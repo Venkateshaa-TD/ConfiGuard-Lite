@@ -10,16 +10,19 @@ operating rules this project is developed under.
 
 ## Status
 
-Phase 3 (dataset registry and leakage-safe data splits) — see
+Phase 4 (pretrained baseline models and ONNX verification) — see
 `docs/PHASE_STATUS.md` for current status. The end-to-end pipeline
 (`configuard.pipeline`) runs but uses a **deterministic dummy predictor**,
-not a trained model. The face preprocessing subsystem (`configuard.media`)
-and the dataset registry (`configuard.datasets`) are both real and
-independently tested, but neither is wired into the pipeline or into any
-training loop yet — see `docs/ARCHITECTURE.md` for what's real vs.
-placeholder. **No training dataset has been downloaded** - the registry
-was built and tested entirely against synthetic fixtures (see
-`docs/DATASETS.md`).
+not a trained model. The face preprocessing subsystem (`configuard.media`),
+the dataset registry (`configuard.datasets`), and two pretrained visual
+encoders (`configuard.models`) are all real and independently tested, but
+none of them are wired into the main pipeline or a real training loop yet
+— see `docs/ARCHITECTURE.md` for what's real vs. placeholder. **No
+training dataset has been downloaded.** Two small ImageNet-pretrained
+backbones (MobileNetV4-Conv-Small, EfficientNet-B0) *have* been
+downloaded, per explicit authorization — see `docs/DATASETS.md` for full
+provenance. **Every prediction `configuard.models` produces is untrained
+and uncalibrated** — see the warning in `docs/MODEL_CARD.md`.
 
 ## Requirements
 
@@ -36,6 +39,12 @@ was built and tested entirely against synthetic fixtures (see
   license, and SHA-256 to verify against; place it at
   `models/face_detection/face_detection_yunet_2026may.onnx` (gitignored)
   or point `CONFIGUARD_YUNET_MODEL_PATH` at it.
+- The two pretrained backbone weights (MobileNetV4-Conv-Small,
+  EfficientNet-B0), for real encoder construction (optional - tests use
+  `pretrained=False`, no download needed). Set `HF_HOME`/`HF_HUB_CACHE`/
+  `TORCH_HOME` in `.env` first (see `.env.example`), then run
+  `scripts\download_baseline_models.py`. See `docs/DATASETS.md` for full
+  provenance.
 
 ## Setup
 
@@ -51,6 +60,10 @@ py -3.11 -m venv .venv
 
 # 3. Install the remaining dependencies
 .venv\Scripts\python.exe -m pip install -r requirements-dev.txt
+
+# 4. Verify PyTorch still has the GPU build after step 3 (installing new
+#    packages can silently re-resolve/downgrade torch - see docs/KNOWN_ISSUES.md)
+.venv\Scripts\python.exe -c "import torch; print(torch.__version__, torch.cuda.is_available())"
 ```
 
 ## Verify your environment
@@ -134,6 +147,33 @@ Check your configured storage paths before pointing anything real at them:
 
 ```powershell
 .venv\Scripts\python.exe scripts\check_storage.py
+```
+
+## Run a pretrained encoder (Phase 4 — UNTRAINED/uncalibrated output)
+
+```python
+import numpy as np
+from configuard.models.registry import create_encoder
+from configuard.models.inference import infer_image, infer_video_fixed_frames
+
+encoder = create_encoder("mobilenetv4_conv_small", pretrained=True)  # or "efficientnet_b0"
+config = encoder.resolve_preprocess_config()
+
+image = np.zeros((224, 224, 3), dtype=np.uint8)  # a real aligned face crop, e.g. from configuard.media
+result = infer_image(encoder, image, config)
+print(result.probability, result.disclaimer)  # ALWAYS UNTRAINED_UNCALIBRATED right now
+
+frames = [image] * 8  # ordered 4/8/16-frame sample, e.g. from configuard.media.sampling
+video_result = infer_video_fixed_frames(encoder, frames, config)
+```
+
+Download the two authorized pretrained backbones (requires `HF_HOME`/
+`HF_HUB_CACHE`/`TORCH_HOME` set in `.env` first):
+
+```powershell
+.venv\Scripts\python.exe scripts\download_baseline_models.py
+.venv\Scripts\python.exe scripts\export_onnx_models.py     # FP32 ONNX + parity check
+.venv\Scripts\python.exe scripts\benchmark_models.py         # latency/memory/FLOPs
 ```
 
 ## Project layout

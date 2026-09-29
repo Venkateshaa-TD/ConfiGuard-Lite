@@ -11,3 +11,16 @@ PyYAML>=6.0,<7.0
 # Phase 2: face/media preprocessing (decoding, YuNet face detection).
 # headless build: no Qt/GUI deps needed on a CPU-only server.
 opencv-python-headless>=4.9,<6.0
+
+# Phase 4: pretrained visual-encoder backbones (MobileNetV4-Conv-Small,
+# EfficientNet-B0) and ONNX export/verification.
+# WARNING: installing these (or anything else) into an existing venv can
+# silently re-resolve/downgrade `torch` to a newer CPU-only build from
+# the default PyPI index if it isn't pinned tightly enough - this
+# happened once during Phase 4 (see docs/KNOWN_ISSUES.md). After
+# installing anything new, re-verify with:
+#   python -c "import torch; print(torch.__version__, torch.cuda.is_available())"
+# and reinstall the pinned GPU build (see README "Setup") if it regressed.
+timm>=1.0
+onnx>=1.16
+onnxruntime>=1.18

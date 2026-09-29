@@ -12,10 +12,21 @@ from __future__ import annotations
 import shutil
 import struct
 import subprocess
+import sys
 import zlib
 from pathlib import Path
 
 import pytest
+
+# MUST happen before any test module imports configuard.models (which
+# imports timm/huggingface_hub inside DeepfakeVisualEncoder.__init__,
+# even with pretrained=False) - those libraries read HF_HOME/
+# HF_HUB_CACHE/TORCH_HOME as module-level constants at import time. See
+# docs/DECISIONS.md.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
+from configuard.env_loader import load_dotenv  # noqa: E402
+
+load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 FFMPEG_AVAILABLE = shutil.which("ffmpeg") is not None
 

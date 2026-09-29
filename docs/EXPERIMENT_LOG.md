@@ -463,3 +463,210 @@ Full combined suite:
 Result: **215 passed** (unchanged pass count - only a storage-module
 extension + one test rename, no new tests added for this configuration
 step).
+
+---
+
+## 2026-09-29 — Phase 4 cache configuration and baseline model download
+
+Cache directories created (`New-Item -ItemType Directory`):
+```
+D:\ConfiGuard-Data\cache\huggingface
+D:\ConfiGuard-Data\cache\torch
+```
+
+`.env` updated with:
+```
+HF_HOME=D:\ConfiGuard-Data\cache\huggingface
+HF_HUB_CACHE=D:\ConfiGuard-Data\cache\huggingface\hub
+TORCH_HOME=D:\ConfiGuard-Data\cache\torch
+```
+
+Command:
+```
+.venv/Scripts/python.exe -m pip install "timm>=1.0" onnx onnxruntime
+```
+Result: `timm 1.0.30`, `onnx 1.23.0`, `onnxruntime 1.30.0` installed.
+**Side effect discovered afterward:** this silently downgraded `torch`
+from `2.5.1+cu121` to `2.14.0+cpu` (see `docs/KNOWN_ISSUES.md` -
+RESOLVED by reinstalling `torch==2.5.1` with the `cu121` index
+immediately after discovery, before any benchmark numbers were recorded).
+
+Command (confirmed both exact authorized model names are available):
+```python
+timm.list_models('mobilenetv4_conv_small*', pretrained=True)
+# ['mobilenetv4_conv_small.e1200_r224_in1k', 'mobilenetv4_conv_small.e2400_r224_in1k',
+#  'mobilenetv4_conv_small.e3600_r256_in1k', 'mobilenetv4_conv_small_050.e3000_r224_in1k']
+timm.list_models('tf_efficientnet_b0*', pretrained=True)
+# ['tf_efficientnet_b0.aa_in1k', 'tf_efficientnet_b0.ap_in1k', 'tf_efficientnet_b0.in1k', 'tf_efficientnet_b0.ns_jft_in1k']
+```
+
+Command (the only download this phase performs):
+```
+.venv/Scripts/python.exe scripts/download_baseline_models.py
+```
+Output (abbreviated): both models constructed successfully via
+`timm.create_model(..., pretrained=True, num_classes=0)`; cache env vars
+confirmed applied from `.env`.
+
+Cache location verification (from the script's own output):
+```
+HF hub cache resolved to : D:\ConfiGuard-Data\cache\huggingface\hub
+  under default ~/.cache : False
+  under repo              : False
+Torch home resolved to   : D:\ConfiGuard-Data\cache\torch
+  under default ~/.cache : False
+  under repo              : False
+```
+
+Downloaded files (verified via `find`/`sha256sum` on the actual cache
+directory):
+```
+D:\ConfiGuard-Data\cache\huggingface\hub\models--timm--mobilenetv4_conv_small.e1200_r224_in1k\
+  refs\main                                    -> c9f31ac64483d7f0590db9edccb4418392a96eea
+  snapshots\c9f31ac.../model.safetensors        -> 15,223,016 bytes
+                                                    sha256=5a2ef04d419ce6d1bf27bfa735bb200d3f8d8997c3ac36320f5bf30382f6b43c
+
+D:\ConfiGuard-Data\cache\huggingface\hub\models--timm--tf_efficientnet_b0.in1k\
+  refs\main                                    -> 8186ca4217f9c67824ebe7566008bdc69976d15a
+  snapshots\8186ca4.../model.safetensors        -> 21,355,344 bytes
+                                                    sha256=276dfe076f3fca30c2f7bf1e44039e395e6de50248caaa159d16530699f16995
+```
+Both `safetensors` format (preferred, as instructed). `D:\ConfiGuard-Data\cache\torch`
+received no files - both models were fetched entirely via the HF hub
+mechanism, `TORCH_HOME` is configured but unused by this phase (kept for
+completeness/future use). `huggingface_hub` warned about Windows
+symlinks being unavailable (informational only - see
+`docs/KNOWN_ISSUES.md`).
+
+No dataset and no other checkpoint (GenD, DINOv2, or anything else) was
+downloaded.
+
+---
+
+## 2026-09-29 — Phase 4 environment regression, found and fixed (torch + torchvision)
+
+Two cascading environment issues, both caused by the `pip install timm
+onnx onnxruntime` command above re-resolving `torch` from the default
+index. Full detail and root cause in `docs/KNOWN_ISSUES.md`; commands and
+final verification here:
+
+```
+pip install "torch==2.5.1" --index-url https://download.pytorch.org/whl/cu121
+pip install "torchvision==0.20.1" --index-url https://download.pytorch.org/whl/cu121
+```
+
+Final verification:
+```
+python -c "import torch, torchvision; print(torch.__version__, torch.cuda.is_available(), torchvision.__version__)"
+# 2.5.1+cu121 True 0.20.1+cu121
+python -c "import timm; print('timm import OK')"
+# timm import OK
+```
+
+---
+
+## 2026-09-29 — Phase 4 full smoke test (both models, CUDA)
+
+Command: ad-hoc script constructing each registered encoder
+(`pretrained=True`), running image inference, 8-frame video inference, a
+forward+backward step, `approximate_flops`, ONNX export, and ONNX parity
+- device resolved via `resolve_device("auto")` -> `cuda` (RTX 4050).
+
+Result (abbreviated; full numbers in the benchmark/export runs below):
+both models produced valid `PredictionResult`s (`is_finetuned=False`,
+`PREDICTION_DISCLAIMER` present) for image and 8-frame video inference;
+`loss.backward()` populated `head.weight.grad` for both; ONNX parity
+`max_abs_diff` on the order of 1e-7 for both, well inside the documented
+1e-3 tolerance.
+
+---
+
+## 2026-09-29 — Phase 4 test suite run
+
+Two real bugs found and fixed while getting these to pass (both are also
+documented as regression tests, see `docs/DECISIONS.md`):
+`test_infer_video_uses_mean_of_embeddings_not_just_first_frame` initially
+compared `probability` (sigmoid-saturated to the same float32 value for
+two inputs with different logits) - fixed to compare `logit` instead;
+`test_real_image_pipeline_with_face_found` /
+`test_real_video_pipeline_with_face_found` initially used a 5x5 mock face
+box against Phase 2's default `min_face_size_px=20`, which silently
+excluded it - fixed by setting `min_face_size_px=1` in that test file's
+config (test-only, not a production default). Also found and fixed a
+test-isolation bug in `tests/test_env_loader.py`
+(`load_dotenv` mutates `os.environ` directly, not via
+`monkeypatch.setenv`, so a later test needed its own `monkeypatch.delenv`
+to avoid a leaked value from an earlier test in the same file).
+
+Command:
+```
+.venv/Scripts/python.exe -m pytest tests/models -v
+```
+Result: **90 passed in 67.98s**, across `test_encoder.py`,
+`test_inference.py`, `test_onnx_export.py`, `test_preprocess.py`,
+`test_pretrained_integration.py` (real checkpoints, not skipped - the
+cache was populated), `test_real_pipeline.py`, `test_registry.py`,
+`test_smoke_backward.py`, `test_device.py`.
+
+Full combined suite:
+```
+.venv/Scripts/python.exe -m pytest -q
+```
+Result: **311 passed in 80.08s** (215 from Phases 0-3 + 90 new Phase 4
+model tests + 6 new `tests/test_env_loader.py` tests).
+
+---
+
+## 2026-09-29 — Phase 4 benchmark (real numbers, warm-up + P50/P95)
+
+Command:
+```
+.venv/Scripts/python.exe scripts/benchmark_models.py
+```
+
+| Metric | EfficientNet-B0 | MobileNetV4-Conv-Small |
+|---|---|---|
+| Parameters (total = trainable) | 4,008,829 | 2,494,305 |
+| Approx. FLOPs @ 224×224 (`torch.utils.flop_counter`) | 769,072,064 | 369,453,696 |
+| CPU latency, batch=1 (P50 / P95, ms) | 99.82 / 198.57 | 46.73 / 69.05 |
+| CPU image batch, n=8 (P50 / P95, ms) | 396.71 / 467.38 | 115.42 / 159.87 |
+| CPU video, 4 frames (P50 / P95, ms) | 238.38 / 323.10 | 83.13 / 118.43 |
+| CPU video, 8 frames (P50 / P95, ms) | 351.64 / 448.42 | 118.48 / 186.54 |
+| CPU video, 16 frames (P50 / P95, ms) | 689.87 / 778.61 | 186.35 / 261.53 |
+| GPU (RTX 4050) latency, batch=1 (P50 / P95, ms) | 39.26 / 49.71 | 22.19 / 22.85 |
+| GPU peak memory (allocated / reserved, MB) | 110.6 / 134.0 | 33.5 / 134.0 |
+| GPU peak memory vs. 6 GB budget | 2.2% (reserved) | 2.2% (reserved) |
+
+Warm-up: 5 iterations (CPU bs=1), 3 (CPU batch/video), 10 (GPU) before
+timing; 20/10/30 measured iterations respectively - see
+`configuard.models.benchmark.measure_latency`. **Both models fit
+comfortably within the RTX 4050's 6 GB VRAM budget** (peak reserved
+~134 MB, ~2.2%).
+
+**MobileNetV4-Conv-Small is faster and smaller on every measured axis**
+(fewer parameters, fewer FLOPs, lower CPU and GPU latency at every batch/
+frame-count tested). This is a **provisional efficiency comparison
+only** - no deepfake-detection accuracy result exists yet (see
+docs/DECISIONS.md and docs/MODEL_CARD.md); the final model choice is not
+decided by this data alone.
+
+---
+
+## 2026-09-29 — Phase 4 ONNX export and parity verification
+
+Command:
+```
+.venv/Scripts/python.exe scripts/export_onnx_models.py
+```
+
+| Model | ONNX file size | Parity (max abs diff) | Parity (mean abs diff) | Within tolerance? |
+|---|---|---|---|---|
+| EfficientNet-B0 | 16,100,693 bytes (~15.4 MB) | 4.359e-07 | 2.517e-07 | Yes (atol=1e-3, rtol=1e-3, n=8 seeded samples) |
+| MobileNetV4-Conv-Small | 9,952,742 bytes (~9.5 MB) | 3.320e-07 | 2.081e-07 | Yes (atol=1e-3, rtol=1e-3, n=8 seeded samples) |
+
+Both exports: FP32, opset 17, dynamic batch axis, legacy TorchScript
+exporter (`dynamo=False` where supported - see docs/DECISIONS.md). ONNX
+CPU inference verified for both (output shape `(4,)` for a 4-sample
+batch, via ONNX Runtime `CPUExecutionProvider`). No quantization
+performed (Phase 4 scope). Exported files land in `outputs/onnx/`
+(gitignored - never committed).

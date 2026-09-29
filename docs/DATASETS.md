@@ -70,4 +70,54 @@ against the dataset's own current documentation and adjust
 | Verification | Loaded successfully via `cv2.FaceDetectorYN_create(...)` on CPU (no CUDA) and confirmed to return no detections on a blank/non-face image — see `docs/EXPERIMENT_LOG.md` |
 
 No other model checkpoint, dataset, or unrelated asset was downloaded in
-this phase.
+that phase.
+
+### Pretrained visual-encoder backbones (Phase 4)
+
+Both authorized by the Phase 4 task instructions, downloaded only from
+their official Hugging Face / timm repositories, `safetensors` format
+(preferred, as instructed). Cached under `D:\ConfiGuard-Data\cache\huggingface`
+(`HF_HOME`/`HF_HUB_CACHE`, configured in the untracked local `.env` - see
+`docs/ARCHITECTURE.md`), never under `C:\Users\...\.cache` or inside this
+repository. Both are ImageNet-1k classification backbones with the
+classifier head removed (`num_classes=0`) - see docs/MODEL_CARD.md for
+why their predictions are not meaningful deepfake results.
+
+#### MobileNetV4-Conv-Small
+
+| Field | Value |
+|---|---|
+| Model ID | `timm/mobilenetv4_conv_small.e1200_r224_in1k` |
+| Revision (commit) | `c9f31ac64483d7f0590db9edccb4418392a96eea` |
+| Source | https://huggingface.co/timm/mobilenetv4_conv_small.e1200_r224_in1k |
+| License | Apache License 2.0 |
+| File format | `model.safetensors` |
+| File size | 15,223,016 bytes (~14.5 MB) |
+| SHA-256 | `5a2ef04d419ce6d1bf27bfa735bb200d3f8d8997c3ac36320f5bf30382f6b43c` |
+| Parameters (feature extractor, `num_classes=0`) | 2,494,305 (incl. this project's randomly-initialized binary head: 2,493,024 backbone + 1,281 head) |
+| Local cache path | `D:\ConfiGuard-Data\cache\huggingface\hub\models--timm--mobilenetv4_conv_small.e1200_r224_in1k\snapshots\c9f31ac...\model.safetensors` |
+| Downloaded | 2026-09-29, via `scripts/download_baseline_models.py`, with explicit user authorization naming this exact model |
+
+#### EfficientNet-B0 (`tf_efficientnet_b0`)
+
+| Field | Value |
+|---|---|
+| Model ID | `timm/tf_efficientnet_b0.in1k` |
+| Revision (commit) | `8186ca4217f9c67824ebe7566008bdc69976d15a` |
+| Source | https://huggingface.co/timm/tf_efficientnet_b0.in1k |
+| License | Apache License 2.0 |
+| File format | `model.safetensors` |
+| File size | 21,355,344 bytes (~20.4 MB) |
+| SHA-256 | `276dfe076f3fca30c2f7bf1e44039e395e6de50248caaa159d16530699f16995` |
+| Parameters (feature extractor, `num_classes=0`) | 4,008,829 (incl. this project's randomly-initialized binary head: 4,007,548 backbone + 1,281 head) |
+| Local cache path | `D:\ConfiGuard-Data\cache\huggingface\hub\models--timm--tf_efficientnet_b0.in1k\snapshots\8186ca4...\model.safetensors` |
+| Downloaded | 2026-09-29, via `scripts/download_baseline_models.py`, with explicit user authorization naming this exact model |
+
+**Integrity verification method:** each file's SHA-256 was computed
+locally after download (`sha256sum`) and cross-checked against
+`huggingface_hub`'s own snapshot revision directory naming (the commit
+hash embedded in the cache path) - see `docs/EXPERIMENT_LOG.md` for the
+full download/verification transcript.
+
+No other checkpoint (GenD, DINOv2, or anything else) and no dataset was
+downloaded in this phase.

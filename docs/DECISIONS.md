@@ -4,6 +4,137 @@ Format: one entry per decision, newest first.
 
 ---
 
+## 2026-09-29 — `HF_HOME`/`HF_HUB_CACHE`/`TORCH_HOME` loaded via a tiny custom `.env` parser, not python-dotenv
+
+**Context:** Phase 4 needs pretrained weight downloads to land under
+`D:\ConfiGuard-Data\cache\...`, never the default `C:\Users\...\.cache`.
+`huggingface_hub` and `torch` read these as **module-level constants at
+import time** - setting them after `import timm`/`import torch` has
+already happened in the process does nothing.
+
+**Decision:** Added `configuard.env_loader.load_dotenv()` (a ~20-line
+`KEY=VALUE` parser using `os.environ.setdefault`, no `python-dotenv`
+dependency), and call it at the very top of every entrypoint that might
+construct a `DeepfakeVisualEncoder` - `scripts/download_baseline_models.py`,
+`scripts/benchmark_models.py`, `scripts/export_onnx_models.py`, and
+critically the **root** `tests/conftest.py` (not a subpackage conftest),
+before any test module can trigger `import timm` via
+`DeepfakeVisualEncoder.__init__` - even with `pretrained=False`, that
+constructor still imports `timm`, which imports `huggingface_hub`.
+
+**Why:** A full dotenv library is unnecessary for this project's simple
+flat `KEY=VALUE` file. The critical, easy-to-miss part is *where* the
+loader must run - not "before training starts" but "before the first
+`import timm`/`import torch`/`import huggingface_hub` anywhere in the
+process," which is why it lives in the root conftest rather than a
+per-directory one.
+
+---
+
+## 2026-09-29 — `DeepfakeVisualEncoder` probes `num_features` empirically, not via `backbone.num_features`
+
+**Context:** Constructing the binary head as
+`nn.Linear(backbone.num_features, 1)` crashed for
+`mobilenetv4_conv_small` specifically: `backbone.num_features` reports
+960, but a real forward pass (with `num_classes=0`) returns a 1280-dim
+pooled feature vector, because timm's MobileNetV4 has an internal "head
+conv" channel-expansion layer (960 -> 1280) that isn't reflected in the
+`num_features` attribute the way it is for `tf_efficientnet_b0`.
+
+**Decision:** `DeepfakeVisualEncoder.__init__` runs one dummy forward
+pass through the backbone (in `eval()` mode - see the next entry) and
+uses the *actual output tensor's* last dimension to size the head,
+instead of trusting `backbone.num_features`.
+
+**Why:** More robust across arbitrary timm architectures than relying on
+an attribute whose meaning apparently isn't 100% consistent across model
+families with `num_classes=0`. Caught by this phase's own smoke testing,
+not a documented timm caveat found in advance - see
+`tests/models/test_encoder.py::test_forward_features_shape`, which would
+have failed loudly (a matmul shape error) if this regressed.
+
+---
+
+## 2026-09-29 — The `num_features` probe forward pass forces `eval()` mode
+
+**Context:** The probe above initially crashed for MobileNetV4 with
+`ValueError: Expected more than 1 value per channel when training, got
+input size torch.Size([1, 1280, 1, 1])` - BatchNorm computes batch
+statistics in `train()` mode (the default state of a freshly constructed
+`nn.Module`) and rejects a batch of size 1, but the probe used a single
+dummy sample.
+
+**Decision:** The probe temporarily switches `self.backbone` to `eval()`
+mode (using running statistics, not batch statistics - safe for batch
+size 1), runs the forward pass, then restores whatever training/eval
+state the module was actually in before the probe.
+
+**Why:** This is exactly the same reason batch size 1 must always go
+through `.eval()` at real inference time too (see
+`tests/models/test_encoder.py::test_batch_size_one_works_in_eval_mode`) -
+the construction-time probe hit the same underlying BatchNorm constraint
+one step earlier than a caller would have.
+
+---
+
+## 2026-09-29 — ONNX export uses the legacy TorchScript-based exporter (`dynamo=False`)
+
+**Context:** `torch.onnx.export(...)` with this project's torch version
+defaults to the newer "dynamo" exporter path, which failed immediately
+with `ModuleNotFoundError: No module named 'onnxscript'`.
+
+**Decision:** Pass `dynamo=False` to use the older, mature
+TorchScript-tracing-based exporter, rather than adding `onnxscript` as a
+dependency.
+
+**Why:** The encoder's graph (a timm backbone + one `nn.Linear` head) is
+simple and has no control flow the legacy tracer would mishandle -
+verified by `docs/EXPERIMENT_LOG.md`'s parity numbers (max abs diff on
+the order of 1e-7, far inside the 1e-3 documented tolerance). Avoids a
+new dependency for a code path this project doesn't need.
+
+---
+
+## 2026-09-29 — Video inference aggregates *embeddings* (mean-pooled), not per-frame probabilities
+
+**Context:** Requirement 8: "fixed-frame video inference using ordered
+frame embeddings and mean aggregation."
+
+**Decision:** `infer_video_fixed_frames` runs every sampled frame through
+`forward_features` (preserving order), mean-pools the resulting (N,
+num_features) tensor along the frame axis into one (1, num_features)
+vector, and only then applies the binary head - producing one logit/
+probability per clip, not N per-frame ones later averaged.
+
+**Why:** Averaging in feature space (before the classifier) is a strictly
+more expressive aggregation than averaging post-hoc probabilities, and
+matches the literal requirement wording ("ordered frame embeddings and
+mean aggregation"). No temporal model (GRU) yet, by explicit task scope -
+this is a placeholder aggregation, replaced when the GRU phase lands.
+
+---
+
+## 2026-09-29 — Real-model pipeline kept separate from the Phase 1 dummy pipeline
+
+**Context:** Requirement 10: wire real media preprocessing into an
+*optional* real-model pipeline, retaining dependency injection.
+
+**Decision:** `configuard.models.real_pipeline.run_real_image_pipeline` /
+`run_real_video_pipeline` are new functions, not a modification of
+`configuard.pipeline.run_pipeline` (the Phase 1 dummy vertical slice,
+still hash-based and deterministic). Both take `detector`, `cache`, and
+`encoder` as parameters (dependency injection), so tests use
+`MockFaceDetector` + a `pretrained=False` encoder with no network access.
+
+**Why:** `run_pipeline`'s contract (`DetectionResult`, deterministic
+dummy score) is still exercised by Phase 1's tests and documented as the
+"vertical slice proof" - conflating it with a real, evolving model
+pipeline would break that contract or force a confusing dual-purpose
+function. Keeping them separate lets each evolve independently until a
+later phase deliberately unifies them (see `docs/PROJECT_PLAN.md`).
+
+---
+
 ## 2026-09-29 — Added `CONFIGUARD_OUTPUT_DIR` as a fourth storage-checked env var
 
 **Context:** The project already had a gitignored `outputs/` directory

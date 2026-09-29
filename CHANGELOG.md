@@ -117,3 +117,40 @@ All notable changes to this project are documented here.
 - Updated `docs/ARCHITECTURE.md` (storage layout), `docs/DECISIONS.md`
   (2 new entries), `docs/DATASETS.md`, `docs/KNOWN_ISSUES.md` (disk-space
   entry marked RESOLVED), `README.md`, `.env.example`.
+
+### Phase 4 — Pretrained baseline models and ONNX verification (2026-09-29)
+
+- Configured `HF_HOME`/`HF_HUB_CACHE`/`TORCH_HOME` under
+  `D:\ConfiGuard-Data\cache\{huggingface,torch}` via `.env` and a new
+  `configuard.env_loader.load_dotenv()` (dependency-free, must run
+  before any `import timm`/`torch`/`huggingface_hub`).
+- Downloaded the two authorized pretrained backbones only -
+  `timm/mobilenetv4_conv_small.e1200_r224_in1k` and
+  `timm/tf_efficientnet_b0.in1k` (Apache-2.0, safetensors) - via
+  `scripts/download_baseline_models.py`. Full provenance (revision,
+  SHA-256, file size) in `docs/DATASETS.md`.
+- Added `src/configuard/models/`: `encoder.py` (`DeepfakeVisualEncoder`,
+  `EncoderSpec`, `PreprocessConfig`), `registry.py`, `preprocess.py`
+  (shared 224×224 contract), `inference.py` (image + fixed-frame
+  mean-aggregated video inference), `real_pipeline.py` (optional,
+  dependency-injected wiring of Phase 2 preprocessing into a Phase 4
+  encoder), `onnx_export.py` (FP32 export + parity verification),
+  `benchmark.py` (warm-up + P50/P95 latency, GPU peak memory, FLOPs),
+  `device.py`.
+- Added `scripts/benchmark_models.py` and `scripts/export_onnx_models.py`.
+- Every prediction carries `PREDICTION_DISCLAIMER` and `is_finetuned=False`
+  - see the warning added to `docs/MODEL_CARD.md`.
+- Found and fixed two real bugs (empirical `num_features` probing;
+  eval-mode probe for BatchNorm batch-size-1 safety) and one environment
+  regression (`timm`/`onnx`/`onnxruntime` install silently downgrading
+  `torch` and mismatching `torchvision` - reinstalled the correct paired
+  versions). All documented in `docs/DECISIONS.md` / `docs/KNOWN_ISSUES.md`.
+- Added 90 new tests under `tests/models/` + 6 new
+  `tests/test_env_loader.py` tests. Full suite: 311/311 passing.
+- Benchmarked both models (parameters, FLOPs, CPU/GPU P50/P95 latency,
+  peak GPU memory ~134 MB / 2.2% of the 6 GB budget, image-batch and
+  4/8/16-frame video timings) and verified ONNX FP32 export + parity
+  (max abs diff ~3-4e-07) for both - full numbers in
+  `docs/EXPERIMENT_LOG.md`. Provisional only - no deepfake accuracy
+  result exists yet.
+- No dataset and no unauthorized model checkpoint downloaded.

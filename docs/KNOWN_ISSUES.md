@@ -150,4 +150,72 @@ exists in `configuard.media`, just not connected to
 Free space on `C:` is now **~12.9 GB** (down from ~21.8 GB at Phase 0),
 consumed by `.venv` packages (PyTorch, OpenCV, etc.) — see the original
 "Limited free disk space" entry above, still OPEN and now more pressing
-ahead of Phase 3b (wiring in a real dataset).
+ahead of Phase 3b (wiring in a real dataset). Since resolved by the
+approved storage audit + configuration step (see the "Limited free disk
+space on C:" entry, now RESOLVED, and `docs/ARCHITECTURE.md`).
+
+---
+
+## RESOLVED — `pip install timm onnx onnxruntime` silently downgraded PyTorch to a CPU-only build
+
+**Detected:** Phase 4, immediately before running the model smoke test
+(2026-09-29).
+
+**Impact:** Installing `timm`, `onnx`, and `onnxruntime` without pinning
+`torch` caused pip to resolve a *newer* `torch` release from the default
+PyPI index (2.14.0+cpu) as a transitive dependency, silently replacing
+the Phase 0-installed CUDA build (2.5.1+cu121). `torch.cuda.is_available()`
+started returning `False` even though the RTX 4050 and its driver were
+untouched (confirmed working via `nvidia-smi`) - this would have made
+every Phase 4 "RTX 4050 latency/peak memory" measurement silently
+CPU-only and wrong.
+
+**Resolved:** 2026-09-29. Reinstalled the correct build explicitly:
+```
+pip install "torch==2.5.1" --index-url https://download.pytorch.org/whl/cu121
+```
+Verified `torch.cuda.is_available()` returns `True` and
+`torch.__version__` reports the `+cu121` build again before running any
+GPU benchmark - see `docs/EXPERIMENT_LOG.md`.
+
+**Cascading follow-on issue:** the same `pip install timm onnx
+onnxruntime` also pulled in `torchvision==0.29.0` (compatible with the
+accidental `torch 2.14.0+cpu`, not with `torch 2.5.1`). After reinstalling
+`torch==2.5.1+cu121`, `import timm` started failing with `RuntimeError:
+operator torchvision::nms does not exist` (a torch/torchvision ABI
+mismatch) - `timm/__init__.py` unconditionally imports a submodule that
+imports `torchvision`, even though none of this project's code uses it
+directly. Fixed by also reinstalling a matching version:
+```
+pip install "torchvision==0.20.1" --index-url https://download.pytorch.org/whl/cu121
+```
+`torch==2.5.1` pairs with `torchvision==0.20.x` per PyTorch's own
+compatibility matrix.
+
+**Action needed for future dependency installs:** when installing any new
+package into this environment, run
+`python -c "import torch, torchvision; print(torch.__version__, torch.cuda.is_available(), torchvision.__version__)"`
+immediately afterward to catch a silent CUDA-build downgrade *or* a
+torch/torchvision version-skew before it contaminates a GPU benchmark or
+breaks `import timm` - a plain `pip install <package>` can re-resolve
+`torch` (and thus require a matching `torchvision`) from the default
+index even when compatible versions are already installed, if the new
+package's dependency metadata doesn't pin tightly enough for pip's
+resolver to leave them alone.
+
+---
+
+## Informational — HF hub cache uses non-symlinked storage on this Windows machine
+
+**Detected:** Phase 4, `scripts/download_baseline_models.py` run
+(2026-09-29).
+
+**Impact:** `huggingface_hub` warned that Windows Developer Mode isn't
+enabled (or Python isn't running elevated), so its cache falls back to
+full file copies instead of symlinks for deduplication. Purely a
+disk-space-efficiency note - functionality is unaffected, and Phase 4's
+two small models (~15 MB and ~21 MB) make this immaterial. Would matter
+more if many large checkpoint variants of the same model were cached.
+
+**Action needed:** None. If cache size becomes a concern later, enabling
+Windows Developer Mode addresses it.

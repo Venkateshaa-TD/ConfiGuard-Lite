@@ -47,7 +47,7 @@ inference within a 6 GB VRAM laptop GPU budget.
 | 2 | Face and media preprocessing (decode, nested sampling, YuNet detection, tracking, alignment, cache) | See `docs/PHASE_STATUS.md` |
 | 3 | Dataset registry and leakage-safe data splits | See `docs/PHASE_STATUS.md` |
 | 3b | Wire real dataset(s) into Phase 2 preprocessing (once user provides local dataset access) | Planned |
-| 4 | Image model: MobileNetV4-Conv-Small + EfficientNet-B0 baselines | Planned |
+| 4 | Pretrained baseline models (MobileNetV4-Conv-Small + EfficientNet-B0) and ONNX verification | See `docs/PHASE_STATUS.md` |
 | 5 | Distillation from frozen GenD CLIP-L/14 teacher | Planned |
 | 6 | Compression-robust augmentation | Planned |
 | 7 | Temporal GRU + adaptive frame sampling for video | Planned |

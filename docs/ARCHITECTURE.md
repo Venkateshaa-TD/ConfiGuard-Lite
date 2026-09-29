@@ -1,13 +1,16 @@
 # Architecture
 
-Status: Phase 3 complete. The Phase 1 pipeline shape below is real and
-tested; the preprocessing, model, and provenance stages it uses are still
-deliberate placeholders (see "Phase 1 scope" below). Phase 2 added a real,
+Status: Phase 4 complete. The Phase 1 pipeline shape below is real and
+tested; its preprocessing/model/provenance stages are still deliberate
+placeholders (see "Phase 1 scope" below). Phase 2 added a real,
 independently-tested face/media preprocessing subsystem
-(`configuard.media`). Phase 3 adds a real, independently-tested dataset
-registry (`configuard.datasets`, documented in its own section below).
-Neither is yet wired into `configuard.pipeline.run_pipeline` or into any
-training loop - that happens once a real encoder/model exists.
+(`configuard.media`). Phase 3 added a real, independently-tested dataset
+registry (`configuard.datasets`). Phase 4 adds two real, ImageNet
+-pretrained visual-encoder backbones with an **untrained, uncalibrated**
+binary head (`configuard.models`, documented in its own section below).
+None of these are yet wired into `configuard.pipeline.run_pipeline` or
+into a real training loop - that happens once deepfake fine-tuning
+exists (see docs/PROJECT_PLAN.md).
 
 ## Data flow
 
@@ -367,6 +370,110 @@ writable / not-in-repo / not-in-OneDrive / recognized by
 `scripts/check_storage.py`) and `docs/KNOWN_ISSUES.md` for the disk-space
 history this resolves.
 
+Pretrained model weight caches (Phase 4) are configured the same way,
+via the *standard* env var names `huggingface_hub`/`torch` themselves
+read - not `CONFIGUARD_*` names, since these libraries own that
+contract:
+
+```
+HF_HOME       = D:\ConfiGuard-Data\cache\huggingface
+HF_HUB_CACHE  = D:\ConfiGuard-Data\cache\huggingface\hub
+TORCH_HOME    = D:\ConfiGuard-Data\cache\torch
+```
+
+**Critical ordering constraint:** `huggingface_hub` and `torch` read
+these as module-level constants at *import* time - setting them after
+`import timm`/`import torch` has already run anywhere in the process has
+no effect. `configuard.env_loader.load_dotenv()` (a tiny dependency-free
+`.env` parser) must be called before any such import; every Phase 4
+entrypoint script does this first, and the root `tests/conftest.py` does
+it before test collection so the whole suite is covered - see
+docs/DECISIONS.md.
+
+## Pretrained visual encoders (Phase 4, `src/configuard/models/`)
+
+Independent, separately-tested subsystem. **Every prediction from this
+subsystem is untrained and uncalibrated** - see the big warning in
+docs/MODEL_CARD.md. Not yet wired into `configuard.pipeline` or any
+training loop.
+
+```
+   EncoderSpec (name, timm_model_name, hf_repo_id, license)
+        |
+        v
+   DeepfakeVisualEncoder(spec, pretrained=True|False)
+     - self.backbone = timm.create_model(timm_model_name, num_classes=0)
+     - self.num_features probed empirically via one eval()-mode forward
+       pass (NOT trusted from backbone.num_features - see docs/DECISIONS.md)
+     - self.head = nn.Linear(num_features, 1)   <- randomly initialized,
+       NEVER trained on deepfake data in this phase
+        |
+        +-- forward_features(x) -> (B, num_features)      pooled embedding
+        +-- forward_logits(x)   -> (B,)                    pre-sigmoid logit
+        +-- forward_probs(x)    -> (B,)                     sigmoid probability
+        +-- forward(x) = forward_logits(x)                   <- ONNX export entry point
+        |
+        v
+   configuard.models.preprocess
+     preprocess_bgr_image()/preprocess_batch(): BGR uint8 HxWx3
+     (the same format configuard.media.alignment.align_and_crop
+     produces) -> normalized (3,224,224) float tensor, using the
+     ENCODER'S OWN resolved mean/std (timm.data.resolve_data_config),
+     not a hardcoded ImageNet constant
+        |
+        v
+   configuard.models.inference
+     infer_image() / infer_image_batch(): independent per-image predictions
+     infer_video_fixed_frames(): ordered frame list -> forward_features
+       per frame -> MEAN of the (N, num_features) embeddings -> one
+       head pass -> one PredictionResult per clip (no GRU yet - task
+       scope; see docs/DECISIONS.md for why aggregation happens in
+       feature space, not on per-frame probabilities)
+        |
+        v
+   configuard.models.real_pipeline  (optional; NOT configuard.pipeline)
+     run_real_image_pipeline() / run_real_video_pipeline():
+     configuard.media (Phase 2 face crop) -> configuard.models
+     (Phase 4 encoder), fully dependency-injected (detector/cache/
+     encoder) so tests substitute MockFaceDetector + a pretrained=False
+     encoder - no network access needed for unit tests
+        |
+        v
+   configuard.models.onnx_export
+     export_to_onnx(): FP32, dynamic batch axis, legacy TorchScript
+       exporter (dynamo=False - see docs/DECISIONS.md)
+     verify_onnx_parity(): seeded random inputs, PyTorch vs ONNX Runtime
+       (CPU), max/mean abs diff vs documented (atol, rtol)
+     run_onnx_cpu_inference(): direct ONNX Runtime CPU inference
+
+   configuard.models.benchmark
+     measure_latency(): warm-up iterations + P50/P95 (never a single
+       timing) measure_gpu_peak_memory() / approximate_flops()
+       (torch.utils.flop_counter, no new dependency)
+```
+
+**Registry** (`registry.py`): `ENCODER_SPECS` holds exactly the two
+authorized models - `mobilenetv4_conv_small` (preferred candidate) and
+`efficientnet_b0` (comparison baseline). `create_encoder(name,
+pretrained=True|False)` is the single construction entry point.
+
+**Two real bugs found and fixed while building this** (both covered by
+regression tests, both explained in docs/DECISIONS.md): (1)
+`backbone.num_features` doesn't reliably match the actual pooled output
+dimension for every timm architecture (MobileNetV4 specifically), fixed
+by probing empirically; (2) that empirical probe itself first failed
+because BatchNorm rejects a batch of size 1 in `train()` mode, fixed by
+probing in `eval()` mode and restoring the original mode afterward.
+
+**Performance measurements** (parameter counts, checkpoint sizes,
+approximate FLOPs, CPU/GPU P50/P95 latency, peak GPU memory, image-batch
+and 4/8/16-frame video-inference timings, ONNX parity numbers) are all in
+`docs/EXPERIMENT_LOG.md` - reproducible via `scripts/benchmark_models.py`
+and `scripts/export_onnx_models.py`. These are a **provisional efficiency
+comparison only**; no deepfake-detection accuracy result exists yet, so
+the final model choice is explicitly deferred, not decided by latency
+alone (docs/DECISIONS.md).
+
 ## Repository layout
 
 ```
@@ -378,23 +485,30 @@ ConfiGuard-Lite/
 │   ├── io_types.py           Typed pipeline data contracts (Phase 1)
 │   ├── validation.py         Secure file-type/size/duration validation (Phase 1)
 │   ├── pipeline.py           End-to-end vertical slice orchestration (Phase 1)
+│   ├── env_loader.py          Tiny dependency-free .env parser (Phase 4)
 │   ├── media/                Face/media preprocessing (Phase 2)
 │   │   ├── types.py, decode.py, sampling.py, face_detector.py,
 │   │   │   alignment.py, tracking.py, cache.py, hashing.py, preprocess.py
-│   └── datasets/              Dataset registry (Phase 3)
-│       ├── schema.py, registry.py, manifest.py, splitting.py,
-│       │   duplicates.py, storage.py
-│       └── adapters/
-│           ├── __init__.py (DatasetAdapter protocol, DatasetAccessError)
-│           ├── folder_convention.py, metadata_sidecar.py (the two engines)
-│           └── known_datasets.py (FF++/Celeb-DF-v2/DFDC/DF40/DeeperForensics-1.0 + generic)
+│   ├── datasets/              Dataset registry (Phase 3)
+│   │   ├── schema.py, registry.py, manifest.py, splitting.py,
+│   │   │   duplicates.py, storage.py
+│   │   └── adapters/
+│   │       ├── __init__.py (DatasetAdapter protocol, DatasetAccessError)
+│   │       ├── folder_convention.py, metadata_sidecar.py (the two engines)
+│   │       └── known_datasets.py (FF++/Celeb-DF-v2/DFDC/DF40/DeeperForensics-1.0 + generic)
+│   └── models/                 Pretrained visual encoders (Phase 4)
+│       ├── encoder.py (DeepfakeVisualEncoder, EncoderSpec, PreprocessConfig)
+│       ├── registry.py (the two authorized models), preprocess.py,
+│       │   inference.py, real_pipeline.py, onnx_export.py, benchmark.py,
+│       │   device.py
 ├── scripts/                 Operational scripts (env verification, preprocessing
-│                              benchmark, storage check)
+│                              benchmark, storage check, baseline model download,
+│                              model benchmark, ONNX export)
 ├── tests/                    pytest suite (unit + integration), tests/conftest.py +
-│                              tests/media/conftest.py + tests/datasets/conftest.py
-│                              generate all fixtures at test time (hand-built PNG,
-│                              ffmpeg lavfi clips, synthetic dataset trees/manifests)
-│                              - nothing checked in
+│                              tests/media/conftest.py + tests/datasets/conftest.py +
+│                              tests/models/conftest.py generate all fixtures at
+│                              test time (hand-built PNG, ffmpeg lavfi clips,
+│                              synthetic dataset trees/manifests) - nothing checked in
 ├── configs/                  base.yaml + development/training/testing/production.yaml
 ├── models/                    (gitignored) external model assets, e.g. YuNet ONNX -
 │                              see docs/DATASETS.md for provenance

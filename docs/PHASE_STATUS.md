@@ -6,6 +6,7 @@
 | 1 | Architecture contracts and minimal vertical slice | PASS | 2026-09-29 |
 | 2 | Face and media preprocessing | PASS | 2026-09-29 |
 | 3 | Dataset registry and leakage-safe data splits | PASS | 2026-09-29 |
+| 4 | Pretrained baseline models and ONNX verification | PASS | 2026-09-29 |
 
 Full per-phase results are recorded below as they complete.
 
@@ -207,4 +208,79 @@ tested against synthetic, generated fixtures only.
   into model training yet").
 - Free disk space is down to ~12.9 GB at last check (`scripts/check_storage.py`
   output in `docs/EXPERIMENT_LOG.md`) - still non-blocking since no real
-  dataset was downloaded, but leaves less room before Phase 3b.
+  dataset was downloaded, but leaves less room before Phase 3b. (Since
+  resolved by the storage-configuration step - see `docs/ARCHITECTURE.md`.)
+
+---
+
+## Phase 4 — Pretrained baseline models and ONNX verification
+
+**Status:** PASS
+
+**Summary:** New `src/configuard/models/` subsystem: a pluggable
+`DeepfakeVisualEncoder` wrapping either of the two authorized
+ImageNet-pretrained timm backbones (MobileNetV4-Conv-Small,
+EfficientNet-B0) with a fresh, randomly-initialized binary head; a
+shared 224×224 preprocessing contract compatible with Phase 2's aligned
+face crops; image and fixed-frame (mean-of-embeddings) video inference;
+an optional real-model pipeline wiring Phase 2 face preprocessing into
+these encoders (fully dependency-injected); FP32 ONNX export with
+verified PyTorch-vs-ONNX parity; and reproducible P50/P95 latency/memory
+benchmarking. **Every prediction is explicitly marked untrained and
+uncalibrated** (`PREDICTION_DISCLAIMER`, `is_finetuned=False`). Only the
+two explicitly authorized models were downloaded, from their official
+Hugging Face repos, cached under `D:\ConfiGuard-Data\cache\huggingface`
+(never `C:\Users\...\.cache` or the repo) - see `docs/DATASETS.md` for
+full provenance.
+
+**Verified:**
+- Both models load pretrained weights from the configured D-drive cache
+  (`test_pretrained_integration.py`, not skipped - cache was populated).
+- Both run on CPU and on the RTX 4050 (GPU) - `resolve_device("auto")`
+  correctly selects `cuda`; per-device latency measured for both.
+- Both complete a forward+backward smoke step (task 13) without OOM -
+  peak GPU memory measured at ~134 MB reserved (2.2% of the 6 GB
+  budget) for a single-image forward pass; the full training-mode
+  smoke step (batch=2) completes without error on both CPU and GPU.
+- Image inference (single + batch) and fixed 4/8/16-frame video
+  inference (ordered frame embeddings, mean-aggregated before the
+  head) both work and are covered by dedicated tests.
+- ONNX CPU inference works for both (verified via
+  `run_onnx_cpu_inference` and a dedicated test); PyTorch-vs-ONNX
+  parity max abs diff ~3-4e-07 for both models, far inside the
+  documented `atol=1e-3, rtol=1e-3` tolerance.
+- `pytest` suite: **311/311 passed** (215 from Phases 0-3 + 90 new
+  Phase 4 model tests + 6 new `tests/test_env_loader.py` tests).
+
+**Two real bugs found and fixed during this phase** (both covered by
+regression tests, both explained in `docs/DECISIONS.md`): (1)
+`backbone.num_features` doesn't reliably match the real pooled output
+dimension for every timm architecture (MobileNetV4 specifically - fixed
+via an empirical probe forward pass); (2) that probe itself first failed
+because BatchNorm rejects a batch of size 1 in `train()` mode (fixed by
+probing in `eval()` mode). Also **one environment regression found and
+fixed**: installing `timm`/`onnx`/`onnxruntime` silently downgraded
+`torch` to a CPU-only build and left `torchvision` mismatched - both
+reinstalled to the correct paired versions before any benchmark number
+was recorded (`docs/KNOWN_ISSUES.md`).
+
+**Performance measurements** (parameter counts, approximate FLOPs,
+warm-up + P50/P95 CPU and GPU latency, peak GPU memory, image-batch and
+4/8/16-frame video-inference timings, ONNX file sizes and parity) are
+fully documented in `docs/EXPERIMENT_LOG.md`, reproducible via
+`scripts/benchmark_models.py` and `scripts/export_onnx_models.py`. This
+is a **provisional efficiency comparison only** - MobileNetV4-Conv-Small
+is faster/smaller on every measured axis, but no deepfake-detection
+accuracy result exists yet, so the final model choice is explicitly not
+decided by this phase.
+
+**Open items carried to later phases (see `docs/KNOWN_ISSUES.md`):**
+- `configuard.models` is not yet wired into `configuard.pipeline` or any
+  real training loop - intentional, deferred until a fine-tuning phase.
+- No quantization performed yet (FP32 ONNX only) - explicit task scope.
+- No temporal model (GRU) yet - video aggregation is mean-pooled
+  embeddings only, explicit task scope.
+- The pip dependency-resolution fragility that caused the torch/
+  torchvision regression this phase is now documented with a mitigation
+  step (verify build after every install), but not structurally
+  prevented (e.g. via a lockfile) - worth revisiting if it recurs.
