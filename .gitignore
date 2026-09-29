@@ -1,0 +1,79 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+*.egg
+
+# --- Virtual environments ---
+.venv/
+venv/
+env/
+
+# --- Environment / secrets ---
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets.yaml
+secrets.yml
+
+# --- Datasets, checkpoints, models (never commit) ---
+data/
+!data/.gitkeep
+checkpoints/
+!checkpoints/.gitkeep
+models/
+!models/.gitkeep
+*.pt
+*.pth
+*.ckpt
+*.onnx
+*.safetensors
+*.bin
+*.h5
+
+# --- Uploaded / user-submitted media (never commit) ---
+uploads/
+media/
+*.mp4
+*.avi
+*.mov
+*.mkv
+*.jpg
+*.jpeg
+*.png
+*.bmp
+!docs/**/*.png
+!docs/**/*.jpg
+
+# --- Caches, generated outputs, reports ---
+cache/
+!cache/.gitkeep
+outputs/
+!outputs/.gitkeep
+.cache/
+*.log
+logs/
+runs/
+wandb/
+mlruns/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+*.report.json
+*.report.html
+
+# --- IDE / OS ---
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# --- Jupyter (exploration only, not source of truth) ---
+.ipynb_checkpoints/

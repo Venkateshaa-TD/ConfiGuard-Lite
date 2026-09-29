@@ -1,0 +1,13 @@
+[project]
+name = "configuard-lite"
+version = "0.1.0"
+description = "Efficient and uncertainty-aware deepfake image and video detection"
+requires-python = ">=3.11,<3.13"
+readme = "README.md"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.setuptools.packages.find]
+where = ["src"]

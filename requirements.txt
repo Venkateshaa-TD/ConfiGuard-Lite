@@ -1,0 +1,9 @@
+# Phase 0: minimum runtime dependencies for environment verification.
+# Model/training/export dependencies (timm, onnxruntime, opencv, etc.) are
+# added in the phases that need them — see docs/DECISIONS.md.
+#
+# PyTorch is installed separately (see README "Setup" section) because the
+# correct wheel depends on CUDA availability, e.g.:
+#   pip install torch --index-url https://download.pytorch.org/whl/cu121
+numpy>=1.26,<3.0
+PyYAML>=6.0,<7.0

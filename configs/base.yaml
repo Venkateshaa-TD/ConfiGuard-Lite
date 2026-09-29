@@ -1,0 +1,6 @@
+# Base project configuration (non-secret, machine-independent defaults).
+# Machine-specific paths belong in .env, not here.
+project_name: configuard-lite
+seed: 42
+device: auto
+log_level: INFO
