@@ -43,16 +43,17 @@ inference within a 6 GB VRAM laptop GPU budget.
 | Phase | Title | Status |
 |---|---|---|
 | 0 | Environment and repository foundation | See `docs/PHASE_STATUS.md` |
-| 1 | Data pipeline: dataset registry, face/frame extraction, caching | Planned |
-| 2 | Image model: MobileNetV4-Conv-Small + EfficientNet-B0 baselines | Planned |
-| 3 | Distillation from frozen GenD CLIP-L/14 teacher | Planned |
-| 4 | Compression-robust augmentation | Planned |
-| 5 | Temporal GRU + adaptive frame sampling for video | Planned |
-| 6 | Calibration + conformal prediction, tri-class decision rule | Planned |
-| 7 | ONNX export (FP32/FP16/INT8) + CPU/GPU inference runtime | Planned |
-| 8 | Explainability: heatmaps, video evidence timelines | Planned |
-| 9 | C2PA provenance integration (separate signal) | Planned |
-| 10 | Serving API + packaging | Planned |
+| 1 | Architecture contracts and minimal vertical slice | See `docs/PHASE_STATUS.md` |
+| 2 | Data pipeline: dataset registry, face/frame extraction, caching | Planned |
+| 3 | Image model: MobileNetV4-Conv-Small + EfficientNet-B0 baselines | Planned |
+| 4 | Distillation from frozen GenD CLIP-L/14 teacher | Planned |
+| 5 | Compression-robust augmentation | Planned |
+| 6 | Temporal GRU + adaptive frame sampling for video | Planned |
+| 7 | Calibration + conformal prediction, tri-class decision rule | Planned |
+| 8 | ONNX export (FP32/FP16/INT8) + CPU/GPU inference runtime | Planned |
+| 9 | Explainability: heatmaps, video evidence timelines | Planned |
+| 10 | C2PA provenance integration (separate signal) | Planned |
+| 11 | Serving API + packaging | Planned |
 
 This table is a planning aid, not a commitment — phases may be split,
 reordered, or merged as findings from earlier phases dictate. Each change

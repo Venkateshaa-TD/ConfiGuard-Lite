@@ -1,0 +1,14 @@
+# Model training runs. Fixed seed for reproducibility; limits sized for
+# curated training-set samples rather than arbitrary uploads.
+project_name: configuard-lite
+environment: training
+seed: 42
+device: auto
+log_level: INFO
+
+validation:
+  max_image_size_mb: 50
+  max_video_size_mb: 500
+  max_video_duration_seconds: 60
+  allowed_image_extensions: [".jpg", ".jpeg", ".png", ".webp"]
+  allowed_video_extensions: [".mp4", ".mov", ".mkv", ".avi"]

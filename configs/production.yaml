@@ -1,0 +1,14 @@
+# Serving. Strict limits (defends the inference service against oversized
+# or abusive uploads), quiet logging.
+project_name: configuard-lite
+environment: production
+seed: 42
+device: auto
+log_level: WARNING
+
+validation:
+  max_image_size_mb: 15
+  max_video_size_mb: 150
+  max_video_duration_seconds: 90
+  allowed_image_extensions: [".jpg", ".jpeg", ".png", ".webp"]
+  allowed_video_extensions: [".mp4", ".mov", ".mkv", ".avi"]

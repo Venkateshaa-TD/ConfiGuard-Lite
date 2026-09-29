@@ -4,16 +4,22 @@ Format: one entry per issue. Mark resolved issues rather than deleting them.
 
 ---
 
-## OPEN — FFmpeg not installed
+## RESOLVED — FFmpeg not installed
 
 **Detected:** Phase 0 environment scan (2026-09-29).
 
-**Impact:** Video frame extraction (needed starting Phase 1/5) will not work
-without FFmpeg on PATH. Not required for Phase 0.
+**Resolved:** 2026-09-29, with explicit user approval, via
+`winget install --id Gyan.FFmpeg -e --source winget`. Installed
+FFmpeg 9.0.2 (full build, gyan.dev) to
+`%LOCALAPPDATA%\Microsoft\WinGet\Packages\Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe\ffmpeg-9.0.2-full_build\bin`,
+added to the user `PATH` environment variable by winget. Verified with
+`ffmpeg -version` and `ffprobe -version` (both report version 9.0.2). See
+`docs/EXPERIMENT_LOG.md` for full output.
 
-**Action needed:** User should confirm before we install FFmpeg (e.g. via
-`winget install Gyan.FFmpeg` or a static build), since installing system
-software requires prior approval per project rules.
+**Note:** Shell processes already running at install time (including this
+agent session's Bash/PowerShell tool shells) do not see the updated `PATH`
+until restarted — a new terminal window picks it up automatically. Not an
+environment defect, just a live-session caveat.
 
 ---
 

@@ -1,0 +1,14 @@
+# Automated test suite. Deliberately tiny limits so fixtures stay small and
+# tests stay fast - see tests/conftest.py for the generated fixtures.
+project_name: configuard-lite
+environment: testing
+seed: 42
+device: cpu
+log_level: WARNING
+
+validation:
+  max_image_size_mb: 1
+  max_video_size_mb: 5
+  max_video_duration_seconds: 5
+  allowed_image_extensions: [".jpg", ".jpeg", ".png", ".webp"]
+  allowed_video_extensions: [".mp4", ".mov", ".mkv", ".avi"]

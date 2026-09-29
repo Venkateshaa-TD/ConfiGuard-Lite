@@ -1,0 +1,13 @@
+# Local development on the laptop. Generous limits, verbose logging.
+project_name: configuard-lite
+environment: development
+seed: 42
+device: auto
+log_level: DEBUG
+
+validation:
+  max_image_size_mb: 20
+  max_video_size_mb: 200
+  max_video_duration_seconds: 120
+  allowed_image_extensions: [".jpg", ".jpeg", ".png", ".webp"]
+  allowed_video_extensions: [".mp4", ".mov", ".mkv", ".avi"]

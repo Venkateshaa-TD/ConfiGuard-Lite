@@ -10,8 +10,10 @@ operating rules this project is developed under.
 
 ## Status
 
-Phase 0 (environment and repository foundation) — see
-`docs/PHASE_STATUS.md` for current status.
+Phase 1 (architecture contracts and minimal vertical slice) — see
+`docs/PHASE_STATUS.md` for current status. The pipeline below runs
+end-to-end but uses a **deterministic dummy predictor**, not a trained
+model — see `docs/ARCHITECTURE.md` for what's real vs. placeholder.
 
 ## Requirements
 
@@ -20,8 +22,8 @@ Phase 0 (environment and repository foundation) — see
   `docs/DECISIONS.md`)
 - Git
 - NVIDIA GPU + recent driver, optional (CPU-only inference is supported)
-- FFmpeg, required starting the video-pipeline phase (not installed by
-  default — see `docs/KNOWN_ISSUES.md`)
+- FFmpeg (install with `winget install --id Gyan.FFmpeg -e`, then open a new
+  terminal so the updated `PATH` takes effect)
 
 ## Setup
 
@@ -53,6 +55,24 @@ detection without exposing any usernames, tokens, or secrets.
 ```powershell
 .venv\Scripts\python.exe -m pytest -v
 ```
+
+## Run the pipeline on a file (Phase 1: dummy prediction)
+
+```python
+import json
+from configuard.config import load_config
+from configuard.pipeline import run_pipeline
+from configuard.io_types import result_to_dict
+
+config = load_config("configs/development.yaml")
+result = run_pipeline("path/to/image_or_video.mp4", config.validation)
+print(json.dumps(result_to_dict(result), indent=2))
+```
+
+Invalid, corrupted, oversized, or wrong-type files raise
+`configuard.pipeline.PipelineRejectedError` (carries the full
+`ValidationResult` with human-readable `error_messages()`), rather than
+producing a prediction.
 
 ## Project layout
 
