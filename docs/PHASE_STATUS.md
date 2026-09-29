@@ -5,6 +5,7 @@
 | 0 | Environment and repository foundation | PASS | 2026-09-29 |
 | 1 | Architecture contracts and minimal vertical slice | PASS | 2026-09-29 |
 | 2 | Face and media preprocessing | PASS | 2026-09-29 |
+| 3 | Dataset registry and leakage-safe data splits | PASS | 2026-09-29 |
 
 Full per-phase results are recorded below as they complete.
 
@@ -130,3 +131,80 @@ named in the task instructions (provenance in `docs/DATASETS.md`).
   intentional, deferred until a real encoder exists to consume face crops.
 - Free disk space remains limited; still non-blocking (only ~224 KB
   downloaded this phase).
+
+---
+
+## Phase 3 — Dataset registry and leakage-safe data splits
+
+**Status:** PASS
+
+**Summary:** New `src/configuard/datasets/` subsystem: a canonical
+`Sample` schema (every field docs/PROJECT_PLAN.md requirement 2 lists),
+a typed registry with adapters for FaceForensics++, Celeb-DF-v2, DFDC,
+DF40, and DeeperForensics-1.0 (two reusable engines - folder-convention
+and metadata-sidecar - the latter doubling as the generic adapter for
+future datasets), JSONL manifest read/write with lenient + strict
+validation, deterministic leakage-safe splitting (union-find over
+source/identity/parent/pair links, hash-bucketed assignment), exact +
+near-duplicate detection, and a storage-path safety checker. No dataset,
+checkpoint, or large file was downloaded - every adapter was built and
+tested against synthetic, generated fixtures only.
+
+**Verified:**
+- `configuard.datasets.schema`: round-trip JSON serialization; unknown
+  manifest fields tolerated on load; demographic fields default to
+  `None` and are never set by any adapter.
+- `configuard.datasets.manifest`: write/read round-trip; lenient parser
+  isolates malformed JSON, missing fields, invalid labels, and
+  unsupported media types as per-line issues without aborting the whole
+  read; semantic validation catches duplicate IDs, missing files, broken
+  parent/pair references, and cross-split source/identity/pair leakage.
+- `configuard.datasets.splitting`: same seed -> bit-identical
+  assignments, independent of input ordering; different seed usually
+  differs; fractions must sum to 1.0; every leakage group (shared source,
+  shared identity, parent link, or pair link) stays in one split, on both
+  a synthetic 60-pair stress test and the full multi-scenario fixture;
+  audit report written to JSON.
+- `configuard.datasets.duplicates`: exact duplicates found via SHA-256
+  grouping; near-duplicates found via average-hash + configurable Hamming
+  threshold; video samples correctly skipped by the near-duplicate check
+  (documented limitation, not a bug - see docs/KNOWN_ISSUES.md); missing
+  files handled without raising; nothing ever deleted, report only.
+- `configuard.datasets.adapters`: both engines tested against synthetic
+  dataset trees (missing root, no buckets present, partial buckets
+  tolerated, official-split-file parsing, fake→real pairing,
+  JSON/JSONL/CSV metadata formats, DFDC's real `{filename: {...}}`
+  metadata shape); all five known-dataset factories registered and
+  fail with `DatasetAccessError` (never crash, never attempt any
+  network access) when pointed at a nonexistent local root.
+- `configuard.datasets.storage`: unset/missing/existing paths;
+  writability; free-space warning at a deliberately huge threshold;
+  in-repo detection both warns (`check_storage_path`) and hard-refuses
+  (`assert_safe_storage_path` raises `UnsafeStoragePathError`) - see
+  `scripts/check_storage.py`'s real output in `docs/EXPERIMENT_LOG.md`,
+  including the refusal case with a real (data)/(cache) split.
+- End-to-end demo: a synthetic FF++-shaped fixture (3 real + 2 fake
+  videos, 2 manipulation methods) built into a manifest, validated
+  (0 issues), split deterministically (pairs stayed together, no
+  leakage), and duplicate-checked - full output in
+  `docs/EXPERIMENT_LOG.md`.
+- `pytest` suite: **215/215 passed** (124 from Phases 0–2 + 91 new Phase 3
+  unit/integration tests).
+
+**Open items carried to later phases (see `docs/KNOWN_ISSUES.md`):**
+- DF40's adapter structure is low-confidence ("verification required") -
+  no independently-confirmed public documentation of its real on-disk
+  layout was available; DeeperForensics-1.0's real-video bucket name is
+  a best-effort guess. Both must be adjusted once real access exists.
+- Access/licensing details for all five datasets are marked
+  "verification required" in `docs/DATASETS.md` where not independently
+  confirmable - treat as a starting point, not ground truth.
+- Near-duplicate detection only covers IMAGE-type samples; video
+  near-duplicate detection would need representative-frame extraction
+  (available via `configuard.media`, not yet wired in here).
+- `configuard.datasets` is not yet wired into any training loop -
+  intentional, per task scope (task 15: "do not wire dataset processing
+  into model training yet").
+- Free disk space is down to ~12.9 GB at last check (`scripts/check_storage.py`
+  output in `docs/EXPERIMENT_LOG.md`) - still non-blocking since no real
+  dataset was downloaded, but leaves less room before Phase 3b.

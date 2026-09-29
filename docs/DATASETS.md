@@ -1,15 +1,50 @@
 # Datasets
 
-Status: No training datasets have been downloaded or registered yet. This
-document also tracks small, non-training external model assets (e.g. the
-face detector below), per project rules that any download must be recorded
-with its provenance.
+Status: No training dataset has been downloaded. Phase 3 added a typed
+**dataset registry** (`src/configuard/datasets/`) with adapters for five
+named deepfake-detection datasets, built and tested entirely against
+synthetic fixtures - see docs/PHASE_STATUS.md and docs/ARCHITECTURE.md for
+what the registry actually does. This document tracks (a) the one small
+non-training model asset downloaded so far (the YuNet face detector) and
+(b) access/licensing information for each registered dataset, verified
+only where explicitly marked - anything not independently confirmed is
+marked **VERIFICATION REQUIRED** rather than presented as fact.
 
 Per project rules, no dataset is downloaded without explicit user
-confirmation. When training datasets are added, this document will record,
-per dataset: name, source/license, size, download method, local storage
-path convention (via `.env`, never hardcoded), and any preprocessing
-applied. Raw data itself is never committed (see `.gitignore`).
+confirmation, and none of the five datasets below were downloaded to
+build their adapters - all are access-controlled and require the user to
+obtain them independently under each dataset's own terms. Local storage
+paths are always configurable via `.env` (`CONFIGUARD_DATA_DIR`,
+`CONFIGUARD_CACHE_DIR`, `CONFIGUARD_CHECKPOINT_DIR` - see
+`scripts/check_storage.py`), never hardcoded. Raw data itself is never
+committed (see `.gitignore`).
+
+---
+
+## Registered datasets: access and licensing
+
+**How to read this table:** "Structure confidence" reflects how sure this
+project is that `src/configuard/datasets/adapters/known_datasets.py`'s
+expected on-disk layout matches the *real* dataset - none of it was
+checked against real data (which this project doesn't have access to).
+Low-confidence entries should be treated as a starting point to adjust
+once real access is obtained, not as ground truth.
+
+| Dataset | Access process | License/terms | Structure confidence |
+|---|---|---|---|
+| FaceForensics++ | Request access via the official form linked from `github.com/ondyari/FaceForensics` (requires agreeing to the dataset's terms of use; academic/research use). **VERIFICATION REQUIRED**: exact current request URL/process - confirm against the live repo before relying on this. | Restricted - EULA/terms-of-use agreement required before download; redistribution prohibited. **VERIFICATION REQUIRED** for exact current license text. | High for the top-level `original_sequences/`/`manipulated_sequences/{method}/{c}/videos` layout (well-documented, stable across the dataset's public lifetime). Filename source/target semantics treated liberally by design - see docs/DECISIONS.md. |
+| Celeb-DF-v2 | Request access via the Google Form linked from `github.com/yuezunli/celeb-deepfakeforensics` (academic/research use, requires institutional affiliation in most public accounts of the process). **VERIFICATION REQUIRED**: exact current form URL/requirements. | Restricted - access-request agreement; research use only per the dataset's own terms. **VERIFICATION REQUIRED** for exact current terms. | High for `Celeb-real/`, `Celeb-synthesis/`, `YouTube-real/`, `List_of_testing_videos.txt` (consistently referenced across public documentation of this dataset). |
+| DFDC (Deepfake Detection Challenge) | Was distributed via Kaggle (`kaggle.com/c/deepfake-detection-challenge`) and an AWS-hosted full dataset for competition participants; general public download availability may have changed since the competition ended. **VERIFICATION REQUIRED**: current availability/access path. | Competition rules / dataset license as published by Meta AI (then Facebook AI) - restricted use terms applied historically. **VERIFICATION REQUIRED** for exact current terms. | High for the per-part `metadata.json` = `{"<file>.mp4": {"label": "REAL"\|"FAKE", "split": ..., "original": "<file>.mp4"\|null}}` shape - this is extensively documented in public competition materials. |
+| DF40 | A more recent (2024+) multi-forgery-method benchmark. **VERIFICATION REQUIRED**: this project could not independently confirm the official repository, access process, license, or on-disk structure. The adapter's `metadata.jsonl` assumption is a generic placeholder, not a confirmed fact. | **VERIFICATION REQUIRED**. | Low - do not rely on `make_df40_adapter()`'s defaults without first confirming the real structure and adjusting `MetadataSidecarSpec` accordingly. |
+| DeeperForensics-1.0 | Request access via the official form linked from the dataset's GitHub repo (academic/research use). **VERIFICATION REQUIRED**: exact current request URL/process. | Restricted - EULA required. **VERIFICATION REQUIRED** for exact current terms. | Moderate for `manipulated_videos/` (fake, end-to-end perturbed videos - stated with moderate confidence from the paper's description). Low for the `source_videos/` (real) bucket name, which is a best-effort guess - the paper describes real source actor recordings distinct from FaceForensics++, but the exact release folder name was not confirmed. |
+
+None of these datasets were downloaded, browsed, or accessed in any way to
+write this project's adapters - the structures above come from general,
+public documentation knowledge of each dataset, which may be incomplete
+or have drifted from the current official release. **Before pointing any
+adapter at a real local copy, verify the actual folder/metadata layout
+against the dataset's own current documentation and adjust
+`known_datasets.py` if it differs.**
 
 ---
 

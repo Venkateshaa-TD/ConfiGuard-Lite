@@ -69,3 +69,29 @@ All notable changes to this project are documented here.
 - Updated `docs/ARCHITECTURE.md`, `docs/DECISIONS.md`, `docs/DATASETS.md`,
   `docs/KNOWN_ISSUES.md`, `docs/PROJECT_PLAN.md` (reordered: preprocessing
   moved ahead of the dataset registry).
+
+### Phase 3 — Dataset registry and leakage-safe data splits (2026-09-29)
+
+- Added `src/configuard/datasets/` subsystem: `schema.py` (canonical
+  `Sample`), `registry.py` (typed `DatasetRegistry`), `manifest.py`
+  (JSONL read/write, lenient + strict validation), `splitting.py`
+  (union-find leakage grouping, deterministic hash-bucketed split
+  assignment, JSON audit report), `duplicates.py` (SHA-256 exact +
+  OpenCV average-hash near-duplicate detection), `storage.py`
+  (storage-path safety checks, `UnsafeStoragePathError`).
+- Added `adapters/` with two reusable engines
+  (`FolderConventionAdapter`, `MetadataSidecarAdapter`) and
+  `known_datasets.py` registering adapters for FaceForensics++,
+  Celeb-DF-v2, DFDC, DF40, and DeeperForensics-1.0, plus
+  `make_generic_metadata_adapter()` for future datasets.
+- Added `scripts/check_storage.py` (CLI for the storage-check utility).
+- Added 91 new unit/integration tests under `tests/datasets/`, including
+  a full synthetic multi-scenario fixture (multiple sources, derivative
+  fakes, paired real/fake, repeated identities, exact + near duplicates)
+  and a deliberately-leaked split assignment proving the leakage detector
+  actually catches leakage. Full suite: 215/215 passing.
+- No dataset, checkpoint, or large file downloaded this phase.
+- Updated `docs/DATASETS.md` (access/licensing per dataset, structure
+  confidence table, "verification required" markers),
+  `docs/ARCHITECTURE.md`, `docs/DECISIONS.md` (7 new entries),
+  `docs/KNOWN_ISSUES.md`, `docs/PROJECT_PLAN.md`.

@@ -10,13 +10,16 @@ operating rules this project is developed under.
 
 ## Status
 
-Phase 2 (face and media preprocessing) — see `docs/PHASE_STATUS.md` for
-current status. The end-to-end pipeline (`configuard.pipeline`) runs but
-uses a **deterministic dummy predictor**, not a trained model. The face
-preprocessing subsystem (`configuard.media`) is real (decoding, nested
-frame sampling, YuNet face detection, tracking, alignment, caching) but
-not yet wired into that pipeline — see `docs/ARCHITECTURE.md` for what's
-real vs. placeholder.
+Phase 3 (dataset registry and leakage-safe data splits) — see
+`docs/PHASE_STATUS.md` for current status. The end-to-end pipeline
+(`configuard.pipeline`) runs but uses a **deterministic dummy predictor**,
+not a trained model. The face preprocessing subsystem (`configuard.media`)
+and the dataset registry (`configuard.datasets`) are both real and
+independently tested, but neither is wired into the pipeline or into any
+training loop yet — see `docs/ARCHITECTURE.md` for what's real vs.
+placeholder. **No training dataset has been downloaded** - the registry
+was built and tested entirely against synthetic fixtures (see
+`docs/DATASETS.md`).
 
 ## Requirements
 
@@ -103,6 +106,34 @@ Benchmark each stage separately:
 
 ```powershell
 .venv\Scripts\python.exe scripts\benchmark_preprocessing.py
+```
+
+## Build a dataset manifest (Phase 3)
+
+```python
+from configuard.datasets.registry import DEFAULT_REGISTRY
+from configuard.datasets.manifest import write_manifest, validate_manifest_file
+from configuard.datasets.splitting import SplitConfig, split_samples, write_split_audit_report
+from configuard.datasets.duplicates import build_duplicate_report
+
+adapter = DEFAULT_REGISTRY.get_adapter("faceforensics++")  # or celeb-df-v2 / dfdc / df40 / deeperforensics-1.0
+samples = adapter.build_manifest("/path/to/your/local/FaceForensics++")  # never downloaded for you - see docs/DATASETS.md
+write_manifest(samples, "manifest.jsonl")
+
+report = validate_manifest_file("manifest.jsonl", media_root="/path/to/your/local/FaceForensics++")
+split_report = split_samples(samples, SplitConfig(seed=42))
+write_split_audit_report(split_report, "split_audit.json")
+dup_report = build_duplicate_report(samples, media_root="/path/to/your/local/FaceForensics++")
+```
+
+A missing/incomplete local dataset root raises
+`configuard.datasets.adapters.DatasetAccessError` with a clear message —
+adapters never download anything.
+
+Check your configured storage paths before pointing anything real at them:
+
+```powershell
+.venv\Scripts\python.exe scripts\check_storage.py
 ```
 
 ## Project layout

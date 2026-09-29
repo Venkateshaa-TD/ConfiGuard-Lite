@@ -273,3 +273,101 @@ for the 16-frame plan. Zero faces found (expected: synthetic test pattern,
 not a real face). Console also showed a benign OpenCV warning
 (`Targets are not supported by the new graph engine for now`) — informational
 only, detection still ran correctly on CPU.
+
+---
+
+## 2026-09-29 — Phase 3 test suite run
+
+Command:
+```
+.venv/Scripts/python.exe -m pytest tests/datasets -v
+```
+Result: **91 passed in 1.01s** across `test_schema.py`, `test_manifest.py`,
+`test_splitting.py`, `test_duplicates.py`, `test_storage.py`,
+`test_adapters.py`, `test_fixture_scenarios.py`.
+
+Full combined suite:
+```
+.venv/Scripts/python.exe -m pytest -q
+```
+Result: **215 passed in 7.83s** (124 from Phases 0–2 + 91 new). Two benign
+`moov atom not found` stderr lines appeared from ffmpeg/OpenCV probing a
+Phase-1 fixture (a deliberately truncated video, used to test corrupted-
+file handling) - expected noise, not a failure.
+
+---
+
+## 2026-09-29 — Phase 3 storage-check utility run
+
+Command (no env vars set):
+```
+.venv/Scripts/python.exe scripts/check_storage.py
+```
+Output: all three of `CONFIGUARD_DATA_DIR`/`CONFIGUARD_CACHE_DIR`/
+`CONFIGUARD_CHECKPOINT_DIR` reported as not set (exit code 0 - unset is a
+warning, not a refusal).
+
+Command (deliberately misconfigured, to exercise the refusal path):
+```powershell
+$env:CONFIGUARD_DATA_DIR = "C:\Users\balag\ConfiGuard-Data-Outside-Repo"
+$env:CONFIGUARD_CACHE_DIR = "C:\Users\balag\Projects\ConfiGuard-Lite\data\bad_location"
+.venv/Scripts/python.exe scripts/check_storage.py
+```
+Output (abbreviated):
+```
+--- CONFIGUARD_DATA_DIR ---
+  configured path : C:\Users\balag\ConfiGuard-Data-Outside-Repo
+  exists          : False
+  writable        : True
+  inside repo     : False
+  total           : 199.6 GB
+  free            : 12.9 GB
+  [WARNING] CONFIGUARD_DATA_DIR path does not exist yet: ...
+
+--- CONFIGUARD_CACHE_DIR ---
+  configured path : C:\Users\balag\Projects\ConfiGuard-Lite\data\bad_location
+  inside repo     : True
+  [WARNING] ... is INSIDE the git repository ... Point it at a location outside the repo.
+
+[REFUSE] One or more paths are inside the git repository - reconfigure before storing any real data.
+```
+Exit code: **1** (refusal, as intended for the in-repo case). Confirms the
+utility correctly distinguishes "not set" / "outside repo, just doesn't
+exist yet" / "inside repo - refuse" without creating or downloading
+anything. Free disk space at time of this check: **12.9 GB** (down from
+~21.8 GB at Phase 0 - consumed by `.venv` packages: torch, opencv, etc. -
+see `docs/KNOWN_ISSUES.md`).
+
+---
+
+## 2026-09-29 — Phase 3 end-to-end dataset registry demo
+
+Built a synthetic, FaceForensics++-shaped fixture (3 real videos under
+`original_sequences/youtube/c23/videos/`, 2 fake videos under
+`manipulated_sequences/{Deepfakes,Face2Face}/c23/videos/`, all tiny
+placeholder byte content - not real video), then ran the full workflow:
+
+```python
+adapter = make_faceforensics_adapter()
+samples = adapter.build_manifest(root)          # -> 5 Sample objects
+write_manifest(samples, manifest_path)           # JSONL
+report = validate_manifest_file(manifest_path, media_root=root)
+split_report = split_samples(samples, SplitConfig(seed=42))
+write_split_audit_report(split_report, audit_path)
+dup_report = build_duplicate_report(samples, root)
+```
+
+Results:
+- **5 samples built**, correctly labeled real/fake, `source_id` extracted
+  from filenames (`001`, `002`, `003`), each fake's `parent_sample_id`
+  correctly linked to its matching real sample by shared `source_id`
+  (`001_002.mp4` -> parent `001.mp4`; `002_003.mp4` -> parent `002.mp4`),
+  `generator_method` set to `Deepfakes`/`Face2Face` per bucket.
+- **Manifest validation: `is_valid=True`, 0 issues.**
+- **Split (seed=42):** `{001-real, 001_002-fake}` -> `validation`;
+  `{002-real, 002_003-fake, 003-real}` -> `train`. The real/fake pairs for
+  sources 001 and 002 stayed together in their respective splits (no
+  leakage), matching `parent_sample_id`-based grouping.
+- Audit report written successfully (1560 bytes JSON).
+- Duplicate report: 0 exact, 0 near (expected - all 5 fixture files have
+  distinct placeholder byte content).

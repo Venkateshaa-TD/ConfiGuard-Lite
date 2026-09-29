@@ -88,3 +88,50 @@ YuNet asset (2026-09-29).
 under an excluded *directory*, only under excluded *contents* of a
 non-excluded directory). See `docs/DECISIONS.md` for detail. Verified via
 `git check-ignore -v` on all five `.gitkeep` paths.
+
+---
+
+## OPEN — DF40 and DeeperForensics-1.0 adapter structures are low-confidence
+
+**Detected:** Phase 3, writing `configuard/datasets/adapters/known_datasets.py`
+(2026-09-29).
+
+**Impact:** `make_df40_adapter()`'s `metadata.jsonl` assumption and
+`make_deeperforensics_adapter()`'s `source_videos/` bucket name were not
+independently verified against real dataset documentation - see
+`docs/DATASETS.md`'s "structure confidence" column. Pointing either
+adapter at a real local copy may fail `validate_structure`/raise
+`DatasetAccessError` even with legitimate data present, if the real
+layout differs.
+
+**Action needed:** Once the user obtains real access to either dataset,
+confirm the actual on-disk/metadata layout and adjust the corresponding
+`FolderConventionSpec`/`MetadataSidecarSpec` in `known_datasets.py`
+accordingly (this is expected, routine adjustment - the specs were
+designed to be easy to update).
+
+---
+
+## OPEN — Near-duplicate detection doesn't cover video samples
+
+**Detected:** Phase 3, writing `configuard/datasets/duplicates.py`
+(2026-09-29).
+
+**Impact:** `find_near_duplicate_images` only processes `SampleMediaType.IMAGE`
+samples. Near-duplicate video clips (e.g. the same source re-encoded at a
+different compression level, common across FF++'s `raw`/`c23`/`c40`
+tiers) are not detected.
+
+**Action needed:** Extend duplicate detection to videos once
+representative-frame extraction is wired in (the machinery already
+exists in `configuard.media`, just not connected to
+`configuard.datasets` yet - intentional, per this phase's scope).
+
+---
+
+## Disk space update (2026-09-29, Phase 3)
+
+Free space on `C:` is now **~12.9 GB** (down from ~21.8 GB at Phase 0),
+consumed by `.venv` packages (PyTorch, OpenCV, etc.) — see the original
+"Limited free disk space" entry above, still OPEN and now more pressing
+ahead of Phase 3b (wiring in a real dataset).

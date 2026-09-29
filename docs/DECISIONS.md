@@ -4,6 +4,161 @@ Format: one entry per decision, newest first.
 
 ---
 
+## 2026-09-29 — JSONL manifests, not Parquet
+
+**Context:** Requirement: "Use JSONL as the initial portable manifest
+format. Do not add a heavy Parquet dependency unless there is a measured
+need."
+
+**Decision:** `configuard.datasets.manifest` reads/writes one JSON object
+per line, no `pyarrow`/`pandas` dependency added.
+
+**Why:** At this project's scale (laptop-scale training data, not
+web-scale), JSONL is human-diffable in `git diff`/code review, trivially
+streamable line-by-line without loading a whole file, and needs zero new
+dependencies. Revisit only if a measured manifest size/load-time problem
+actually appears.
+
+---
+
+## 2026-09-29 — Leakage groups are connected components (union-find), not pairwise rules
+
+**Context:** Requirement: group all derivatives of one source, all
+samples of one identity, and any real/fake pair into the same split.
+
+**Decision:** `compute_leakage_groups` unions samples sharing a
+`source_id`, sharing an `identity_id`, linked by `parent_sample_id`, or
+linked by `paired_sample_id` into connected components via a union-find
+structure, then assigns each *component* (not each sample) to a split.
+
+**Why:** These relationships chain (e.g. a fake derived from another fake
+derived from a real - see the derivative-of-derivative case in
+`tests/datasets/test_fixture_scenarios.py`), and a person can appear
+across sources. Handling each relationship as an independent pairwise
+rule would miss transitive leakage (A-B linked, B-C linked, but A-C not
+directly checked); connected components close over all transitive links
+in one pass.
+
+---
+
+## 2026-09-29 — Split assignment is a deterministic hash, not a seeded shuffle
+
+**Context:** Requirement: "Deterministic splits reproduce exactly with
+the same seed," independent of how the caller happens to order samples.
+
+**Decision:** Each leakage group's split is chosen by hashing
+`f"{seed}:{group_key}"` into `[0, 1)` and bucketing against cumulative
+split fractions, rather than seeding `random.shuffle` on the group list.
+
+**Why:** A seeded shuffle's result depends on the *order* items are fed
+into it and on Python's specific PRNG algorithm/version - two callers
+with the same groups but a different starting order, or a future
+different Python version, aren't guaranteed to get bit-identical output.
+Hashing each group's own stable key is order-independent by construction
+(verified in `tests/datasets/test_splitting.py::test_split_samples_reordered_input_same_result`)
+and has no dependency on `random` module internals.
+
+---
+
+## 2026-09-29 — Two adapter engines cover five named datasets + the generic case
+
+**Context:** Requirement: typed adapters for FaceForensics++, Celeb-DF-v2,
+DFDC, DF40, DeeperForensics-1.0, plus "future datasets through a generic
+adapter."
+
+**Decision:** Rather than five independent adapter classes (mostly
+duplicated scanning logic) plus a sixth generic one, built two reusable,
+declaratively-configured engines - `FolderConventionAdapter` (real/fake
+media in known subdirectories, identity from filename; backs FF++,
+Celeb-DF-v2, DeeperForensics-1.0) and `MetadataSidecarAdapter` (a JSON/
+JSONL/CSV sidecar declares path/label/etc per row, no folder assumptions;
+backs DFDC, DF40, and is *also* the generic adapter via
+`make_generic_metadata_adapter()`). Each named dataset is a thin factory
+function in `known_datasets.py` that configures one engine.
+
+**Why:** DRY - one tested scanning/pairing implementation per engine
+rather than five. `MetadataSidecarAdapter` was the natural pick for
+"generic," since it needs zero folder-layout knowledge (any dataset that
+ships a path+label sidecar works with it out of the box), matching the
+open-ended "future image-only face-deepfake datasets" requirement better
+than a folder-convention engine would.
+
+---
+
+## 2026-09-29 — `FolderConventionAdapter` tolerates partially-missing buckets
+
+**Context:** Initially, `validate_structure` required every declared
+bucket directory (e.g. all 3 compression tiers x 6 manipulation methods
+for FF++) to exist, which failed a synthetic test fixture containing only
+one method/tier and would equally fail a real, legitimately *partial*
+local download (many practitioners only fetch the `c23` compression
+tier).
+
+**Decision:** A missing individual bucket directory is tolerated (that
+bucket just contributes zero samples); `validate_structure`/
+`build_manifest` only fail if the dataset root itself is missing, or if
+*none* of the declared buckets are present at all.
+
+**Why:** Matches realistic partial local copies, still satisfies "fail
+clearly when access-controlled data is missing" (root missing, or nothing
+usable found, both still raise `DatasetAccessError`) without being overly
+strict about which subset a user happened to download.
+
+---
+
+## 2026-09-29 — Fake→real pairing is inferred one-directionally by matching `source_id`
+
+**Context:** Requirement 2's "paired-real/fake relationship" field.
+
+**Decision:** `FolderConventionAdapter` and `MetadataSidecarAdapter` both
+build a real-sample-by-`source_id` lookup after scanning, then set
+`parent_sample_id`/`paired_sample_id` on each FAKE sample whose extracted
+`source_id` matches a REAL sample's `source_id` in the same dataset. This
+is one-directional (only the fake sample carries the link); nothing sets
+it on the real sample.
+
+**Why:** This is the general pattern across all five datasets' naming/
+metadata conventions (a fake's filename or metadata references its real
+source, not the reverse). A reverse index is trivial for a caller to
+build from the forward links if needed, so storing it redundantly on both
+sides wasn't worth the complexity of updating an already-frozen `Sample`.
+
+---
+
+## 2026-09-29 — Near-duplicate detection uses a hand-rolled average-hash via OpenCV
+
+**Context:** Requirement: perceptual hashes for near-duplicate images,
+with a configurable threshold.
+
+**Decision:** `configuard.datasets.duplicates.compute_average_hash`
+implements aHash directly (grayscale, resize to `hash_size`, threshold
+against the resized image's own mean) using OpenCV, which is already a
+project dependency, rather than adding the `imagehash` package.
+
+**Why:** aHash is ~10 lines of OpenCV calls; not worth a new dependency
+for one algorithm this project's scale needs. Revisit if a more
+sophisticated perceptual hash (pHash/dHash ensembles) becomes necessary.
+
+---
+
+## 2026-09-29 — Storage check refuses (raises) for in-repo paths, only warns for low space
+
+**Context:** Requirement 11: "must warn or refuse before placing real
+datasets inside the repository or on an insufficient-volume location."
+
+**Decision:** `check_storage_path` reports both conditions as warnings;
+`assert_safe_storage_path` additionally *raises* `UnsafeStoragePathError`
+specifically for the in-repo case, not for low free space.
+
+**Why:** An in-repo dataset path risks an accidental `git add -A`/commit
+of real (possibly access-controlled, non-redistributable) data - a hard
+stop is warranted. Low free space is a softer condition a caller may
+still want to proceed past (e.g. to download a small subset, or because
+they're about to free space) - a warning that surfaces in
+`scripts/check_storage.py` output is proportionate.
+
+---
+
 ## 2026-09-29 — Nested 4/8/16 frame sampling is derived, not independently sampled
 
 **Context:** Requirement: the 4-frame selection must be a subset of the

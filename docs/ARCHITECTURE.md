@@ -1,12 +1,13 @@
 # Architecture
 
-Status: Phase 2 complete. The Phase 1 pipeline shape below is real and
+Status: Phase 3 complete. The Phase 1 pipeline shape below is real and
 tested; the preprocessing, model, and provenance stages it uses are still
-deliberate placeholders (see "Phase 1 scope" below). Phase 2 adds a real,
+deliberate placeholders (see "Phase 1 scope" below). Phase 2 added a real,
 independently-tested face/media preprocessing subsystem
-(`configuard.media`, documented in its own section below) that is not yet
-wired into `configuard.pipeline.run_pipeline` - that happens once a real
-encoder exists to consume its crops.
+(`configuard.media`). Phase 3 adds a real, independently-tested dataset
+registry (`configuard.datasets`, documented in its own section below).
+Neither is yet wired into `configuard.pipeline.run_pipeline` or into any
+training loop - that happens once a real encoder/model exists.
 
 ## Data flow
 
@@ -261,6 +262,93 @@ stale crops. Writes go to a temp file in the same directory, then
 `os.replace()` (atomic on both POSIX and Windows for a same-volume
 rename). `max_bytes` triggers oldest-first (mtime) eviction.
 
+## Dataset registry (Phase 3, `src/configuard/datasets/`)
+
+Independent, separately-tested subsystem. Not yet wired into any training
+loop (none exists yet - see docs/PROJECT_PLAN.md).
+
+```
+   adapter.build_manifest(local_root)
+        |
+        v
+  DatasetAdapter (Protocol: validate_structure(), build_manifest())
+    |                                    |
+    v                                    v
+  FolderConventionAdapter          MetadataSidecarAdapter
+  (real/fake in known                (a JSON/JSONL/CSV sidecar at
+   subdirectories; identity           the dataset root declares
+   from filename)                     path/label/... per row - no
+    |                                  folder assumptions at all;
+    | backs FaceForensics++,          also the officially "generic"
+    | Celeb-DF-v2,                    adapter for future datasets)
+    | DeeperForensics-1.0              |
+    |                                  | backs DFDC, DF40, and any
+    |                                  | future dataset via
+    |                                  | make_generic_metadata_adapter()
+    +------------------+---------------+
+                        v
+              list[Sample]  (canonical schema, configuard.datasets.schema)
+                        |
+          +-------------+-------------+
+          v                           v
+   write_manifest()             validate_samples() /
+   (JSONL, one Sample            validate_manifest_file()
+    per line)                    missing files, duplicate IDs,
+          |                      invalid labels, broken parent/
+          v                      pair refs, unsupported media
+   read_manifest() /             types, cross-split source/
+   parse_manifest_lenient()      identity/pair leakage
+   (strict / issue-collecting)          |
+          |                             v
+          |                   ManifestValidationReport
+          v
+   split_samples(samples, SplitConfig(seed, fractions))
+     1. compute_leakage_groups(): union-find over shared
+        source_id, shared identity_id, parent_sample_id
+        links, and paired_sample_id links
+     2. each group -> one split, via
+        hash(seed, group_key) bucketed against cumulative
+        fractions (deterministic, order-independent)
+          |
+          v
+   SplitAuditReport (assignments + per-group audit trail)
+   -> write_split_audit_report() (JSON)
+
+   build_duplicate_report(samples, media_root)
+     - find_exact_duplicates(): group by Sample.checksum_sha256
+     - find_near_duplicate_images(): average-hash (aHash) computed
+       via OpenCV, pairwise Hamming distance <= configurable threshold
+          |
+          v
+   DuplicateReport (report only - never deletes anything)
+```
+
+**Canonical schema** (`src/configuard/datasets/schema.py`): `Sample` is a
+frozen dataclass with every field docs/PROJECT_PLAN.md requirement 2
+lists (sample/dataset identity, media type/path, label, source/identity/
+parent/paired IDs, manipulation family/method/compression, official
+split, license status, optional demographic attributes, checksum,
+preprocessing version). `demographic_attrs` defaults to `None` and is
+never computed/inferred by any adapter - only ever set from a field an
+adapter's underlying metadata source explicitly provides (none of the
+five built-in adapters currently populate it, since no verified official
+source of per-sample demographic labels was available to this phase).
+
+**Leakage-safe splitting** (`src/configuard/datasets/splitting.py`): see
+docs/DECISIONS.md for why grouping is done as connected components
+(union-find) rather than simpler pairwise rules, and why split assignment
+is a deterministic hash rather than a seeded shuffle.
+
+**Storage-path checking** (`src/configuard/datasets/storage.py`):
+`check_storage_path`/`check_all_storage_paths` report configured path,
+free/total space, writability, and whether the path resolves inside the
+git repository, for `CONFIGUARD_DATA_DIR` / `CONFIGUARD_CACHE_DIR` /
+`CONFIGUARD_CHECKPOINT_DIR`. `assert_safe_storage_path` raises
+`UnsafeStoragePathError` instead of just warning when a path is inside
+the repo (docs/PROJECT_PLAN.md requirement 11's "must warn or refuse").
+See `scripts/check_storage.py` for the CLI and docs/EXPERIMENT_LOG.md for
+real output, including the refusal case.
+
 ## Repository layout
 
 ```
@@ -272,13 +360,23 @@ ConfiGuard-Lite/
 │   ├── io_types.py           Typed pipeline data contracts (Phase 1)
 │   ├── validation.py         Secure file-type/size/duration validation (Phase 1)
 │   ├── pipeline.py           End-to-end vertical slice orchestration (Phase 1)
-│   └── media/                Face/media preprocessing (Phase 2)
-│       ├── types.py, decode.py, sampling.py, face_detector.py,
-│       │   alignment.py, tracking.py, cache.py, hashing.py, preprocess.py
-├── scripts/                 Operational scripts (env verification, preprocessing benchmark)
+│   ├── media/                Face/media preprocessing (Phase 2)
+│   │   ├── types.py, decode.py, sampling.py, face_detector.py,
+│   │   │   alignment.py, tracking.py, cache.py, hashing.py, preprocess.py
+│   └── datasets/              Dataset registry (Phase 3)
+│       ├── schema.py, registry.py, manifest.py, splitting.py,
+│       │   duplicates.py, storage.py
+│       └── adapters/
+│           ├── __init__.py (DatasetAdapter protocol, DatasetAccessError)
+│           ├── folder_convention.py, metadata_sidecar.py (the two engines)
+│           └── known_datasets.py (FF++/Celeb-DF-v2/DFDC/DF40/DeeperForensics-1.0 + generic)
+├── scripts/                 Operational scripts (env verification, preprocessing
+│                              benchmark, storage check)
 ├── tests/                    pytest suite (unit + integration), tests/conftest.py +
-│                              tests/media/conftest.py generate all fixtures at test
-│                              time (hand-built PNG, ffmpeg lavfi clips) - nothing checked in
+│                              tests/media/conftest.py + tests/datasets/conftest.py
+│                              generate all fixtures at test time (hand-built PNG,
+│                              ffmpeg lavfi clips, synthetic dataset trees/manifests)
+│                              - nothing checked in
 ├── configs/                  base.yaml + development/training/testing/production.yaml
 ├── models/                    (gitignored) external model assets, e.g. YuNet ONNX -
 │                              see docs/DATASETS.md for provenance
