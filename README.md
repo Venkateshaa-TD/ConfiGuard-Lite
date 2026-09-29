@@ -10,10 +10,13 @@ operating rules this project is developed under.
 
 ## Status
 
-Phase 1 (architecture contracts and minimal vertical slice) — see
-`docs/PHASE_STATUS.md` for current status. The pipeline below runs
-end-to-end but uses a **deterministic dummy predictor**, not a trained
-model — see `docs/ARCHITECTURE.md` for what's real vs. placeholder.
+Phase 2 (face and media preprocessing) — see `docs/PHASE_STATUS.md` for
+current status. The end-to-end pipeline (`configuard.pipeline`) runs but
+uses a **deterministic dummy predictor**, not a trained model. The face
+preprocessing subsystem (`configuard.media`) is real (decoding, nested
+frame sampling, YuNet face detection, tracking, alignment, caching) but
+not yet wired into that pipeline — see `docs/ARCHITECTURE.md` for what's
+real vs. placeholder.
 
 ## Requirements
 
@@ -24,6 +27,12 @@ model — see `docs/ARCHITECTURE.md` for what's real vs. placeholder.
 - NVIDIA GPU + recent driver, optional (CPU-only inference is supported)
 - FFmpeg (install with `winget install --id Gyan.FFmpeg -e`, then open a new
   terminal so the updated `PATH` takes effect)
+- The YuNet face detector ONNX model, for real face detection (optional -
+  `configuard.media.face_detector.MockFaceDetector` works without it, e.g.
+  for tests). See `docs/DATASETS.md` for the official download source,
+  license, and SHA-256 to verify against; place it at
+  `models/face_detection/face_detection_yunet_2026may.onnx` (gitignored)
+  or point `CONFIGUARD_YUNET_MODEL_PATH` at it.
 
 ## Setup
 
@@ -73,6 +82,28 @@ Invalid, corrupted, oversized, or wrong-type files raise
 `configuard.pipeline.PipelineRejectedError` (carries the full
 `ValidationResult` with human-readable `error_messages()`), rather than
 producing a prediction.
+
+## Run face preprocessing on a file (Phase 2)
+
+```python
+from configuard.media.cache import FaceCropCache
+from configuard.media.face_detector import YuNetFaceDetector
+from configuard.media.preprocess import preprocess_image, preprocess_video
+from configuard.media.types import PreprocessingConfig
+
+detector = YuNetFaceDetector()  # requires the model file - see Requirements above
+cache = FaceCropCache("cache/face_crops", max_bytes=2_000_000_000)
+config = PreprocessingConfig(detector_name=detector.name, detector_version=detector.version)
+
+image_result = preprocess_image("photo.jpg", detector, cache, config)
+video_result = preprocess_video("clip.mp4", requested_frame_count=8, detector=detector, cache=cache, config=config)
+```
+
+Benchmark each stage separately:
+
+```powershell
+.venv\Scripts\python.exe scripts\benchmark_preprocessing.py
+```
 
 ## Project layout
 

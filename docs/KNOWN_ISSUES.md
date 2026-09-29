@@ -29,11 +29,13 @@ environment defect, just a live-session caveat.
 
 **Impact:** `C:` drive had ~20 GB free out of 200 GB at time of scan. Face
 manipulation / deepfake datasets and multiple model checkpoints can easily
-exceed this. Will block Phase 1 (data pipeline) if not addressed.
+exceed this. Not a blocker through Phase 2 (only a 224 KB detector model
+was downloaded - see `docs/DATASETS.md`); will block Phase 3 (dataset
+registry / training data pipeline) if not addressed first.
 
 **Action needed:** Confirm target dataset sizes with the user before
 downloading, and consider an external/secondary drive path (configurable via
-`.env`, e.g. `CONFIGUARD_DATA_DIR`) before Phase 1 begins.
+`.env`, e.g. `CONFIGUARD_DATA_DIR`) before Phase 3 begins.
 
 ---
 
@@ -47,3 +49,42 @@ Would only matter if a future phase needs to compile custom CUDA kernels.
 
 **Action needed:** None for now. Revisit only if a custom-kernel dependency
 is introduced.
+
+---
+
+## OPEN — Video rotation metadata not observed from this ffmpeg build's lavfi-synthesized clips
+
+**Detected:** Phase 2, writing `configuard.media.decode._extract_rotation`
+and its test (2026-09-29).
+
+**Impact:** `ffmpeg -metadata:s:v:0 rotate=90` and `-display_rotation 90`
+did not produce a `rotate` tag or Display Matrix side data on an mp4 muxed
+from a `lavfi testsrc` input, verified by direct `ffprobe -show_streams`
+inspection, with this project's installed ffmpeg 9.0.2. Real phone-
+recorded video (the actual target use case) reliably carries this
+metadata in practice, so this is a test-fixture limitation, not
+necessarily a production one - but it has not been verified against a
+real rotated video file in this environment. `_extract_rotation`'s parsing
+logic (both the legacy `rotate` tag and Display Matrix side-data
+conventions) is unit-tested directly against synthetic ffprobe JSON
+instead - see `docs/DECISIONS.md`.
+
+**Action needed:** When a real rotated sample video becomes available
+(e.g. user-provided, not downloaded), re-verify `extract_video_metadata`
+end-to-end against it. Not blocking - rotation is reported, defaulting
+safely to 0, and is not yet used to auto-correct crops (see
+`docs/ARCHITECTURE.md`'s edge-case table).
+
+---
+
+## RESOLVED — `.gitignore` silently dropped `.gitkeep` placeholders in ignored directories
+
+**Detected:** Phase 2, while adding `models/` to `.gitignore` for the
+YuNet asset (2026-09-29).
+
+**Resolved:** 2026-09-29. Changed `data/`, `checkpoints/`, `models/`,
+`cache/`, `outputs/` patterns to `data/*`, `checkpoints/*`, etc. so the
+`!dir/.gitkeep` exceptions actually work (git cannot re-include a file
+under an excluded *directory*, only under excluded *contents* of a
+non-excluded directory). See `docs/DECISIONS.md` for detail. Verified via
+`git check-ignore -v` on all five `.gitkeep` paths.

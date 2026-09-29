@@ -22,11 +22,14 @@ secrets.yaml
 secrets.yml
 
 # --- Datasets, checkpoints, models (never commit) ---
-data/
+# NOTE: `dir/*` (not `dir/`) so the `!dir/.gitkeep` exceptions below can
+# actually re-include the placeholder - git cannot re-include a file whose
+# parent directory itself is excluded.
+data/*
 !data/.gitkeep
-checkpoints/
+checkpoints/*
 !checkpoints/.gitkeep
-models/
+models/*
 !models/.gitkeep
 *.pt
 *.pth
@@ -37,8 +40,10 @@ models/
 *.h5
 
 # --- Uploaded / user-submitted media (never commit) ---
-uploads/
-media/
+# Anchored to the repo root (leading /) so this doesn't also match
+# source packages named "media", e.g. src/configuard/media/, tests/media/.
+/uploads/
+/media/
 *.mp4
 *.avi
 *.mov
@@ -51,9 +56,9 @@ media/
 !docs/**/*.jpg
 
 # --- Caches, generated outputs, reports ---
-cache/
+cache/*
 !cache/.gitkeep
-outputs/
+outputs/*
 !outputs/.gitkeep
 .cache/
 *.log

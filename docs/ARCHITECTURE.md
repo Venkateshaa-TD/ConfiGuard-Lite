@@ -1,8 +1,12 @@
 # Architecture
 
-Status: Phase 1 complete. The pipeline shape below is real and tested; the
-preprocessing, model, and provenance stages are deliberate placeholders
-(deterministic dummy logic, not trained models) - see "Phase 1 scope" below.
+Status: Phase 2 complete. The Phase 1 pipeline shape below is real and
+tested; the preprocessing, model, and provenance stages it uses are still
+deliberate placeholders (see "Phase 1 scope" below). Phase 2 adds a real,
+independently-tested face/media preprocessing subsystem
+(`configuard.media`, documented in its own section below) that is not yet
+wired into `configuard.pipeline.run_pipeline` - that happens once a real
+encoder exists to consume its crops.
 
 ## Data flow
 
@@ -156,6 +160,107 @@ MobileNetV4-Conv-Small / EfficientNet-B0 encoders, GenD CLIP-L/14
 distillation, the temporal GRU, calibration/conformal prediction, ONNX
 export, heatmaps/evidence timelines, and real C2PA provenance checking.
 
+## Face and media preprocessing (Phase 2, `src/configuard/media/`)
+
+Independent, separately-tested subsystem. Not yet called from
+`configuard.pipeline` - see the note at the top of this document.
+
+```
+   image path                          video path
+      |                                    |
+      v                                    v
+  decode_image()                  extract_video_metadata()
+  (configuard.media.decode)        (ffprobe, falls back to OpenCV;
+      |                             reports fps/duration/rotation/VFR)
+      |                                    |
+      |                          compute_sampling_plan(frame_count, N)
+      |                             (configuard.media.sampling)
+      |                             nested nesting: indices(4) subset
+      |                             indices(8) subset indices(16),
+      |                             deduplicated for short videos
+      |                                    |
+      |                          decode_sampled_frames()
+      |                             sequential decode of just the
+      |                             requested indices; missing/corrupt
+      |                             frames -> warnings, never a crash
+      |                                    |
+      v                                    v
+  detector.detect(image)            detector.detect(frame.image) per frame
+  (FaceDetector protocol:                  |
+   YuNetFaceDetector or                    v
+   MockFaceDetector for tests)      track_faces() (configuard.media.tracking)
+      |                             greedy IoU + landmark-distance
+      |                             tie-break, temporal-gap tolerance
+      |                             (adapted to the sampling stride -
+      |                             see docs/DECISIONS.md), frame order
+      |                             preserved
+      |                                    |
+      |                          select_primary_track()
+      |                             longest track wins; other tracks
+      |                             with a meaningful length produce a
+      |                             warning instead of being silently
+      |                             dropped
+      v                                    v
+  align_and_crop() per face          align_and_crop() per face in the
+  (configuard.media.alignment:        primary track (frame order)
+   levels the eyes, expands by
+   margin_ratio, clips to image
+   bounds, resizes to output_size)
+      |                                    |
+      v                                    v
+  FaceCropCache.get()/.put()          FaceCropCache.get()/.put()
+  (configuard.media.cache: keyed by (input SHA-256, frame_index,
+   track_id, PreprocessingConfig.version_tag); atomic writes via
+   temp-file + os.replace; optional oldest-first byte-limit eviction)
+      |                                    |
+      v                                    v
+  ImagePreprocessingResult          VideoPreprocessingResult
+```
+
+**Typed contracts** (`src/configuard/media/types.py`): `BoundingBox` (with
+`.iou`, `.expanded`, `.clipped`), `FaceLandmarks` (5-point, YuNet
+convention: right eye, left eye, nose tip, right mouth corner, left mouth
+corner), `DetectedFace`, `FaceTrack`, `VideoMetadata`, `SampledFrame`,
+`FrameSamplingPlan`, `PreprocessingConfig`, `ImagePreprocessingResult`,
+`VideoPreprocessingResult`.
+
+**FaceDetector is a `Protocol`** (`src/configuard/media/face_detector.py`):
+`YuNetFaceDetector` wraps `cv2.FaceDetectorYN_create` (CPU-only, no CUDA
+required - see docs/EXPERIMENT_LOG.md for the load/verification run);
+`MockFaceDetector` returns pre-configured detections (fixed, or
+per-detector-call via a `{call_index: [...]}` map) for fully deterministic
+unit tests. `configuard.media.preprocess` takes a `FaceDetector` and a
+`FaceCropCache` via dependency injection - nothing in that module imports
+`cv2.FaceDetectorYN_create` directly.
+
+**Nested frame sampling** (`src/configuard/media/sampling.py`): the
+16-frame set is a uniform sample of the video; the 8-frame set is every
+second element of the 16-frame set; the 4-frame set is every second
+element of the 8-frame set. This guarantees `indices(4) ⊆ indices(8) ⊆
+indices(16)` by construction - see docs/DECISIONS.md for why.
+
+**Handling required edge cases** (docs/PROJECT_PLAN.md / Phase 2 task
+list item 13):
+
+| Case | Handling |
+|---|---|
+| No face | `faces=()` / no primary track; `"no_face_detected"` warning, no crash |
+| Multiple faces (image) | Highest-confidence one used; `"multiple_faces_detected"` warning |
+| Multiple faces (video) | Longest track used; `"multiple_face_tracks"` warning if another track is a meaningful fraction of that length |
+| Rotated media | `VideoMetadata.rotation_degrees` extracted best-effort from ffprobe (legacy `rotate` tag or Display Matrix side data); not yet auto-corrected in the crop (see docs/KNOWN_ISSUES.md) |
+| Very small faces | Detections below `PreprocessingConfig.min_face_size_px` are excluded before tracking/alignment; `"small_faces_excluded"` warning |
+| Corrupted frames | `decode_sampled_frames` returns whatever frames it could decode + a warning per missing index; a fully unopenable file raises `DecodeError` (already filtered out earlier by `configuard.validation` in the full pipeline) |
+| Short videos | `compute_nested_sampling_plans` deduplicates and never requests more frames than exist |
+| Variable frame rate | `extract_video_metadata` prefers ffprobe's `avg_frame_rate` vs. `r_frame_rate` comparison to flag `is_variable_frame_rate` and estimate `frame_count` for containers where `nb_frames` is absent |
+
+**Cache** (`src/configuard/media/cache.py`): key = `(input_sha256,
+frame_index, track_id, config_version)`; `PreprocessingConfig.version_tag`
+is a hash of every alignment/detector setting, so any config change
+automatically lands in a new cache namespace rather than silently reusing
+stale crops. Writes go to a temp file in the same directory, then
+`os.replace()` (atomic on both POSIX and Windows for a same-volume
+rename). `max_bytes` triggers oldest-first (mtime) eviction.
+
 ## Repository layout
 
 ```
@@ -166,11 +271,17 @@ ConfiGuard-Lite/
 │   ├── env_check.py         Python/Git/FFmpeg/CUDA/GPU device detection
 │   ├── io_types.py           Typed pipeline data contracts (Phase 1)
 │   ├── validation.py         Secure file-type/size/duration validation (Phase 1)
-│   └── pipeline.py           End-to-end vertical slice orchestration (Phase 1)
-├── scripts/                 Operational scripts (env verification)
-├── tests/                    pytest suite (unit + integration), tests/conftest.py
-│                              generates all fixtures at test time - nothing checked in
+│   ├── pipeline.py           End-to-end vertical slice orchestration (Phase 1)
+│   └── media/                Face/media preprocessing (Phase 2)
+│       ├── types.py, decode.py, sampling.py, face_detector.py,
+│       │   alignment.py, tracking.py, cache.py, hashing.py, preprocess.py
+├── scripts/                 Operational scripts (env verification, preprocessing benchmark)
+├── tests/                    pytest suite (unit + integration), tests/conftest.py +
+│                              tests/media/conftest.py generate all fixtures at test
+│                              time (hand-built PNG, ffmpeg lavfi clips) - nothing checked in
 ├── configs/                  base.yaml + development/training/testing/production.yaml
+├── models/                    (gitignored) external model assets, e.g. YuNet ONNX -
+│                              see docs/DATASETS.md for provenance
 ├── docs/                      Living project documentation
 ├── data/ checkpoints/ cache/ outputs/   (all gitignored)
 └── .venv/                    (gitignored) Python 3.11 virtual environment

@@ -44,17 +44,21 @@ inference within a 6 GB VRAM laptop GPU budget.
 |---|---|---|
 | 0 | Environment and repository foundation | See `docs/PHASE_STATUS.md` |
 | 1 | Architecture contracts and minimal vertical slice | See `docs/PHASE_STATUS.md` |
-| 2 | Data pipeline: dataset registry, face/frame extraction, caching | Planned |
-| 3 | Image model: MobileNetV4-Conv-Small + EfficientNet-B0 baselines | Planned |
-| 4 | Distillation from frozen GenD CLIP-L/14 teacher | Planned |
-| 5 | Compression-robust augmentation | Planned |
-| 6 | Temporal GRU + adaptive frame sampling for video | Planned |
-| 7 | Calibration + conformal prediction, tri-class decision rule | Planned |
-| 8 | ONNX export (FP32/FP16/INT8) + CPU/GPU inference runtime | Planned |
-| 9 | Explainability: heatmaps, video evidence timelines | Planned |
-| 10 | C2PA provenance integration (separate signal) | Planned |
-| 11 | Serving API + packaging | Planned |
+| 2 | Face and media preprocessing (decode, nested sampling, YuNet detection, tracking, alignment, cache) | See `docs/PHASE_STATUS.md` |
+| 3 | Dataset registry + training data pipeline (wires real datasets into Phase 2 preprocessing) | Planned |
+| 4 | Image model: MobileNetV4-Conv-Small + EfficientNet-B0 baselines | Planned |
+| 5 | Distillation from frozen GenD CLIP-L/14 teacher | Planned |
+| 6 | Compression-robust augmentation | Planned |
+| 7 | Temporal GRU + adaptive frame sampling for video | Planned |
+| 8 | Calibration + conformal prediction, tri-class decision rule | Planned |
+| 9 | ONNX export (FP32/FP16/INT8) + CPU/GPU inference runtime | Planned |
+| 10 | Explainability: heatmaps, video evidence timelines | Planned |
+| 11 | C2PA provenance integration (separate signal) | Planned |
+| 12 | Serving API + packaging | Planned |
 
 This table is a planning aid, not a commitment — phases may be split,
-reordered, or merged as findings from earlier phases dictate. Each change
-should be reflected here and explained in `docs/DECISIONS.md`.
+reordered, or merged as findings from earlier phases dictate (Phase 2 was
+reordered ahead of the dataset registry on 2026-09-29 at the user's
+direction, since face preprocessing needed to exist before real datasets
+are wired in). Each change should be reflected here and explained in
+`docs/DECISIONS.md`.

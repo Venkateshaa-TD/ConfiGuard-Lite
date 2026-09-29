@@ -4,6 +4,7 @@
 |---|---|---|---|
 | 0 | Environment and repository foundation | PASS | 2026-09-29 |
 | 1 | Architecture contracts and minimal vertical slice | PASS | 2026-09-29 |
+| 2 | Face and media preprocessing | PASS | 2026-09-29 |
 
 Full per-phase results are recorded below as they complete.
 
@@ -71,3 +72,61 @@ flow/schema and `docs/EXPERIMENT_LOG.md` for exact commands/output.
   datasets were downloaded.
 - All preprocessing/model/provenance logic is placeholder-only by design;
   Phase 2+ replaces each piece behind the same typed contracts.
+
+---
+
+## Phase 2 — Face and media preprocessing
+
+**Status:** PASS
+
+**Summary:** Independent `src/configuard/media/` subsystem: reliable image
+decoding + video metadata (ffprobe-preferred), deterministic nested 4/8/16
+frame sampling, a pluggable `FaceDetector` interface with a real
+CPU-only OpenCV YuNet backend and a `MockFaceDetector` test double, face
+alignment/crop with a configurable margin, simple IoU+landmark video face
+tracking with primary-track selection, and a versioned, atomic face-crop
+cache. Not yet wired into `configuard.pipeline` (see
+`docs/ARCHITECTURE.md`). No dataset, no deepfake model checkpoint, and no
+unrelated asset was downloaded — only the YuNet detector ONNX explicitly
+named in the task instructions (provenance in `docs/DATASETS.md`).
+
+**Verified:**
+- `configuard.media.decode`: valid image decode; corrupted image/video
+  raise `DecodeError`; video metadata (fps/duration/frame_count) matches
+  the known ffmpeg-generated clip; rotation-tag parsing unit-tested
+  against synthetic ffprobe JSON (see `docs/KNOWN_ISSUES.md` for why not
+  against a real rotated fixture in this environment).
+- `configuard.media.sampling`: nesting (`indices(4) ⊆ indices(8) ⊆
+  indices(16)`) verified for frame counts 1–1000, including short videos
+  where sets are deduplicated below the requested count.
+- `configuard.media.face_detector`: `MockFaceDetector` fully deterministic;
+  real `YuNetFaceDetector` loads on CPU (no CUDA) and safely returns no
+  detections on a non-face image and on a blank image.
+- `configuard.media.alignment`: output shape matches `output_size`; margin
+  expansion verifiably pulls in more background; out-of-bounds boxes are
+  clipped (partial) or rejected via `AlignmentError` (fully outside).
+- `configuard.media.tracking`: single continuous track, gap tolerance,
+  track split on a large gap, two simultaneous faces kept as two separate
+  tracks, frame order preserved, primary-track selection with and without
+  a "multiple tracks" warning.
+- `configuard.media.cache`: hit/miss, atomic writes (no leftover temp
+  files), different config version/frame index/track ID are distinct
+  entries (no stale-hit risk), byte-limit eviction, and cache-reuse (no
+  recompute, unchanged mtime) verified both directly and through the full
+  `preprocess_image`/`preprocess_video` orchestration.
+- `pytest` suite: **124/124 passed** (48 from Phases 0–1 + 76 new Phase 2
+  unit/integration tests).
+- `scripts/benchmark_preprocessing.py` run once against a synthesized
+  640x480/5s/15fps clip — see `docs/EXPERIMENT_LOG.md` for full numbers
+  (decode ~68ms/16 frames, YuNet detection ~13ms/frame on CPU, alignment
+  ~1.5ms/crop, cache write ~4ms, cache hit read ~15ms, cache miss ~0.2ms).
+
+**Open items carried to later phases (see `docs/KNOWN_ISSUES.md`):**
+- Rotation metadata extraction is implemented but unverified against a
+  real rotated video file in this environment (this ffmpeg build didn't
+  attach rotation metadata to a synthetic test clip); not yet used to
+  auto-correct crops.
+- `configuard.media` is not yet called from `configuard.pipeline` —
+  intentional, deferred until a real encoder exists to consume face crops.
+- Free disk space remains limited; still non-blocking (only ~224 KB
+  downloaded this phase).

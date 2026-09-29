@@ -7,3 +7,7 @@
 #   pip install torch --index-url https://download.pytorch.org/whl/cu121
 numpy>=1.26,<3.0
 PyYAML>=6.0,<7.0
+
+# Phase 2: face/media preprocessing (decoding, YuNet face detection).
+# headless build: no Qt/GUI deps needed on a CPU-only server.
+opencv-python-headless>=4.9,<6.0

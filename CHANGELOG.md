@@ -41,3 +41,31 @@ All notable changes to this project are documented here.
   `test_io_types.py`, `test_validation.py`, `test_pipeline.py`,
   `test_config_environments.py`. Full suite: 48/48 passing.
 - Updated `docs/ARCHITECTURE.md` with the full data flow and JSON schema.
+
+### Phase 2 — Face and media preprocessing (2026-09-29)
+
+- Added `src/configuard/media/` subsystem: `decode.py` (image decoding,
+  ffprobe-preferred video metadata), `sampling.py` (deterministic nested
+  4/8/16 frame sampling), `face_detector.py` (pluggable `FaceDetector`
+  interface, `YuNetFaceDetector` CPU backend, `MockFaceDetector` test
+  double), `alignment.py` (eye-leveling + margin + crop), `tracking.py`
+  (IoU + landmark video face tracking, primary-track selection),
+  `cache.py` (versioned, atomic face-crop cache), `hashing.py`,
+  `preprocess.py` (orchestration for images and video).
+- Downloaded the official YuNet face detector ONNX
+  (`face_detection_yunet_2026may.onnx`, MIT license, 229,738 bytes,
+  SHA-256 `ebafce4e3...22f0f0`) from opencv/opencv_zoo — the only asset
+  this phase downloaded; full provenance in `docs/DATASETS.md`.
+- Added `opencv-python-headless` to `requirements.txt`.
+- Added `scripts/benchmark_preprocessing.py` (decode/sampling/detection/
+  alignment/cache-hit-vs-miss timings).
+- Added 76 new unit/integration tests under `tests/media/` (mock-detector
+  unit tests + a small number of real-YuNet integration tests). Full
+  suite: 124/124 passing.
+- Fixed a Phase 0 `.gitignore` bug (`dir/` vs `dir/*`) that silently
+  dropped `data/.gitkeep`, `checkpoints/.gitkeep`, `cache/.gitkeep`,
+  `outputs/.gitkeep` from version control; added `models/*` +
+  `!models/.gitkeep` for the new external-asset directory.
+- Updated `docs/ARCHITECTURE.md`, `docs/DECISIONS.md`, `docs/DATASETS.md`,
+  `docs/KNOWN_ISSUES.md`, `docs/PROJECT_PLAN.md` (reordered: preprocessing
+  moved ahead of the dataset registry).
