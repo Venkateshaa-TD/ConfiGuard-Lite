@@ -343,11 +343,29 @@ is a deterministic hash rather than a seeded shuffle.
 `check_storage_path`/`check_all_storage_paths` report configured path,
 free/total space, writability, and whether the path resolves inside the
 git repository, for `CONFIGUARD_DATA_DIR` / `CONFIGUARD_CACHE_DIR` /
-`CONFIGUARD_CHECKPOINT_DIR`. `assert_safe_storage_path` raises
-`UnsafeStoragePathError` instead of just warning when a path is inside
-the repo (docs/PROJECT_PLAN.md requirement 11's "must warn or refuse").
-See `scripts/check_storage.py` for the CLI and docs/EXPERIMENT_LOG.md for
-real output, including the refusal case.
+`CONFIGUARD_CHECKPOINT_DIR` / `CONFIGUARD_OUTPUT_DIR`.
+`assert_safe_storage_path` raises `UnsafeStoragePathError` instead of
+just warning when a path is inside the repo (docs/PROJECT_PLAN.md
+requirement 11's "must warn or refuse"). See `scripts/check_storage.py`
+for the CLI and docs/EXPERIMENT_LOG.md for real output, including the
+refusal case.
+
+**This machine's configured storage layout** (local `.env`, never
+committed - see `.env.example` for the template):
+
+```
+CONFIGUARD_DATA_DIR       = D:\ConfiGuard-Data\datasets
+CONFIGUARD_CACHE_DIR      = D:\ConfiGuard-Data\cache
+CONFIGUARD_CHECKPOINT_DIR = D:\ConfiGuard-Data\checkpoints
+CONFIGUARD_OUTPUT_DIR     = D:\ConfiGuard-Data\outputs
+```
+
+All four sit on `D:` (92.9 GB free, a separate local fixed volume - not
+the repo's `C:` drive, not OneDrive-synced), per the approved storage
+audit - see `docs/EXPERIMENT_LOG.md` for the full verification (exists /
+writable / not-in-repo / not-in-OneDrive / recognized by
+`scripts/check_storage.py`) and `docs/KNOWN_ISSUES.md` for the disk-space
+history this resolves.
 
 ## Repository layout
 

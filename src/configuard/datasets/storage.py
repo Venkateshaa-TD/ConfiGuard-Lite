@@ -1,6 +1,7 @@
 """Storage-path checking: reports configured path, free space, writability,
-and whether a configured data/cache/checkpoint root is (dangerously)
-inside the git repository - all without touching or downloading anything.
+and whether a configured data/cache/checkpoint/output root is
+(dangerously) inside the git repository - all without touching or
+downloading anything.
 """
 
 from __future__ import annotations
@@ -16,6 +17,7 @@ STORAGE_ENV_VARS: tuple[str, ...] = (
     "CONFIGUARD_DATA_DIR",
     "CONFIGUARD_CACHE_DIR",
     "CONFIGUARD_CHECKPOINT_DIR",
+    "CONFIGUARD_OUTPUT_DIR",
 )
 
 

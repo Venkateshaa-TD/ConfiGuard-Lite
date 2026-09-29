@@ -97,9 +97,10 @@ def test_nonexistent_path_reports_warning_but_not_inside_repo(tmp_path: Path, mo
     assert any("does not exist yet" in w for w in result.warnings)
 
 
-def test_check_all_storage_paths_covers_all_three_vars(tmp_path: Path):
+def test_check_all_storage_paths_covers_every_configured_var(tmp_path: Path):
     results = check_all_storage_paths(repo_root=tmp_path)
     assert {r.env_var for r in results} == set(STORAGE_ENV_VARS)
+    assert "CONFIGUARD_OUTPUT_DIR" in STORAGE_ENV_VARS
 
 
 def test_storage_check_does_not_create_or_write_anything(tmp_path: Path, monkeypatch):

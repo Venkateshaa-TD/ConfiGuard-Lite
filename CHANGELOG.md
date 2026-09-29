@@ -95,3 +95,25 @@ All notable changes to this project are documented here.
   confidence table, "verification required" markers),
   `docs/ARCHITECTURE.md`, `docs/DECISIONS.md` (7 new entries),
   `docs/KNOWN_ISSUES.md`, `docs/PROJECT_PLAN.md`.
+
+### Pre-Phase-4 storage configuration (2026-09-29)
+
+- Ran a read-only storage audit (all drives, repo/.venv/pip-cache/HF-
+  cache/torch-cache/project-dir/temp-dir sizes, explained the 21.8 GB ->
+  12.9 GB drop, identified `D:` as a safe secondary volume).
+- Created `D:\ConfiGuard-Data\{datasets,cache,checkpoints,outputs}` and
+  configured local `.env` (never committed) to point
+  `CONFIGUARD_DATA_DIR`/`CONFIGUARD_CACHE_DIR`/`CONFIGUARD_CHECKPOINT_DIR`/
+  `CONFIGUARD_OUTPUT_DIR` there.
+- Added `CONFIGUARD_OUTPUT_DIR` as a fourth storage-checked variable
+  (`configuard.datasets.storage.STORAGE_ENV_VARS`, `.env.example`) - the
+  project previously had an `outputs/` directory but no corresponding
+  configurable external path.
+- Verified every directory exists, is actually writable (real write
+  test), is outside the repo, is outside OneDrive, and is recognized by
+  `scripts/check_storage.py`.
+- Purged the pip download cache only (`pip cache purge`), reclaiming
+  3,365.8 MB on `C:` (12.92 GB -> 16.05 GB free); no other files touched.
+- Updated `docs/ARCHITECTURE.md` (storage layout), `docs/DECISIONS.md`
+  (2 new entries), `docs/DATASETS.md`, `docs/KNOWN_ISSUES.md` (disk-space
+  entry marked RESOLVED), `README.md`, `.env.example`.

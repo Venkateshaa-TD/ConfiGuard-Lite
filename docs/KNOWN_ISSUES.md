@@ -23,19 +23,35 @@ environment defect, just a live-session caveat.
 
 ---
 
-## OPEN — Limited free disk space
+## RESOLVED — Limited free disk space on `C:`
 
-**Detected:** Phase 0 environment scan (2026-09-29).
+**Detected:** Phase 0 environment scan (2026-09-29). `C:` drive had ~20 GB
+free out of 200 GB at time of scan; dropped further to ~12.9 GB by Phase 3
+(`.venv`/pip cache/FFmpeg - see the "Disk space update" entry below).
+Face manipulation / deepfake datasets and multiple model checkpoints
+would easily exceed this if stored on `C:`.
 
-**Impact:** `C:` drive had ~20 GB free out of 200 GB at time of scan. Face
-manipulation / deepfake datasets and multiple model checkpoints can easily
-exceed this. Not a blocker through Phase 2 (only a 224 KB detector model
-was downloaded - see `docs/DATASETS.md`); will block Phase 3 (dataset
-registry / training data pipeline) if not addressed first.
+**Resolved:** 2026-09-29, via a user-approved read-only storage audit
+followed by explicit storage configuration:
+1. Audit found `D:` (a separate local fixed NTFS volume, not OneDrive-
+   synced) with 92.9 GB free - see the storage-audit report in the
+   conversation history and `docs/EXPERIMENT_LOG.md`.
+2. Created `D:\ConfiGuard-Data\{datasets,cache,checkpoints,outputs}` and
+   configured local `.env` (never committed) to point
+   `CONFIGUARD_DATA_DIR`/`CONFIGUARD_CACHE_DIR`/
+   `CONFIGUARD_CHECKPOINT_DIR`/`CONFIGUARD_OUTPUT_DIR` there - see
+   `docs/ARCHITECTURE.md` for the exact layout.
+3. Purged the pip download cache (`pip cache purge`, official command;
+   nothing else was deleted) - reclaimed 3,365.8 MB on `C:`.
+4. Verified every directory exists, is actually writable (real write
+   test, not just a permission bit check), is outside both the repo and
+   OneDrive, and is recognized by `scripts/check_storage.py` - see
+   `docs/EXPERIMENT_LOG.md` for full command output.
 
-**Action needed:** Confirm target dataset sizes with the user before
-downloading, and consider an external/secondary drive path (configurable via
-`.env`, e.g. `CONFIGUARD_DATA_DIR`) before Phase 3 begins.
+`C:` free space: 12.92 GB -> **16.05 GB** after the pip cache purge.
+`D:` free space: 92.93 GB, unaffected (new directories are empty).
+Real datasets will now be stored on `D:`, not `C:`, avoiding this
+constraint going forward.
 
 ---
 

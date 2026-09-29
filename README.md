@@ -144,4 +144,9 @@ See `docs/ARCHITECTURE.md` for the full repository layout and design.
 
 Non-secret defaults live in `configs/*.yaml`. Machine-specific paths and
 secrets go in a local `.env` file (copy `.env.example` to `.env` — `.env` is
-never committed).
+never committed). Point `CONFIGUARD_DATA_DIR` / `CONFIGUARD_CACHE_DIR` /
+`CONFIGUARD_CHECKPOINT_DIR` / `CONFIGUARD_OUTPUT_DIR` at a location
+outside the repo (and outside any cloud-synced folder like OneDrive) with
+enough free space — run `scripts\check_storage.py` to verify before
+storing anything real. This machine's configured layout is recorded in
+`docs/ARCHITECTURE.md`.

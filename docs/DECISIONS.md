@@ -4,6 +4,43 @@ Format: one entry per decision, newest first.
 
 ---
 
+## 2026-09-29 — Added `CONFIGUARD_OUTPUT_DIR` as a fourth storage-checked env var
+
+**Context:** The project already had a gitignored `outputs/` directory
+(generated reports/artifacts) but no corresponding configurable external
+path or storage-check coverage - `STORAGE_ENV_VARS` only listed
+data/cache/checkpoint.
+
+**Decision:** Added `CONFIGUARD_OUTPUT_DIR` to
+`configuard.datasets.storage.STORAGE_ENV_VARS` and `.env.example`.
+
+**Why:** Requested explicitly ("add a configurable output-directory
+variable if the project supports it") as part of moving all generated
+project data off the small `C:` system drive - `outputs/` needed the same
+external-path treatment as the other three, for the same reason (avoid
+growing an in-repo directory with real generated artifacts).
+
+---
+
+## 2026-09-29 — Real datasets/cache/checkpoints/outputs live on `D:`, not `C:`
+
+**Context:** Storage audit found `C:` (the repo's drive) at 12.9 GB free
+and `D:` (a separate local fixed NTFS volume, not OneDrive-synced) at
+92.9 GB free.
+
+**Decision:** Configured local `.env` (never committed) to point all four
+storage variables at `D:\ConfiGuard-Data\{datasets,cache,checkpoints,outputs}`.
+
+**Why:** `C:` doesn't have enough headroom for real deepfake-detection
+datasets (these commonly run tens to hundreds of GB) without risking
+filling the system drive; `D:` does. Every path was verified writable via
+an actual write test (not just a permission-bit check), outside the git
+repository, and outside OneDrive (OneDrive sync could otherwise silently
+upload access-controlled dataset content to the cloud, or choke on
+folder sizes/counts typical of a dataset).
+
+---
+
 ## 2026-09-29 — JSONL manifests, not Parquet
 
 **Context:** Requirement: "Use JSONL as the initial portable manifest

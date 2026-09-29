@@ -15,8 +15,10 @@ confirmation, and none of the five datasets below were downloaded to
 build their adapters - all are access-controlled and require the user to
 obtain them independently under each dataset's own terms. Local storage
 paths are always configurable via `.env` (`CONFIGUARD_DATA_DIR`,
-`CONFIGUARD_CACHE_DIR`, `CONFIGUARD_CHECKPOINT_DIR` - see
-`scripts/check_storage.py`), never hardcoded. Raw data itself is never
+`CONFIGUARD_CACHE_DIR`, `CONFIGUARD_CHECKPOINT_DIR`,
+`CONFIGUARD_OUTPUT_DIR` - see `scripts/check_storage.py` and this
+machine's configured layout in `docs/ARCHITECTURE.md`), never hardcoded.
+Raw data itself is never
 committed (see `.gitignore`).
 
 ---

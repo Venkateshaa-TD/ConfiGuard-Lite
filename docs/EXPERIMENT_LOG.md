@@ -371,3 +371,95 @@ Results:
 - Audit report written successfully (1560 bytes JSON).
 - Duplicate report: 0 exact, 0 near (expected - all 5 fixture files have
   distinct placeholder byte content).
+
+---
+
+## 2026-09-29 — Storage audit (read-only)
+
+Full drive listing, directory-size measurements (repo, `.venv`, pip
+cache, HF/torch caches, project dirs, user temp), and the 21.8 GB -> 12.9
+GB explanation are recorded in the conversation transcript (storage-audit
+report). Key figures, reused below: `C:` 199.56 GB total / 12.92 GB free;
+`D:` 276.38 GB total / 92.93 GB free (separate local fixed NTFS volume,
+not OneDrive); `.venv` 4,671.5 MB (torch alone 4,372.1 MB); pip cache
+3,209.9 MB; FFmpeg (WinGet) 664.2 MB.
+
+---
+
+## 2026-09-29 — Storage configuration (approved: create dirs, configure `.env`, purge pip cache only)
+
+Commands:
+```powershell
+New-Item -ItemType Directory -Force -Path "D:\ConfiGuard-Data\datasets"
+New-Item -ItemType Directory -Force -Path "D:\ConfiGuard-Data\cache"
+New-Item -ItemType Directory -Force -Path "D:\ConfiGuard-Data\checkpoints"
+New-Item -ItemType Directory -Force -Path "D:\ConfiGuard-Data\outputs"
+```
+Result: all four created successfully.
+
+Code change: added `CONFIGUARD_OUTPUT_DIR` to
+`configuard.datasets.storage.STORAGE_ENV_VARS` (was data/cache/checkpoint
+only) and to `.env.example`, so the project actually supports a fourth,
+configurable output directory - see `docs/DECISIONS.md`.
+
+Local `.env` created (untracked; verified below that it stays gitignored)
+with:
+```
+CONFIGUARD_DATA_DIR=D:\ConfiGuard-Data\datasets
+CONFIGUARD_CHECKPOINT_DIR=D:\ConfiGuard-Data\checkpoints
+CONFIGUARD_CACHE_DIR=D:\ConfiGuard-Data\cache
+CONFIGUARD_OUTPUT_DIR=D:\ConfiGuard-Data\outputs
+```
+
+Verification 1 - `git check-ignore -v .env`:
+```
+.gitignore:16:.env	.env
+```
+`.env` matched by the ignore rule; `git status --porcelain` showed no
+`.env` entry. Confirmed never staged/committed.
+
+Verification 2 - `scripts/check_storage.py` (env vars set to the D:
+paths): all four report `exists=True`, `writable=True`,
+`inside repo=False`, no warnings, `total=276.4 GB`, `free=92.9 GB`.
+
+Verification 3 - explicit OneDrive-exclusion + real write test (not just
+a permission-bit check):
+```
+OneDrive root: C:\Users\balag\OneDrive
+Repo root: C:\Users\balag\Projects\ConfiGuard-Lite
+CONFIGUARD_DATA_DIR: exists=True writable(actual write test)=True inside_onedrive=False inside_repo=False
+CONFIGUARD_CACHE_DIR: exists=True writable(actual write test)=True inside_onedrive=False inside_repo=False
+CONFIGUARD_CHECKPOINT_DIR: exists=True writable(actual write test)=True inside_onedrive=False inside_repo=False
+CONFIGUARD_OUTPUT_DIR: exists=True writable(actual write test)=True inside_onedrive=False inside_repo=False
+```
+(Each check wrote a `.write_test.tmp` file and deleted it immediately -
+no files left behind.)
+
+Pip cache purge (the only cleanup authorized):
+```
+.venv/Scripts/python.exe -m pip cache purge
+```
+Output: `Files removed: 1598 (3365.8 MB)`, `Directories removed: 2602`.
+No other temporary files or application data were touched.
+
+Free space recheck:
+| Drive | Before | After |
+|---|---|---|
+| `C:` | 12.92 GB | **16.05 GB** |
+| `D:` | 92.93 GB | 92.93 GB (unchanged - new dirs are empty) |
+
+Test run:
+```
+.venv/Scripts/python.exe -m pytest tests/datasets/test_storage.py -v
+```
+Result: **9 passed** (all storage tests, including the renamed
+`test_check_all_storage_paths_covers_every_configured_var`, which now
+also asserts `CONFIGUARD_OUTPUT_DIR` is in `STORAGE_ENV_VARS`).
+
+Full combined suite:
+```
+.venv/Scripts/python.exe -m pytest -q
+```
+Result: **215 passed** (unchanged pass count - only a storage-module
+extension + one test rename, no new tests added for this configuration
+step).
