@@ -12,6 +12,7 @@ MOBILENETV4_CONV_SMALL = EncoderSpec(
     timm_model_name="mobilenetv4_conv_small.e1200_r224_in1k",
     hf_repo_id="timm/mobilenetv4_conv_small.e1200_r224_in1k",
     license="Apache-2.0",
+    revision="c9f31ac64483d7f0590db9edccb4418392a96eea",
 )
 
 EFFICIENTNET_B0 = EncoderSpec(
@@ -19,6 +20,7 @@ EFFICIENTNET_B0 = EncoderSpec(
     timm_model_name="tf_efficientnet_b0.in1k",
     hf_repo_id="timm/tf_efficientnet_b0.in1k",
     license="Apache-2.0",
+    revision="8186ca4217f9c67824ebe7566008bdc69976d15a",
 )
 
 ENCODER_SPECS: dict[str, EncoderSpec] = {

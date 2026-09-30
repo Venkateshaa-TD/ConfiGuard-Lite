@@ -154,3 +154,45 @@ All notable changes to this project are documented here.
   `docs/EXPERIMENT_LOG.md`. Provisional only - no deepfake accuracy
   result exists yet.
 - No dataset and no unauthorized model checkpoint downloaded.
+
+### Phase 5 — Reproducible training pipeline (2026-09-30)
+
+- Dependency safety: `constraints-cuda.txt` pins torch 2.5.1 /
+  torchvision 0.20.1 (cu121 index documented);
+  `configuard.dependency_safety` hard-fails on CPU-only torch, a
+  torchvision import/compiled-op (ABI) failure, a torch↔torchvision
+  release mismatch, or lost CUDA; wired into `scripts/verify_environment.py`
+  and both CLIs. README/requirements install steps now use the pin. No
+  package was installed or upgraded.
+- Added `src/configuard/training/`: `config.py` (strict YAML config),
+  `paths.py` (D-drive checkpoint/output/cache dirs, refuses in-repo
+  paths), `splits.py` (cross-split leakage guard), `datasets.py`
+  (manifest-backed image and video-frame datasets over Phase 2 crops),
+  `sampling.py`/`dataloader.py` (seeded, source+class-balanced,
+  worker-seeded), `optim.py` (AdamW + warm-up/cosine), `metrics.py`
+  (threshold-free AUROC/AP vs threshold-dependent confusion matrix,
+  sensitivity, specificity, balanced accuracy, F1), `checkpoint.py`
+  (atomic, full-state + provenance, mismatch refusal), `logging_utils.py`
+  (JSONL + per-split CSV), `trainer.py` (AMP, accumulation, clipping,
+  freezing, early stopping, best/latest, exact resume, non-finite-loss and
+  CUDA-OOM handling), `runner.py` (wiring + CPU/RTX 4050 smoke mode),
+  `synthetic.py` (engineering-only synthetic data).
+- Added `scripts/train.py` (config-driven training, `--resume-from`,
+  `--smoke cpu|cuda`) and `scripts/evaluate.py` (evaluation-only).
+  Added `configs/train/{mobilenetv4_conv_small,efficientnet_b0}.yaml`.
+- `EncoderSpec.revision` records the HF commit of each authorized
+  backbone; `models.inference.compute_logits_for_batch` provides the
+  gradient-friendly image/video forward.
+- Fixed while resuming the interrupted draft: GPU resume crashed (RNG
+  state loaded onto CUDA); resume wasn't exact (sampler RNG and
+  early-stop/best state not restored); OOM only caught in the forward
+  pass; unknown config keys silently ignored; single CSV silently dropping
+  epoch columns; evaluation crop cache could be written next to
+  `media_root`; synthetic data not obviously separable; AMP silently
+  skipping every step of a short run (now counted, `amp_init_scale=1024`);
+  saturated-AUROC ties keeping a worse "best" checkpoint.
+- Measured (synthetic, engineering only): RTX 4050 AMP peak VRAM 154 MB
+  (MobileNetV4) / 460 MB (EfficientNet-B0); resume bit-exact on CPU and
+  GPU; checkpoints 28.9 / 46.4 MiB. All in `docs/EXPERIMENT_LOG.md`.
+- 111 new tests. Full suite: 422/422 passing.
+- No dataset, GenD, DINOv2, or additional model downloaded. No accuracy claim.

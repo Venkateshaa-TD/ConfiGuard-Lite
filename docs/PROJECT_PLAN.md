@@ -48,18 +48,20 @@ inference within a 6 GB VRAM laptop GPU budget.
 | 3 | Dataset registry and leakage-safe data splits | See `docs/PHASE_STATUS.md` |
 | 3b | Wire real dataset(s) into Phase 2 preprocessing (once user provides local dataset access) | Planned |
 | 4 | Pretrained baseline models (MobileNetV4-Conv-Small + EfficientNet-B0) and ONNX verification | See `docs/PHASE_STATUS.md` |
-| 5 | Distillation from frozen GenD CLIP-L/14 teacher | Planned |
-| 6 | Compression-robust augmentation | Planned |
-| 7 | Temporal GRU + adaptive frame sampling for video | Planned |
-| 8 | Calibration + conformal prediction, tri-class decision rule | Planned |
-| 9 | ONNX export (FP32/FP16/INT8) + CPU/GPU inference runtime | Planned |
-| 10 | Explainability: heatmaps, video evidence timelines | Planned |
-| 11 | C2PA provenance integration (separate signal) | Planned |
-| 12 | Serving API + packaging | Planned |
+| 5 | Reproducible training pipeline (config-driven training, exact resume, checkpoints, metrics, logging, dependency safety) | See `docs/PHASE_STATUS.md` |
+| 6 | Distillation from frozen GenD CLIP-L/14 teacher | Planned |
+| 7 | Compression-robust augmentation | Planned |
+| 8 | Temporal GRU + adaptive frame sampling for video | Planned |
+| 9 | Calibration + conformal prediction, tri-class decision rule | Planned |
+| 10 | ONNX export (FP32/FP16/INT8) + CPU/GPU inference runtime | Planned |
+| 11 | Explainability: heatmaps, video evidence timelines | Planned |
+| 12 | C2PA provenance integration (separate signal) | Planned |
+| 13 | Serving API + packaging | Planned |
 
 This table is a planning aid, not a commitment — phases may be split,
 reordered, or merged as findings from earlier phases dictate (Phase 2 was
 reordered ahead of the dataset registry on 2026-09-29 at the user's
 direction, since face preprocessing needed to exist before real datasets
-are wired in). Each change should be reflected here and explained in
+are wired in; Phase 5 was redefined as the reproducible training
+pipeline on 2026-09-30, shifting later phases by one). Each change should be reflected here and explained in
 `docs/DECISIONS.md`.

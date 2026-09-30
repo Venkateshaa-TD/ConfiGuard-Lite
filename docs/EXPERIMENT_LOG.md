@@ -1,6 +1,6 @@
 # Experiment Log
 
-Format: one entry per meaningful run, newest first. This log records exact
+Format: one entry per meaningful run, in chronological order (oldest first). This log records exact
 commands and results, not narrative summaries.
 
 ---
@@ -670,3 +670,189 @@ CPU inference verified for both (output shape `(4,)` for a 4-sample
 batch, via ONNX Runtime `CPUExecutionProvider`). No quantization
 performed (Phase 4 scope). Exported files land in `outputs/onnx/`
 (gitignored - never committed).
+
+---
+
+## 2026-09-30 — Phase 5 environment verification (before and after; no installs)
+
+No package was installed, upgraded, or reinstalled in Phase 5, so the
+"before and after any installation" check reduces to verifying the
+environment at the start and end of the phase.
+
+```
+.venv/Scripts/python.exe scripts/verify_environment.py
+```
+Result (both times): Python 3.11.9; torch 2.5.1+cu121, CUDA available
+(12.1), NVIDIA GeForce RTX 4050 Laptop GPU, 6140 MB; torchvision
+0.20.1+cu121 imports **and** runs `torchvision.ops.nms`; cuDNN 90100;
+driver 591.66; timm 1.0.30; `Dependency safety: OK`, no warnings; exit 0.
+These are the versions pinned in `constraints-cuda.txt`.
+
+---
+
+## 2026-09-30 — Phase 5 test runs (formal)
+
+Baseline, before any Phase 5 resume work (preliminary, includes the
+interrupted draft's own tests):
+```
+.venv/Scripts/python.exe -m pytest -q -p no:cacheprovider
+```
+Result: 372 passed in 85.03s.
+
+Targeted Phase 5 tests, final code:
+```
+.venv/Scripts/python.exe -m pytest tests/training tests/test_dependency_safety.py -v -p no:cacheprovider
+```
+Result: **109 passed, 0 skipped in 105.53s**: test_trainer 35,
+test_checkpoint 13, test_metrics 13, test_dependency_safety 9,
+test_splits_and_logging 8, test_config 6, test_datasets 6,
+test_sampling 6, test_optim 5, test_paths 5, test_dataloader 3. The
+CUDA-only tests (AMP smoke for both backbones, CUDA resume, AMP-skip
+accounting, RNG restore after a CUDA load) **ran** on the RTX 4050; they
+were not skipped.
+
+Afterwards, 2 more tests were added to close coverage gaps (video-frame training end-to-end; `num_workers=2` spawned workers bit-identical to single-process). Both passed, bringing the Phase 5 total to **111**. Full suite: see the final entry below.
+
+Failures found and fixed while getting here (each now a regression test):
+1. `test_tiny_synthetic_set_can_be_overfitted` initially failed: loss
+   0.41 → 3.11 over 12 epochs. Probe (three lr/pretrained settings)
+   showed loss reaching ~0 and then spiking at the **same epochs (8, 11)**
+   in every setting. Printing per-epoch batch labels showed those epochs
+   contain an all-real batch: the balanced sampler draws with
+   replacement, and train-mode BatchNorm normalizes away the colour cue
+   inside a single-class batch. With full batch and no replacement, loss
+   goes 0.678 → 0.0002, monotonically. The test now uses that setup
+   (`docs/KNOWN_ISSUES.md`).
+2. `test_cuda_resume_matches_uninterrupted_run` failed with `TypeError:
+   RNG state must be a torch.ByteTensor`: a **pre-existing draft bug**
+   (checkpoint loaded with `map_location="cuda"` moved the RNG states to
+   the GPU). Fixed; GPU resume never worked before.
+3. One test-code kwarg collision (`epochs` passed twice); fixed.
+
+---
+
+## 2026-09-30 — Phase 5 smoke training (CLI, D: drive) — ENGINEERING TESTS ONLY
+
+> All numbers below come from synthetic blue- vs. red-tinted
+> checkerboards with a deliberately obvious signal. They verify pipeline
+> mechanics. **They are not deepfake-detection accuracy.**
+
+Smoke config (`configuard.training.runner.run_smoke`): pretrained
+ImageNet weights from `D:\ConfiGuard-Data\cache\huggingface`
+(`HF_HUB_OFFLINE=1`), 64 train (32/class) + 16 val (8/class) synthetic
+images, full-frame mock face detector through Phase 2 crop/cache, batch
+8, grad accumulation 2 (4 optimizer steps/epoch), 5 epochs, AdamW lr
+1e-3, warm-up 2 + cosine, grad clip 1.0, seed 1234, source+class-balanced
+sampling. Each run also repeats training as "interrupted after epoch 4 +
+resumed from latest" and compares the final weights.
+
+Commands:
+```
+.venv/Scripts/python.exe scripts/train.py --smoke cuda
+.venv/Scripts/python.exe scripts/train.py --smoke cuda --encoder efficientnet_b0
+.venv/Scripts/python.exe scripts/train.py --smoke cpu
+```
+All three exited 0.
+
+| | MobileNetV4 — RTX 4050, AMP | EfficientNet-B0 — RTX 4050, AMP | MobileNetV4 — CPU (fp32) |
+|---|---|---|---|
+| Run | `smoke_mobilenetv4_conv_small_cuda_20260930-212901` | `smoke_efficientnet_b0_cuda_20260930-212938` | `smoke_mobilenetv4_conv_small_cpu_20260930-213025` |
+| Parameters | 2,494,305 | 4,008,829 | 2,494,305 |
+| Peak VRAM allocated / reserved | 132.1 / **154.0 MB** (2.5% of 6 GB) | 437.8 / **460.0 MB** (7.5% of 6 GB) | n/a |
+| Mean training step (batch 8), epochs 1-4 | 76.6-92.0 ms | 164.5-183.1 ms | 244.4-254.5 ms |
+| Epoch-0 step (cold: crop cache + cuDNN warm-up) | 255.9 ms | 379.6 ms | 251.7 ms |
+| Validation pass (16 images), epochs 1-4 | 0.20-0.21 s | 0.23-0.24 s | 0.26-0.27 s |
+| Optimizer steps attempted / skipped by AMP | 20 / 3 | 20 / 0 | 20 / 0 |
+| Checkpoint size (latest = best, incl. AdamW state) | 30,278,650 B (28.9 MiB) | 48,607,919 B (46.4 MiB) | 30,270,202 B (28.9 MiB) |
+| Resume: max abs param diff vs uninterrupted | **0.0** | **0.0** | **0.0** |
+| Resume: final train loss / global step equal | yes / yes (20) | yes / yes (20) | yes / yes (20) |
+| Train loss epoch 0 → 4 | 0.690 → 0.063 | 0.582 → 0.024 | 0.621 → 0.048 |
+| Val AUROC / balanced acc, final epoch (synthetic) | 1.0 / 1.0 | 1.0 / 1.0 | 1.0 / 1.0 |
+| Best epoch (AUROC, val-loss tie-break) | 3 | 2 | 4 |
+
+Written (and nothing else):
+- checkpoints: `D:\ConfiGuard-Data\checkpoints\smoke\<run>\<run>_{latest,best}.pt`
+  and `<run>_resume_{latest,best}.pt`
+- logs: `D:\ConfiGuard-Data\outputs\smoke\<run>\<run>.jsonl`,
+  `<run>_train.csv`, `<run>_epoch.csv`, `<run>_summary.json`
+- synthetic media + manifests + face-crop cache:
+  `D:\ConfiGuard-Data\outputs\smoke\<run>\synthetic_data\`, `...\face_crop_cache\`
+
+Preliminary, superseded smoke runs, kept on D: for the record and
+**not** used as results:
+- `..._cuda_20260930-212438` (3 epochs, 6 steps): train loss stuck
+  ~0.69. The checkpoint was 10.2 MB with **empty optimizer state**:
+  GradScaler skipped all 6 steps (scale 65536 → 1024). This led to
+  skip counting and `amp_init_scale=1024` (`docs/DECISIONS.md`).
+- `..._cuda_20260930-212525` (5 epochs, default init scale): 9 of 20
+  steps skipped (scale → 128).
+- `..._cuda_20260930-212728` (init scale 1024, before the val-loss
+  tie-break): best checkpoint = epoch 1 (AUROC 1.0, val loss 0.51)
+  instead of epoch 3 (AUROC 1.0, val loss 0.028). This led to the
+  tie-break.
+
+---
+
+## 2026-09-30 — Phase 5 evaluation-only CLI
+
+```
+.venv/Scripts/python.exe scripts/evaluate.py --synthetic \
+  --checkpoint D:/ConfiGuard-Data/checkpoints/smoke/smoke_mobilenetv4_conv_small_cuda_20260930-212901/smoke_mobilenetv4_conv_small_cuda_20260930-212901_best.pt \
+  --manifest   D:/ConfiGuard-Data/outputs/smoke/smoke_mobilenetv4_conv_small_cuda_20260930-212901/synthetic_data/val_manifest.jsonl \
+  --media-root D:/ConfiGuard-Data/outputs/smoke/smoke_mobilenetv4_conv_small_cuda_20260930-212901/synthetic_data/media
+```
+Result (exit 0; ENGINEERING TEST ONLY, disclaimer included in the
+output): cuda, 16 samples, 1.38 s. Threshold-free: AUROC 1.0, AP 1.0.
+Threshold-dependent (@0.5): sensitivity 1.0, specificity 1.0, balanced
+accuracy 1.0, F1 1.0, TP 8 / FP 0 / TN 8 / FN 0. Written to
+`D:\ConfiGuard-Data\outputs\eval\eval_smoke_mobilenetv4_conv_small_cuda_20260930-212901_best_20260930-213124.json`.
+
+---
+
+## 2026-09-30 — Phase 5 mismatched-checkpoint rejection through the real CLI
+
+Resumed the MobileNetV4 smoke checkpoint under the production config
+(same encoder, same manifests):
+```
+.venv/Scripts/python.exe scripts/train.py --config configs/train/mobilenetv4_conv_small.yaml \
+  --train-manifest .../synthetic_data/train_manifest.jsonl --val-manifest .../val_manifest.jsonl \
+  --media-root .../synthetic_data/media --resume-from .../smoke_mobilenetv4_conv_small_cuda_20260930-212901_latest.pt
+```
+Result: exit 1, `CheckpointMismatchError` listing all 8 mismatches
+(preprocessing_version: mock vs. YuNet detector; seed, batch_size,
+epochs, lr, warmup_steps, grad_accum_steps, early_stopping_patience).
+No training step was taken.
+
+---
+
+## 2026-09-30 — Phase 5 output-location audit
+
+- `D:\ConfiGuard-Data\checkpoints`: 687 MB (6 smoke runs x {main, resume}
+  x {latest, best}). `D:\ConfiGuard-Data\outputs`: 5.4 MB.
+  `D:\ConfiGuard-Data\cache\face_crops`: 204 KB (the CLI-rejection run).
+- `D:\ConfiGuard-Data\cache\huggingface\hub`: still exactly the two
+  Phase 4 models. No new model was downloaded.
+- `%USERPROFILE%\.cache\huggingface` and `\torch` do not exist.
+- The repo gained no generated files: `git status --ignored` shows only
+  source/test/config/doc changes. The ignored `outputs/onnx/` (Phase 4,
+  2026-09-29) and `.pytest_cache/` (2026-09-29) predate this phase.
+- pytest runs write their checkpoints/logs under pytest's `tmp_path`
+  (`%TEMP%\pytest-of-<user>\...`), by design:
+  tests must not depend on or pollute the configured D: directories.
+
+---
+
+## 2026-09-30 — Phase 5 final verification
+
+```
+.venv/Scripts/python.exe -m pytest -p no:cacheprovider -q -rs
+```
+Result: **422 passed, 0 skipped, 0 failed in 191.97s** (311 from Phases
+0-4 + 111 new Phase 5 tests). The CUDA tests ran on the RTX 4050.
+
+```
+.venv/Scripts/python.exe scripts/verify_environment.py
+```
+Result: torch 2.5.1+cu121 CUDA build, torchvision 0.20.1+cu121 (import +
+`ops.nms` OK), CUDA available, `Dependency safety: OK`, exit 0. No
+package changed during the phase.

@@ -4,6 +4,203 @@ Format: one entry per decision, newest first.
 
 ---
 
+## 2026-09-30 — Phase 5 is the reproducible training pipeline; roadmap renumbered
+
+**Context:** `docs/PROJECT_PLAN.md` had planned Phase 5 as GenD
+distillation. The user's Phase 5 instruction instead defined a
+reproducible training pipeline (no teacher, no new downloads).
+
+**Decision:** Phase 5 = reproducible training pipeline. Every later
+planned phase shifts by one (distillation becomes Phase 6, etc.).
+
+**Why:** Distillation, augmentation, the temporal GRU, and calibration
+all need a trustworthy training loop, checkpointing, and metrics first.
+
+---
+
+## 2026-09-30 — Exact resume = epoch-boundary checkpoints + per-epoch data seeding + persisted trainer state
+
+**Context:** The first Phase 5 draft saved model/optimizer/scheduler/
+scaler/RNG state, but (a) the balanced sampler's generator advanced
+across epochs and was not saved, so a resumed run saw different batches;
+(b) best-metric and early-stopping counters were not saved, so a resume
+could re-save a worse "best" and ignore patience; (c) the checkpoint was
+loaded with `map_location="cuda"`, which moved the saved RNG ByteTensors
+to the GPU where `torch.set_rng_state` rejects them - GPU resume could
+never have worked.
+
+**Decision:** Checkpoints are written only at epoch boundaries;
+`Trainer._reseed_loader_for_epoch` reseeds the sampler and DataLoader
+generators with `seed + epoch` every epoch; `TrainState` (epoch, step,
+best metric + tie-break, best epoch, patience counter, AMP-skipped steps)
+is stored in the checkpoint (format version 2); checkpoints are always
+loaded on CPU and RNG states restored via `.cpu()`.
+
+**Why:** Makes data order a pure function of (seed, epoch), so resumed
+and uninterrupted runs are identical. Measured: max parameter difference
+**0.0** after interrupt+resume on CPU and on the RTX 4050 (AMP), both
+backbones (`docs/EXPERIMENT_LOG.md`). Mid-epoch resume is deliberately
+not supported (it would need DataLoader iterator state); an interruption
+loses at most the current epoch.
+
+---
+
+## 2026-09-30 — Refuse any resume whose data, preprocessing, model, or result-affecting config differs
+
+**Decision:** `verify_checkpoint_compatible` compares encoder name, HF
+model id, face-preprocessing `version_tag`, SHA-256 of the train *and*
+validation manifests, and every key in `RESUME_CRITICAL_CONFIG_KEYS`
+(seed, batch size, epochs, lr, weight decay, warm-up, accumulation,
+clipping, freezing, AMP + init scale, selection metric, patience,
+pretrained, balancing, frames per video), and lists **every** mismatch in
+one `CheckpointMismatchError`. Bookkeeping fields (run name, paths,
+workers, device, log cadence) are exempt. `TrainingConfig.from_dict` now
+**rejects unknown keys** (the draft silently ignored them).
+
+**Why:** Task 11 forbids silent resumes across changed data/
+preprocessing/model config. `epochs` is critical because the cosine
+schedule length depends on it. A typo'd YAML key (e.g. `learning_rate`)
+silently falling back to a default would make a run irreproducible from
+its own config file.
+
+---
+
+## 2026-09-30 — Best checkpoint: validation AUROC, then validation loss, then training loss; exact ties broken by validation loss
+
+**Decision:** Selection value (higher is better): (1) validation AUROC
+when defined; (2) otherwise, i.e. the validation split lacks one class,
+negative validation loss; (3) with no validation set, negative training
+loss. Exact ties (AUROC saturating at 1.0) go to the lower validation loss.
+
+**Why:** AUROC is threshold-free and the planned calibration phase
+re-derives thresholds anyway. The fallback can't flip between epochs:
+whether AUROC is defined depends only on the fixed validation labels.
+The tie-break was added after the RTX 4050 smoke run picked epoch 1
+(AUROC 1.0, val loss 0.51) over epoch 3 (AUROC 1.0, val loss 0.028).
+
+---
+
+## 2026-09-30 — AMP via `torch.amp`, fp32 loss, `init_scale=1024`, and AMP-skipped steps are counted
+
+**Context:** A 6-step RTX 4050 smoke run finished "successfully" with
+chance-level loss. Inspection showed the optimizer state was empty:
+`GradScaler`'s default initial scale (65536) overflowed fp16 gradients,
+so **all 6 steps were skipped** (scale 65536 → 1024), and nothing
+reported it. A 20-step run skipped 9 steps.
+
+**Decision:** Use only `torch.amp.autocast` / `torch.amp.GradScaler`
+(not the deprecated `torch.cuda.amp` interfaces); compute BCE on fp32
+logits outside autocast; default `amp_init_scale` to 1024 (configurable);
+advance the LR schedule only when the scaler actually applied the step;
+count skipped steps in `TrainState`, the epoch log, and the smoke summary.
+
+**Why:** With `init_scale=1024` the same 20-step run skips 3 steps
+instead of 9 and converges faster. A silent "trained without updating a
+weight" run is exactly the failure a pipeline-verification phase must
+catch.
+
+---
+
+## 2026-09-30 — CUDA OOM and non-finite loss stop training; nothing adapts automatically
+
+**Decision:** `torch.cuda.OutOfMemoryError` anywhere in forward,
+backward, or optimizer step becomes `TrainingOutOfMemoryError`, whose
+message carries batch size, accumulation, AMP flag, and allocated/peak/
+reserved memory, and says the batch size was **not** changed. A NaN/Inf
+loss raises `NonFiniteLossError` before backward, so no optimizer step
+and no checkpoint happens for that epoch.
+
+**Why:** Tasks 17/18. Silently shrinking the batch would change the
+experiment (and the resume-critical config) behind the user's back.
+
+---
+
+## 2026-09-30 — Training re-checks split leakage; mixed image+video manifests are refused
+
+**Decision:** `configuard.training.splits.assert_no_cross_split_leakage`
+runs in `build_trainer` over the train/validation manifests actually
+handed to training (reusing Phase 3's source/identity/pair checks, plus
+duplicate `sample_id` across splits). `build_manifest_dataset` refuses
+manifests mixing IMAGE and VIDEO samples.
+
+**Why:** Phase 3 assigns splits leakage-safely, but the trainer must not
+trust that files weren't edited or swapped afterwards (task 5). All
+frames of a video share its Sample's `source_id`, so the source check
+also keeps frames of one source inside one split. The previous draft
+silently dropped image samples from a mixed manifest.
+
+---
+
+## 2026-09-30 — Synthetic pipeline data: blue- vs. red-tinted checkerboards, full-frame mock face detector
+
+**Context:** The first draft's synthetic real/fake pair was a
+checkerboard vs. its phase-inverted copy - identical global statistics,
+separable by a global-pooled CNN only through padding/border effects,
+so not an "obvious" signal (task 20).
+
+**Decision:** `configuard.training.synthetic` generates checkerboards
+with a blue (real) vs. red (fake) tint and per-sample phase/brightness
+variation. Smoke runs use a mock detector that reports the whole frame
+as the face, so Phase 2 alignment/cropping/caching runs for real. Every
+synthetic result carries `SYNTHETIC_RESULT_DISCLAIMER`.
+
+**Why:** Pipeline verification needs a signal whose learnability is
+beyond doubt; the result must never be mistaken for detection accuracy
+(task 21).
+
+---
+
+## 2026-09-30 — Training and evaluation CLIs force `HF_HUB_OFFLINE=1`
+
+**Decision:** `scripts/train.py` and `scripts/evaluate.py` set
+`HF_HUB_OFFLINE=1` (via `setdefault`) right after loading `.env`.
+
+**Why:** Phase 5 must not download any model. Offline mode makes
+huggingface_hub serve only the already-cached Phase 4 weights and fail
+instead of silently fetching something new.
+
+---
+
+## 2026-09-30 — Pinned CUDA build pair in `constraints-cuda.txt` + a runtime regression guard
+
+**Decision:** `constraints-cuda.txt` pins `torch==2.5.1` /
+`torchvision==0.20.1` and documents the only correct index
+(`https://download.pytorch.org/whl/cu121`).
+`configuard.dependency_safety` hard-fails if torch is CPU-only, if
+torchvision fails to import **or fails its first compiled op**
+(`torchvision.ops.nms` - ABI breaks often import fine), if torchvision
+isn't the release paired with the installed torch, or if CUDA was
+expected but is gone. Version drift from the pin is a warning. It runs
+in `scripts/verify_environment.py` and at the start of both CLIs.
+
+**Why:** Directly guards the Phase 4 regression (a routine `pip install`
+silently swapped in a CPU-only torch). No packages were installed or
+upgraded in Phase 5.
+
+---
+
+## 2026-09-30 — Structured logs: JSONL is the source of truth, per-record-type CSVs are views
+
+**Decision:** `ExperimentLogger` appends every record to `<run>.jsonl`
+(nested) and to `<run>_train.csv` / `<run>_epoch.csv` (recursively
+flattened), all under `CONFIGUARD_OUTPUT_DIR`. A resumed run appends to
+the same files.
+
+**Why:** The draft used one CSV whose header was frozen from the first
+record; since that is a train-step row, every epoch/validation column
+would have been silently dropped from the CSV.
+
+---
+
+## 2026-09-30 — Checkpoints use `torch.load(weights_only=False)`, trusted-source only
+
+**Decision:** Kept `weights_only=False` because checkpoints contain
+Python/NumPy RNG state tuples that the weights-only unpickler rejects.
+Documented in code and `docs/KNOWN_ISSUES.md`: only load checkpoints
+this project wrote itself.
+
+---
+
 ## 2026-09-29 — `HF_HOME`/`HF_HUB_CACHE`/`TORCH_HOME` loaded via a tiny custom `.env` parser, not python-dotenv
 
 **Context:** Phase 4 needs pretrained weight downloads to land under

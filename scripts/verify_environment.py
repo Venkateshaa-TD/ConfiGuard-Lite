@@ -39,6 +39,22 @@ def main() -> int:
         print("\n[WARNING] FFmpeg not found on PATH. Required for video frame "
               "extraction in a later phase, not needed for Phase 0.")
 
+    print("\n--- Dependency safety (Phase 5: torch/torchvision/CUDA regression guard) ---")
+    from configuard.dependency_safety import check_dependency_safety  # noqa: E402
+
+    safety = check_dependency_safety(require_cuda=d.cuda_available)
+    print(f"torch is CUDA build : {safety.torch_is_cuda_build} (version={safety.torch_version})")
+    print(f"torchvision imports  : {safety.torchvision_importable} (version={safety.torchvision_version})")
+    print(f"CUDA still available : {safety.cuda_available}")
+    for warning in safety.warnings:
+        print(f"[WARNING] {warning}")
+    if not safety.is_safe:
+        print("\n[BLOCKER] Dependency safety check FAILED:")
+        for problem in safety.problems:
+            print(f"  - {problem}")
+        return 1
+    print("Dependency safety: OK")
+
     return 0
 
 

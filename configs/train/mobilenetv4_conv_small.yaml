@@ -1,0 +1,34 @@
+# Default training candidate (CLAUDE.md: MobileNetV4-Conv-Small preferred).
+# Paths are intentionally blank: train/val manifests come from
+# configuard.datasets (Phase 3) built over the user's own local dataset,
+# and checkpoint/output dirs resolve from CONFIGUARD_CHECKPOINT_DIR /
+# CONFIGUARD_OUTPUT_DIR in .env. Override per run, never commit real paths.
+# Every key must be a TrainingConfig field - unknown keys are rejected.
+encoder_name: mobilenetv4_conv_small
+pretrained: true
+seed: 42
+run_name: mobilenetv4_conv_small
+
+train_manifest: ""
+val_manifest: ""
+media_root: ""
+frames_per_video: 8
+batch_size: 32
+num_workers: 0
+balance_source: true
+balance_class: true
+
+epochs: 10
+lr: 0.0003
+weight_decay: 0.01
+warmup_steps: 100
+grad_accum_steps: 1
+grad_clip_norm: 1.0
+freeze_backbone: false
+amp: true
+amp_init_scale: 1024.0
+
+early_stopping_patience: 3
+selection_metric: val_auroc
+log_every_n_steps: 10
+device: auto

@@ -1,7 +1,9 @@
 # Model Card
 
-Status: **No deepfake-detection model has been trained yet.** Phase 4
-added two candidate visual-encoder backbones
+Status: **No deepfake-detection model has been trained yet.** Phase 5
+built the training pipeline but has only trained on *synthetic*
+engineering data (see "Phase 5 training pipeline" below) - no checkpoint
+from it is a deepfake detector. Phase 4 added two candidate visual-encoder backbones
 (`configuard.models.DeepfakeVisualEncoder`), each an ImageNet-1k-pretrained
 timm backbone with its classifier head replaced by a single-logit binary
 (real/fake) head. **That head is randomly initialized and has never seen
@@ -37,6 +39,51 @@ guarantees, known failure modes, and export formats.
 | RTX 4050 latency, P50 (ms, bs=1) | 22.19 | 39.26 |
 | GPU peak memory (reserved) | 134.0 MB (2.2% of 6 GB) | 134.0 MB (2.2% of 6 GB) |
 | ONNX FP32 export | Verified, parity max abs diff 3.3e-07 | Verified, parity max abs diff 4.4e-07 |
+
+### MobileNetV4-Conv-Small: source-model vs. reduced-head parameter count
+
+| | Parameters |
+|---|---|
+| Source model (ImageNet-1k, 1000-class classifier) | 3,774,024 |
+| After removing the 1000-class head (`num_classes=0` backbone only) | 2,493,024 |
+| Reduction from removing the original classifier | 1,281,000 (~33.9%) |
+| ConfiGuard-Lite final model (backbone + new binary head) | **2,494,305** |
+
+The original classifier is `nn.Linear(1280, 1000)` (1,280,000 weights +
+1,000 bias = 1,281,000 params - matches exactly). The new binary head is
+`nn.Linear(1280, 1)` (1,280 weights + 1 bias = 1,281 params). Note:
+`timm`'s own `model.num_features` attribute reports 960 for this
+architecture's full (classified) config, which does **not** match the
+backbone's actual 1280-dim pooled output with `num_classes=0` - this is
+the same discrepancy `configuard.models.encoder.DeepfakeVisualEncoder`
+already works around by probing the real output shape empirically rather
+than trusting that attribute (see docs/DECISIONS.md, Phase 4).
+
+## Phase 5 training pipeline: engineering verification only
+
+> ⚠️ **No accuracy claim.** Every Phase 5 training run used synthetic
+> blue- vs. red-tinted checkerboards (`configuard.training.synthetic`)
+> with a deliberately obvious signal, so that the training loop,
+> checkpointing, resume, metrics, and logging could be verified without
+> downloading any dataset. The resulting AUROC/balanced accuracy of 1.0
+> only shows the pipeline can learn a trivial cue. It says **nothing**
+> about detecting deepfakes. Every such result carries
+> `SYNTHETIC_RESULT_DISCLAIMER` ("ENGINEERING_TEST_ONLY ...").
+
+What Phase 5 verified (full numbers in `docs/EXPERIMENT_LOG.md`):
+
+| | MobileNetV4-Conv-Small (default candidate) | EfficientNet-B0 (baseline) |
+|---|---|---|
+| RTX 4050 mixed-precision smoke training | Completed, 5 epochs | Completed, 5 epochs |
+| Peak VRAM reserved (batch 8, AMP) | 154 MB (2.5% of 6 GB) | 460 MB (7.5% of 6 GB) |
+| Mean training step, batch 8, GPU / CPU | ~77-92 ms / ~244-255 ms | ~165-183 ms (GPU) |
+| Checkpoint size (weights + AdamW state + RNG + provenance) | 28.9 MiB | 46.4 MiB |
+| Interrupt + resume vs. uninterrupted | identical (max param diff 0.0) | identical (max param diff 0.0) |
+
+The real training configs (`configs/train/*.yaml`) target batch 32 for
+MobileNetV4 and 16 × 2 accumulation for EfficientNet-B0. At the measured
+peak those are well within 6 GB, but that is **unmeasured at those batch
+sizes on real 224×224 face crops** until real data exists (Phase 3b).
 
 Full provenance (revision, license, file size, SHA-256) is in
 `docs/DATASETS.md`. Performance measurements (latency, memory, ONNX

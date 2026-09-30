@@ -394,8 +394,8 @@ docs/DECISIONS.md.
 
 Independent, separately-tested subsystem. **Every prediction from this
 subsystem is untrained and uncalibrated** - see the big warning in
-docs/MODEL_CARD.md. Not yet wired into `configuard.pipeline` or any
-training loop.
+docs/MODEL_CARD.md. Not yet wired into `configuard.pipeline`; trained
+only on synthetic data so far by the Phase 5 training pipeline (below).
 
 ```
    EncoderSpec (name, timm_model_name, hf_repo_id, license)
@@ -474,6 +474,79 @@ comparison only**; no deepfake-detection accuracy result exists yet, so
 the final model choice is explicitly deferred, not decided by latency
 alone (docs/DECISIONS.md).
 
+## Reproducible training pipeline (Phase 5, `src/configuard/training/`)
+
+Trains either Phase 4 encoder (MobileNetV4-Conv-Small by default,
+EfficientNet-B0 as the comparison) as a binary real(0)/fake(1)
+classifier from Phase 3 manifests, through Phase 2 aligned face crops.
+So far it has only been run on synthetic data (see `docs/MODEL_CARD.md`).
+
+```
+ configs/train/*.yaml ──> TrainingConfig (frozen; unknown keys rejected)
+        │
+ scripts/train.py ── assert_dependency_safety()  (CPU-only torch / broken torchvision / lost CUDA = hard stop)
+        │            HF_HUB_OFFLINE=1            (cached Phase 4 weights only)
+        v
+ runner.build_trainer(config, detector, face_config, checkpoint_dir, output_dir, face_cache_dir)
+   ├─ set_global_seed(seed)          python / numpy / torch / cuda, cuDNN deterministic
+   ├─ read_manifest(train, val)      Phase 3 canonical Sample schema
+   ├─ assert_no_cross_split_leakage  source / identity / real-fake pair / sample_id
+   ├─ sha256(train & val manifests)  -> checkpoint provenance
+   ├─ build_manifest_dataset         IMAGE -> ManifestImageDataset      item (3,224,224)
+   │                                 VIDEO -> ManifestVideoFrameDataset item (N,3,224,224)
+   │                                 both via configuard.media.preprocess_{image,video}
+   │                                 (detect -> align -> FaceCropCache) -> models.preprocess
+   ├─ build_dataloader               source+class-balanced WeightedRandomSampler (train),
+   │                                 sequential (val); seeded generator + per-worker seeding
+   └─ Trainer
+        per epoch E:  reseed sampler/loader generators with seed+E   (exact-resume basis)
+          train:  autocast(fp16 on CUDA) -> compute_logits_for_batch (5D video = mean of frame
+                  embeddings) -> BCE on fp32 logits -> NaN/Inf check -> GradScaler.scale/backward
+                  every grad_accum_steps: unscale -> clip_grad_norm -> scaler.step/update
+                  -> scheduler.step() only if the step was not AMP-skipped
+                  CUDA OOM anywhere -> TrainingOutOfMemoryError (batch size never changed)
+          validate: loss + ValidationMetrics{threshold_free: AUROC, AP |
+                                             threshold_dependent @0.5: confusion matrix,
+                                             sensitivity, specificity, balanced acc, precision, F1}
+          select:   val AUROC -> (undefined) lowest val loss -> (no val set) lowest train loss;
+                    exact ties -> lower val loss
+          log:      <output>/<run>.jsonl + <run>_{train,epoch}.csv
+          save:     <ckpt>/<run>_latest.pt every epoch, <run>_best.pt on improvement
+          early stop after `early_stopping_patience` non-improving epochs
+```
+
+**Checkpoint contents** (atomic temp-file + `os.replace`, format v2):
+model, optimizer, scheduler, and AMP scaler states; epoch and global step;
+Python/NumPy/torch-CPU/torch-CUDA RNG states; `TrainState` (best metric,
+tie-break, best epoch, patience counter, AMP-skipped steps); metrics;
+provenance (encoder name, HF model id **and revision**, face-preprocessing
+`version_tag`, train and val manifest SHA-256, git commit, full config).
+
+**Resume** loads on CPU, then `verify_checkpoint_compatible` refuses any
+mismatch in encoder, model id, preprocessing version, either manifest
+checksum, or a `RESUME_CRITICAL_CONFIG_KEYS` field, and lists every
+mismatch. Resumed and uninterrupted runs are identical (max parameter
+diff 0.0 measured on CPU and RTX 4050). Granularity is one epoch.
+
+**Storage:** checkpoint dir = `CONFIGUARD_CHECKPOINT_DIR`, logs/outputs
+= `CONFIGUARD_OUTPUT_DIR`, face crops = `CONFIGUARD_CACHE_DIR/face_crops`
+(`configuard.training.paths`, which refuses paths inside the repo). On
+this machine all three are on `D:\ConfiGuard-Data\`.
+
+**Smoke mode** (`scripts/train.py --smoke cpu|cuda [--encoder ...]`,
+`runner.run_smoke`): generates synthetic tinted-checkerboard data under
+`<output>/smoke/<run>/`, trains with a full-frame mock face detector,
+re-runs as interrupted + resumed to measure resume consistency, and
+writes `<run>_summary.json` (peak VRAM, step/validation time, checkpoint
+size, resume diff). **Evaluation-only:** `scripts/evaluate.py` loads a
+checkpoint's weights (encoder taken from its provenance) and writes the
+metrics JSON to `<output>/eval/`.
+
+**Dependency safety** (`configuard.dependency_safety`, pinned pair in
+`constraints-cuda.txt`): checks the torch CUDA build, torchvision import
+plus the first compiled op, torch↔torchvision release pairing, and CUDA
+availability. Runs in `scripts/verify_environment.py` and at CLI start.
+
 ## Repository layout
 
 ```
@@ -496,20 +569,27 @@ ConfiGuard-Lite/
 │   │       ├── __init__.py (DatasetAdapter protocol, DatasetAccessError)
 │   │       ├── folder_convention.py, metadata_sidecar.py (the two engines)
 │   │       └── known_datasets.py (FF++/Celeb-DF-v2/DFDC/DF40/DeeperForensics-1.0 + generic)
-│   └── models/                 Pretrained visual encoders (Phase 4)
-│       ├── encoder.py (DeepfakeVisualEncoder, EncoderSpec, PreprocessConfig)
-│       ├── registry.py (the two authorized models), preprocess.py,
-│       │   inference.py, real_pipeline.py, onnx_export.py, benchmark.py,
-│       │   device.py
+│   ├── models/                 Pretrained visual encoders (Phase 4)
+│   │   ├── encoder.py (DeepfakeVisualEncoder, EncoderSpec, PreprocessConfig)
+│   │   ├── registry.py (the two authorized models), preprocess.py,
+│   │   │   inference.py, real_pipeline.py, onnx_export.py, benchmark.py,
+│   │   │   device.py
+│   ├── dependency_safety.py     torch/torchvision/CUDA regression guard (Phase 5)
+│   └── training/                Reproducible training pipeline (Phase 5)
+│       ├── config.py, paths.py, splits.py, datasets.py, sampling.py,
+│       │   dataloader.py, optim.py, metrics.py, checkpoint.py,
+│       │   logging_utils.py, trainer.py, runner.py, synthetic.py
 ├── scripts/                 Operational scripts (env verification, preprocessing
 │                              benchmark, storage check, baseline model download,
-│                              model benchmark, ONNX export)
+│                              model benchmark, ONNX export, train, evaluate)
 ├── tests/                    pytest suite (unit + integration), tests/conftest.py +
 │                              tests/media/conftest.py + tests/datasets/conftest.py +
 │                              tests/models/conftest.py generate all fixtures at
 │                              test time (hand-built PNG, ffmpeg lavfi clips,
 │                              synthetic dataset trees/manifests) - nothing checked in
 ├── configs/                  base.yaml + development/training/testing/production.yaml
+│                              + train/{mobilenetv4_conv_small,efficientnet_b0}.yaml (Phase 5)
+├── constraints-cuda.txt       pinned torch/torchvision CUDA pair (Phase 5)
 ├── models/                    (gitignored) external model assets, e.g. YuNet ONNX -
 │                              see docs/DATASETS.md for provenance
 ├── docs/                      Living project documentation

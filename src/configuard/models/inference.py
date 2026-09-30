@@ -18,6 +18,24 @@ from configuard.models.encoder import PREDICTION_DISCLAIMER, DeepfakeVisualEncod
 from configuard.models.preprocess import preprocess_batch
 
 
+def compute_logits_for_batch(encoder: DeepfakeVisualEncoder, pixel_values: torch.Tensor) -> torch.Tensor:
+    """Gradient-friendly (no torch.no_grad()) batch forward, dispatching
+    on tensor rank: (B, 3, H, W) image batches go straight through the
+    head; (B, N, 3, H, W) video batches are mean-aggregated in feature
+    space across the N ordered frames before the head - the same
+    contract as infer_video_fixed_frames, but keeping gradients for
+    training (configuard.training.trainer uses this directly)."""
+    if pixel_values.dim() == 4:
+        return encoder.forward_logits(pixel_values)
+    if pixel_values.dim() == 5:
+        batch_size, num_frames, channels, height, width = pixel_values.shape
+        flat = pixel_values.reshape(batch_size * num_frames, channels, height, width)
+        features = encoder.forward_features(flat)
+        features = features.reshape(batch_size, num_frames, -1).mean(dim=1)
+        return encoder.head(features).squeeze(-1)
+    raise ValueError(f"Expected a 4D image batch or 5D video batch, got shape {tuple(pixel_values.shape)}")
+
+
 @dataclass(frozen=True)
 class PredictionResult:
     probability: float

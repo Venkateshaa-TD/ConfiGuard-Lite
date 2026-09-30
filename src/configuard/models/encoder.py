@@ -27,6 +27,7 @@ class EncoderSpec:
     hf_repo_id: str  # official Hugging Face repo this model comes from
     license: str
     default_input_size: int = 224
+    revision: str | None = None  # HF commit the cached weights were downloaded at (docs/DATASETS.md)
 
 
 @dataclass(frozen=True)

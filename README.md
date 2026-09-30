@@ -10,8 +10,11 @@ operating rules this project is developed under.
 
 ## Status
 
-Phase 4 (pretrained baseline models and ONNX verification) — see
-`docs/PHASE_STATUS.md` for current status. The end-to-end pipeline
+Phase 5 (reproducible training pipeline) — see
+`docs/PHASE_STATUS.md` for current status. The training pipeline
+(`configuard.training`) is real and verified on CPU and the RTX 4050,
+but **has only ever trained on synthetic engineering data** — no
+deepfake detector exists yet. The end-to-end pipeline
 (`configuard.pipeline`) runs but uses a **deterministic dummy predictor**,
 not a trained model. The face preprocessing subsystem (`configuard.media`),
 the dataset registry (`configuard.datasets`), and two pretrained visual
@@ -54,16 +57,17 @@ py -3.11 -m venv .venv
 
 # 2. Install PyTorch matching your hardware
 #    GPU (NVIDIA, CUDA 12.1-compatible driver):
-.venv\Scripts\python.exe -m pip install torch --index-url https://download.pytorch.org/whl/cu121
+.venv\Scripts\python.exe -m pip install torch==2.5.1 torchvision==0.20.1 --index-url https://download.pytorch.org/whl/cu121
 #    CPU-only:
-.venv\Scripts\python.exe -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+.venv\Scripts\python.exe -m pip install torch==2.5.1 torchvision==0.20.1 --index-url https://download.pytorch.org/whl/cpu
 
-# 3. Install the remaining dependencies
-.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
+# 3. Install the remaining dependencies, constrained to the pinned torch
+#    pair so pip cannot swap in a different (e.g. CPU-only) build
+.venv\Scripts\python.exe -m pip install -r requirements-dev.txt -c constraints-cuda.txt
 
 # 4. Verify PyTorch still has the GPU build after step 3 (installing new
 #    packages can silently re-resolve/downgrade torch - see docs/KNOWN_ISSUES.md)
-.venv\Scripts\python.exe -c "import torch; print(torch.__version__, torch.cuda.is_available())"
+.venv\Scripts\python.exe scripts\verify_environment.py
 ```
 
 ## Verify your environment
@@ -175,6 +179,42 @@ Download the two authorized pretrained backbones (requires `HF_HOME`/
 .venv\Scripts\python.exe scripts\export_onnx_models.py     # FP32 ONNX + parity check
 .venv\Scripts\python.exe scripts\benchmark_models.py         # latency/memory/FLOPs
 ```
+
+## Train and evaluate (Phase 5)
+
+Pinned CUDA build — reinstall/verify only with the pinned pair (the
+default PyPI index serves a CPU-only torch on Windows):
+
+```powershell
+.venv\Scripts\pip.exe install -c constraints-cuda.txt torch==2.5.1 torchvision==0.20.1 --index-url https://download.pytorch.org/whl/cu121
+.venv\Scripts\python.exe scripts\verify_environment.py   # fails loudly on CPU-only torch / broken torchvision / lost CUDA
+```
+
+Synthetic smoke training (**engineering test only — not deepfake
+accuracy**); checkpoints go to `CONFIGUARD_CHECKPOINT_DIR`, logs to
+`CONFIGUARD_OUTPUT_DIR`:
+
+```powershell
+.venv\Scripts\python.exe scripts\train.py --smoke cuda                          # MobileNetV4, RTX 4050, AMP
+.venv\Scripts\python.exe scripts\train.py --smoke cuda --encoder efficientnet_b0
+.venv\Scripts\python.exe scripts\train.py --smoke cpu
+```
+
+Real training, once you have leakage-safe manifests from
+`configuard.datasets` (Phase 3) over your own local data:
+
+```powershell
+.venv\Scripts\python.exe scripts\train.py --config configs\train\mobilenetv4_conv_small.yaml `
+    --train-manifest D:\...\train.jsonl --val-manifest D:\...\val.jsonl --media-root D:\...\media
+# exact resume from the last completed epoch (refused if data/preprocessing/config changed):
+.venv\Scripts\python.exe scripts\train.py --config ... --resume-from D:\...\<run>_latest.pt
+# evaluation only:
+.venv\Scripts\python.exe scripts\evaluate.py --checkpoint D:\...\<run>_best.pt --manifest D:\...\test.jsonl --media-root D:\...\media
+```
+
+Both CLIs run offline (`HF_HUB_OFFLINE=1`) and never download a model or
+dataset. See `docs/ARCHITECTURE.md` for checkpoint contents, resume
+rules, and metrics.
 
 ## Project layout
 

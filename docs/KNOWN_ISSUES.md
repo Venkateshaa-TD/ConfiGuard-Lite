@@ -219,3 +219,109 @@ more if many large checkpoint variants of the same model were cached.
 
 **Action needed:** None. If cache size becomes a concern later, enabling
 Windows Developer Mode addresses it.
+
+---
+
+## OPEN — Balanced sampling (with replacement) can yield single-class batches; BatchNorm then erases the class cue
+
+**Detected:** Phase 5 (2026-09-30), from the failing overfit test (see
+`docs/EXPERIMENT_LOG.md`).
+
+**Impact:** `WeightedRandomSampler` draws with replacement. On a tiny
+set with a small batch, a batch can hold only one class. Train-mode
+BatchNorm then normalizes away the between-class difference inside that
+batch and the loss spikes: measured at batch 4 over 8 samples, loss ~0
+→ 2.1-2.9 at exactly the epochs containing an all-real batch. At a real
+batch size of 32 with balanced classes, P(one-class batch) ≈ 2 × 0.5^32,
+which is negligible, so this mainly affects smoke/test scales.
+
+**Mitigation now:** The overfit test uses full batch without
+replacement. Configs default to batch 32 (MobileNetV4) / 16 × accumulation
+2 (EfficientNet-B0).
+**Possible fix later:** a per-epoch class-stratified sampler without
+replacement, or GroupNorm/frozen BN statistics for very small batches.
+
+---
+
+## OPEN — Threshold-dependent metrics are unreliable while BatchNorm running statistics are still settling
+
+**Impact:** In the from-scratch 12-step overfit test, eval-mode AUROC is
+1.0 while balanced accuracy at threshold 0.5 is 0.5: BN running
+mean/var haven't converged, so eval-mode logits are offset (ranking
+intact, threshold wrong). Early-training threshold metrics (sensitivity,
+specificity, F1, balanced accuracy) should not be read as meaningful.
+Checkpoint selection uses threshold-free AUROC for this reason, and the
+planned calibration phase re-derives the operating threshold anyway.
+
+---
+
+## OPEN — Resume granularity is one epoch
+
+Checkpoints are written only at epoch boundaries (the basis of the
+bit-exact resume guarantee). An interruption mid-epoch loses that epoch's
+progress. Resuming mid-epoch would need DataLoader iterator/sampler
+position state and is not implemented.
+
+---
+
+## OPEN — GPU resume was bit-exact here, but CUDA doesn't guarantee it
+
+`set_global_seed` enables `cudnn.deterministic` and disables
+`cudnn.benchmark`; every RTX 4050 smoke resume measured max parameter
+diff **0.0**. CUDA kernels (e.g. atomics in some backward ops) are not
+guaranteed deterministic across driver/library versions, so the CUDA
+resume test asserts < 1e-4 rather than exact equality. CPU resume is
+asserted exactly equal.
+
+---
+
+## OPEN — AMP still skips a few optimizer steps at start-up
+
+With `amp_init_scale=1024`, MobileNetV4 skipped 3 of its first 20
+steps (fp16 gradient overflow while GradScaler calibrates); EfficientNet-B0
+skipped 0. Skipped steps are now counted and logged
+(`optimizer_steps_skipped_amp`) and don't advance the LR schedule. On
+real runs (thousands of steps) this is noise. On very short runs, check
+the counter; before this fix, a 6-step run silently skipped every step
+(`docs/DECISIONS.md`).
+
+---
+
+## OPEN — Checkpoints load with `torch.load(weights_only=False)`
+
+Needed for the Python/NumPy RNG state tuples stored for exact resume.
+Unpickling can execute code, so **only load checkpoints produced by this
+project** - never a checkpoint downloaded or received from elsewhere.
+A future export path for sharing weights should save a weights-only
+`state_dict` (or ONNX, per the roadmap) separately.
+
+---
+
+## OPEN — Mixed image+video manifests are refused
+
+`build_manifest_dataset` raises on a manifest containing both IMAGE and
+VIDEO samples (the draft silently dropped the images). Joint image+video
+training needs separate loaders or a mixed-shape collate function; to be
+decided when real datasets are wired in (Phase 3b).
+
+---
+
+## OPEN — No real-data training has happened; nothing here measures detection ability
+
+Every Phase 5 training run used synthetic tinted checkerboards and the
+full-frame mock face detector. The production path (YuNet detector on
+real faces, real manifests from `configuard.datasets`) is wired and its
+entry point is exercised by the CLI mismatch-rejection check, but it has
+not trained on real media, because no dataset has been provided
+(Phase 3b). `is_finetuned` remains `False`; `docs/MODEL_CARD.md` makes
+no accuracy claim.
+
+---
+
+## Informational — Phase 5 smoke artifacts on D: (≈ 692 MB)
+
+`D:\ConfiGuard-Data\checkpoints\smoke\` (687 MB, 6 runs incl. 3
+superseded preliminary runs) and `D:\ConfiGuard-Data\outputs\smoke\`
+(5.4 MB) are safe to delete at any time. They are kept only as evidence
+for `docs/EXPERIMENT_LOG.md`. Each future `--smoke` run adds about 60-200 MB
+(latest + best, main + resume run).

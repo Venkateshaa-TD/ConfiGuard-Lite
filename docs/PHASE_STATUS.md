@@ -7,6 +7,7 @@
 | 2 | Face and media preprocessing | PASS | 2026-09-29 |
 | 3 | Dataset registry and leakage-safe data splits | PASS | 2026-09-29 |
 | 4 | Pretrained baseline models and ONNX verification | PASS | 2026-09-29 |
+| 5 | Reproducible training pipeline | PASS | 2026-09-30 |
 
 Full per-phase results are recorded below as they complete.
 
@@ -284,3 +285,76 @@ decided by this phase.
   torchvision regression this phase is now documented with a mitigation
   step (verify build after every install), but not structurally
   prevented (e.g. via a lockfile) - worth revisiting if it recurs.
+
+---
+
+## Phase 5 — Reproducible training pipeline
+
+**Status:** PASS
+
+**Summary:** New `src/configuard/training/` subsystem plus
+`scripts/train.py` / `scripts/evaluate.py`: config-driven training of
+MobileNetV4-Conv-Small (default) or EfficientNet-B0 from Phase 3
+manifests through Phase 2 aligned face crops, with AMP, accumulation,
+clipping, optional backbone freezing, warm-up + cosine AdamW, early
+stopping, best/latest atomic checkpoints with full provenance, exact
+resume that refuses mismatched checkpoints, JSONL/CSV logging, and
+threshold-free vs threshold-dependent validation metrics. Pre-phase
+dependency safety pins and guards the torch/torchvision CUDA pair.
+**Everything was trained on synthetic data only. No accuracy claim is
+made.** The phase was interrupted once and resumed from the uncommitted
+working tree on 2026-09-30. The draft's ad-hoc checks were treated as
+preliminary, and every result below was re-run on the final code.
+
+**Acceptance criteria:**
+- MobileNetV4 synthetic smoke training on the RTX 4050 with mixed
+  precision: **met** (`scripts/train.py --smoke cuda`, 5 epochs, AMP on).
+- Peak VRAM safely below 6 GB: **met**. 154 MB reserved (MobileNetV4),
+  460 MB (EfficientNet-B0), at batch 8.
+- EfficientNet-B0 forward/backward: **met**. Full 5-epoch AMP smoke on
+  CUDA plus CPU tests.
+- Tiny synthetic set overfitted: **met**. Loss 0.678 → 0.0002, eval AUROC 1.0.
+- Interrupted training resumes correctly: **met**. Max parameter diff
+  0.0 vs uninterrupted, on CPU and RTX 4050, both backbones.
+- Checkpoints only on D: **met**. `D:\ConfiGuard-Data\checkpoints\...`;
+  the repo and `~/.cache` are untouched.
+- Mismatched checkpoints rejected: **met**. Unit tests per field, plus a
+  real CLI run listing all 8 mismatches.
+- CUDA available after dependency work: **met**. No installs were made;
+  `verify_environment.py` is OK before and after.
+- Validation metrics and structured logs generated: **met** (JSONL,
+  train/epoch CSV, summary JSON, eval JSON on D:).
+- No real accuracy claim: **met**. Disclaimers are in outputs, MODEL_CARD
+  and the experiment log.
+- No unauthorized model/dataset downloaded: **met**. HF cache still holds
+  only the two Phase 4 models, and `HF_HUB_OFFLINE=1` is forced.
+- Complete test suite passes: **met**, **422/422** (311 + 111 new), 0 skipped.
+
+**Real bugs found and fixed** (all have regression tests; details in
+`docs/DECISIONS.md` / `docs/EXPERIMENT_LOG.md`):
+- GPU resume always crashed: RNG states were loaded onto CUDA.
+- Resume wasn't exact: sampler RNG and best/early-stop state were not
+  saved.
+- A short AMP run silently skipped every optimizer step (GradScaler
+  overflow calibration). Skipped steps are now counted, and
+  `amp_init_scale` defaults to 1024.
+- A saturated-AUROC tie kept a worse "best" checkpoint (now broken by
+  val loss).
+- CUDA OOM was only caught in the forward pass.
+- Unknown config keys were silently ignored.
+- A frozen-header CSV silently dropped every epoch/validation column.
+- Mixed image+video manifests silently dropped the images.
+- The evaluation crop cache could be written next to the media root.
+
+**Open items carried forward (see `docs/KNOWN_ISSUES.md`):**
+- Balanced with-replacement sampling can form single-class batches at
+  tiny batch sizes, which BatchNorm then destabilizes. Negligible at the
+  configured batch sizes.
+- Threshold-dependent metrics are unreliable while BatchNorm running
+  statistics settle.
+- Resume granularity is one epoch.
+- GPU bit-exactness was observed but is not guaranteed by CUDA.
+- `torch.load(weights_only=False)`: only load trusted checkpoints.
+- Mixed image+video training is not supported yet.
+- No real-data training has happened (Phase 3b dependency). VRAM at the
+  real configs' batch sizes is not yet measured.

@@ -121,3 +121,22 @@ full download/verification transcript.
 
 No other checkpoint (GenD, DINOv2, or anything else) and no dataset was
 downloaded in this phase.
+
+## Phase 5 — synthetic training fixtures (generated, not downloaded)
+
+Phase 5 downloaded **nothing** (no dataset, no GenD, no DINOv2, no
+additional model). Training runs used:
+
+- **Synthetic images**, generated at run time by
+  `configuard.training.synthetic`: 64×64 checkerboards, blue-tinted =
+  "real", red-tinted = "fake". These are engineering fixtures, not face
+  imagery or deepfakes. Smoke runs write them under
+  `CONFIGUARD_OUTPUT_DIR/smoke/<run>/synthetic_data/`; tests write them
+  under pytest's `tmp_path`.
+- **Synthetic video clips** (tests only): ffmpeg `lavfi` `testsrc` /
+  `testsrc2` patterns.
+- **The two Phase 4-authorized backbones**, loaded from the existing
+  `D:\ConfiGuard-Data\cache\huggingface` cache at the revisions
+  recorded above (now also stored in `EncoderSpec.revision` and in every
+  checkpoint's provenance), with `HF_HUB_OFFLINE=1`.
+

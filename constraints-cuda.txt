@@ -1,0 +1,24 @@
+# Verified-working torch/torchvision CUDA build pair for this project.
+#
+# Background: a routine `pip install timm onnx onnxruntime` in Phase 4
+# silently re-resolved `torch` to a newer CPU-only build from the default
+# PyPI index and left `torchvision` ABI-mismatched (see docs/KNOWN_ISSUES.md
+# and docs/EXPERIMENT_LOG.md). This file pins the pair last confirmed
+# working end-to-end (CUDA available, `import torchvision` succeeds,
+# `import timm` succeeds) so it can be reinstalled exactly, and referenced
+# as a `-c` constraints file for future installs.
+#
+# Install (this is the ONLY correct index for the CUDA build - the
+# default PyPI index serves a CPU-only torch wheel on Windows):
+#   pip install torch==2.5.1 torchvision==0.20.1 --index-url https://download.pytorch.org/whl/cu121
+#
+# Verify after ANY package install with:
+#   python -c "from configuard.dependency_safety import assert_dependency_safety; print(assert_dependency_safety())"
+# or:
+#   .venv/Scripts/python.exe scripts/verify_environment.py
+#
+# Last verified: 2026-09-29 - Python 3.11.9, driver 591.66, cuDNN 90100,
+# RTX 4050 Laptop GPU (6 GB). Do not bump these versions without a
+# documented reason (docs/DECISIONS.md) and re-verification.
+torch==2.5.1
+torchvision==0.20.1

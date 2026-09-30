@@ -3,8 +3,10 @@
 # added in the phases that need them — see docs/DECISIONS.md.
 #
 # PyTorch is installed separately (see README "Setup" section) because the
-# correct wheel depends on CUDA availability, e.g.:
-#   pip install torch --index-url https://download.pytorch.org/whl/cu121
+# correct wheel depends on CUDA availability. The verified pair is pinned
+# in constraints-cuda.txt (Phase 5):
+#   pip install torch==2.5.1 torchvision==0.20.1 --index-url https://download.pytorch.org/whl/cu121
+# and every later install should pass `-c constraints-cuda.txt`.
 numpy>=1.26,<3.0
 PyYAML>=6.0,<7.0
 
@@ -19,7 +21,7 @@ opencv-python-headless>=4.9,<6.0
 # the default PyPI index if it isn't pinned tightly enough - this
 # happened once during Phase 4 (see docs/KNOWN_ISSUES.md). After
 # installing anything new, re-verify with:
-#   python -c "import torch; print(torch.__version__, torch.cuda.is_available())"
+#   python scripts/verify_environment.py   (Phase 5 dependency-safety guard)
 # and reinstall the pinned GPU build (see README "Setup") if it regressed.
 timm>=1.0
 onnx>=1.16
