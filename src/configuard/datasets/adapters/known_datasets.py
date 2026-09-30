@@ -14,6 +14,10 @@ Adjust the specs below once real access + structure confirmation exists.
 
 from __future__ import annotations
 
+import re
+from dataclasses import replace
+from pathlib import Path
+
 from configuard.datasets.adapters.folder_convention import (
     FolderBucket,
     FolderConventionAdapter,
@@ -21,12 +25,52 @@ from configuard.datasets.adapters.folder_convention import (
 )
 from configuard.datasets.adapters.metadata_sidecar import MetadataSidecarAdapter, MetadataSidecarSpec
 from configuard.datasets.registry import DEFAULT_REGISTRY, DatasetSpec
-from configuard.datasets.schema import SampleLabel, SampleMediaType
+from configuard.datasets.schema import Sample, SampleLabel, SampleMediaType
 
 
 # --------------------------------------------------------------- FF++ ---
 
-def make_faceforensics_adapter() -> FolderConventionAdapter:
+# Official FF++ manipulated filenames are "<target>_<source>.mp4" (both
+# 3-digit original_sequences/youtube video IDs) - verified against the
+# real c23 download in Phase 5b (docs/DATASETS.md).
+FFPP_MANIPULATED_STEM = re.compile(r"^(?P<target>\d{3})_(?P<source>\d{3})$")
+
+
+class FaceForensicsAdapter(FolderConventionAdapter):
+    """FolderConventionAdapter plus FF++'s two-original lineage.
+
+    The generic engine links a fake only to the original sharing its
+    leading filename token (the *target* video). But `000_003.mp4` is
+    built from TWO originals: the target `000` (frames/background) and
+    the source `003` (the swapped-in face for Deepfakes/FaceSwap, the
+    driving expressions for Face2Face/NeuralTextures). A split that
+    only kept `000` with it could put `000_003` in train and `003.mp4`
+    in test - identity leakage. So each fake gets
+    parent_sample_id = target original, paired_sample_id = source
+    original; Phase 3's leakage grouping unions on both.
+
+    identity_id is deliberately NOT set: FF++ publishes no identity labels
+    (Sample.identity_id is only for dataset-provided identities)."""
+
+    def build_manifest(self, root: Path) -> list[Sample]:
+        samples = super().build_manifest(root)
+        real_by_key: dict[tuple[str, str | None], str] = {
+            (Path(s.media_path).stem, s.compression_level): s.sample_id
+            for s in samples if s.label is SampleLabel.REAL
+        }
+        for i, sample in enumerate(samples):
+            if sample.label is not SampleLabel.FAKE:
+                continue
+            match = FFPP_MANIPULATED_STEM.match(Path(sample.media_path).stem)
+            if match is None:
+                continue
+            target = real_by_key.get((match["target"], sample.compression_level))
+            source = real_by_key.get((match["source"], sample.compression_level))
+            samples[i] = replace(sample, source_id=match["target"], parent_sample_id=target, paired_sample_id=source)
+        return samples
+
+
+def make_faceforensics_adapter() -> FaceForensicsAdapter:
     """FaceForensics++ (Rossler et al.). Structure per the official repo
     (github.com/ondyari/FaceForensics): original_sequences/youtube/<c>/videos
     and manipulated_sequences/<method>/<c>/videos, c in {raw, c23, c40}.
@@ -61,7 +105,7 @@ def make_faceforensics_adapter() -> FolderConventionAdapter:
         buckets=tuple(buckets),
         media_type=SampleMediaType.VIDEO,
     )
-    return FolderConventionAdapter(spec)
+    return FaceForensicsAdapter(spec)
 
 
 # ---------------------------------------------------------- Celeb-DF ---

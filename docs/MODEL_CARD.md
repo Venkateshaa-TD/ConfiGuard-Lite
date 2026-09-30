@@ -59,6 +59,12 @@ the same discrepancy `configuard.models.encoder.DeepfakeVisualEncoder`
 already works around by probing the real output shape empirically rather
 than trusting that attribute (see docs/DECISIONS.md, Phase 4).
 
+## Training data status
+
+FaceForensics++ c23 was acquired and validated in Phase 5b
+(`docs/DATASETS.md`), but **no model has been trained on it**: no split
+has been applied and no face crops have been extracted yet.
+
 ## Phase 5 training pipeline: engineering verification only
 
 > ⚠️ **No accuracy claim.** Every Phase 5 training run used synthetic

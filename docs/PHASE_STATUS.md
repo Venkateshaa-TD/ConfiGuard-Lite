@@ -8,6 +8,7 @@
 | 3 | Dataset registry and leakage-safe data splits | PASS | 2026-09-29 |
 | 4 | Pretrained baseline models and ONNX verification | PASS | 2026-09-29 |
 | 5 | Reproducible training pipeline | PASS | 2026-09-30 |
+| 5b | Official FaceForensics++ c23 acquisition and validation | PASS | 2026-09-30 |
 
 Full per-phase results are recorded below as they complete.
 
@@ -358,3 +359,65 @@ preliminary, and every result below was re-run on the final code.
 - Mixed image+video training is not supported yet.
 - No real-data training has happened (Phase 3b dependency). VRAM at the
   real configs' batch sizes is not yet measured.
+
+---
+
+## Phase 5b — Official FaceForensics++ c23 acquisition and validation
+
+**Status:** PASS
+
+**Summary:** FaceForensics++ c23 videos were acquired: original and
+Deepfakes/Face2Face/FaceSwap/NeuralTextures, 1000 each, 5000 files,
+8.42 GiB. Everything came from server EU2 through the official script
+URL from the user's approval email, via a hash-pinned, allow-listed,
+free-space- and stall-guarded wrapper, into
+`D:\ConfiGuard-Data\datasets\FaceForensics++` (outside Git). The
+download was validated in full, a canonical manifest was built with the
+existing registry, and leakage grouping was verified. No split was
+applied, because the approved source provides none; none was invented.
+
+**Requirements:**
+1-2. Script downloaded only to `...\FaceForensics++\_official_script\`.
+     URL, redirect, UTC time, and SHA-256 are recorded in `docs/DATASETS.md`. **Met.**
+3. `-h` run first; the argument syntax was inspected and the whole
+   script read before execution. **Met.**
+4-6. Server `EU2`; only c23 videos of the 5 classes; no raw, c40, masks,
+     models, images, DFD, FaceShifter, or benchmark data (validator
+     found 0 unexpected paths). **Met.**
+7-8. Stored only under `D:\ConfiGuard-Data\datasets`; `git status`
+     shows no data, manifests, or logs. **Met.**
+9. Free space monitored throughout, with a watchdog at 40 GB; the
+   minimum observed was 83.78 GB. **Met.**
+10. Structure, per-class counts (1000/1000 ×5), ffprobe readability
+    (5000/5000, full packet demux), 0 zero-byte, 0 partial, and 0
+    relationship problems. **Met.**
+11. Canonical manifest built via `DEFAULT_REGISTRY` (5000 samples, 0
+    issues, 0 duplicates). **Met.**
+12. Official split: not available from the approved source, so not
+    applied and not invented. **Met, as specified.**
+13. Leakage validation: 500 groups × 10 members, 2 originals each, 0
+    lineage problems. Acquisition report written. **Met.**
+14. No face crops, no training, no GenD, no model code changed. **Met.**
+15. Documentation updated. Tests: **435/435 passed**, 0 skipped. **Met.**
+
+**Real problems found and fixed:**
+- **Leakage-unsafe FF++ lineage.** The adapter linked each fake only to
+  its target original, so a split could have leaked the source identity.
+- **Hung downloads.** The official script's `urlretrieve()` has no
+  timeout; a stall watchdog was added and proved itself on a later
+  Face2Face stall.
+- **Orphaned downloader.** The low-space stop would have killed only the
+  Windows venv launcher and left the real downloader running.
+- **Redirect page saved as the script.** The approved http URL returns a
+  301 page, which the first fetch saved; the https target was fetched
+  instead.
+
+**Open items (see `docs/KNOWN_ISSUES.md`):**
+- No FF++ split yet. Training on FF++ needs either user approval to
+  fetch the official split JSONs from the authors' GitHub repo, or an
+  explicit decision to generate a leakage-safe split.
+- Manipulated classes differ from originals in clip length and
+  resolution distribution. Preprocessing must not let these become
+  shortcut cues.
+- The download wrapper's stall/low-space logic was verified live, not by
+  unit tests.

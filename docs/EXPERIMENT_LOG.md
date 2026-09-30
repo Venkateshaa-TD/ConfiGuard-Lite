@@ -856,3 +856,69 @@ Result: **422 passed, 0 skipped, 0 failed in 191.97s** (311 from Phases
 Result: torch 2.5.1+cu121 CUDA build, torchvision 0.20.1+cu121 (import +
 `ops.nms` OK), CUDA available, `Dependency safety: OK`, exit 0. No
 package changed during the phase.
+
+---
+
+## 2026-09-30 — Phase 5b FaceForensics++ c23 acquisition
+
+Free space on D: before starting: 92.22 GB (floor: 40 GB).
+
+Official script (`docs/DATASETS.md` has full provenance):
+```
+curl -sS -f -L --proto-redir =https -o D:/ConfiGuard-Data/datasets/FaceForensics++/_official_script/faceforensics_download_v4.py \
+  <approved script URL from the approval email - see _official_script/PROVENANCE.md on D:>
+# 301 -> same host over HTTPS, 200, 10727 bytes
+# sha256 5d0b220ad0c88bba9d80f45426aef48a89d182e88956ded85c8a9d310f8d04d0
+python faceforensics_download_v4.py -h     # read in full before running; defaults are -c raw -d all -> never used
+```
+(The first fetch without `-L` saved the 353-byte 301 page; it was replaced.)
+
+Trial: 5 files per class, then full download (5 detached single-stream instances):
+```
+.venv/Scripts/python.exe scripts/download_faceforensics_c23.py --num-videos 5
+.venv/Scripts/python.exe scripts/download_faceforensics_c23.py --datasets <each of the 5>
+```
+- Trial: 25 files, 43.55 MB (~1.75 MB/file) → projected ~8.7 GB for 5000
+  files, leaving ~83 GB. Proceeded.
+- Full: ~1.1-1.5 files/s across 5 streams. `original` hung at 456 files
+  (dead connection, 17:06:39 → noticed 17:14). It was killed and all
+  streams were moved onto the patched wrapper (stall watchdog +
+  process-tree kill). Face2Face later auto-recovered from a stall at 787
+  files (17:35:14).
+- Completed 17:52:52 UTC: 5 × 1000 files, 0 `tmp*` partials,
+  9,041,543,739 bytes. Free space afterwards: 83.78 GB (minimum
+  observed; never near the 40 GB floor).
+- Logs: `D:\ConfiGuard-Data\outputs\acquisition\faceforensics\` (`download_*.jsonl`,
+  per-dataset `*.stderr.log`, `wrapper_*.out.log`, `wrapper_*_restart.out.log`).
+
+## 2026-09-30 — Phase 5b FaceForensics++ c23 validation, manifest, leakage
+
+```
+.venv/Scripts/python.exe scripts/validate_faceforensics.py
+```
+Result: **VALID**, exit 0, 96 s total (ffprobe of 5000 files: 70 s with 8 workers).
+- Structure: exactly `original_sequences/youtube/c23/videos` and
+  `manipulated_sequences/{Deepfakes,Face2Face,FaceSwap,NeuralTextures}/c23/videos`;
+  no raw/c40/masks/models/DFD/FaceShifter/other paths.
+- Counts vs official pair list: 1000/1000 for each of the 5 classes; 0
+  missing, 0 unexpected, 0 zero-byte, 0 partial.
+- ffprobe header + full packet demux: 5000/5000 readable, all h264.
+- Relationships: 0 problems. Every fake is `<target>_<source>`, an
+  official pair, with both originals present.
+- Manifest (existing registry, `faceforensics++` adapter): 5000 samples
+  (1000 real / 4000 fake), 0 Phase 3 validation issues, 0 exact SHA-256
+  duplicates.
+- Leakage: no official split available from the approved source, so
+  none was applied or invented. 500 leakage groups, every one with 10
+  members and exactly 2 originals; 0 lineage problems.
+- Report: `D:\ConfiGuard-Data\outputs\acquisition\faceforensics\acquisition_report_20260930-232450.{json,md}`.
+
+Tests:
+```
+.venv/Scripts/python.exe -m pytest tests/datasets -q -p no:cacheprovider       # 104 passed (91 Phase 3 + 13 new)
+.venv/Scripts/python.exe -m pytest -q -p no:cacheprovider -rs                   # 435 passed, 0 skipped, 192.49s
+```
+Final Phase 5b verification (after all code and doc changes):
+`pytest -q -p no:cacheprovider -rs` → **435 passed, 0 skipped, 0 failed
+in 192.49s** (422 through Phase 5 + 13 new in
+`tests/datasets/test_faceforensics.py`).

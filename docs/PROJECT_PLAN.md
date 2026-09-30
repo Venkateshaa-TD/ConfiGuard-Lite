@@ -49,6 +49,7 @@ inference within a 6 GB VRAM laptop GPU budget.
 | 3b | Wire real dataset(s) into Phase 2 preprocessing (once user provides local dataset access) | Planned |
 | 4 | Pretrained baseline models (MobileNetV4-Conv-Small + EfficientNet-B0) and ONNX verification | See `docs/PHASE_STATUS.md` |
 | 5 | Reproducible training pipeline (config-driven training, exact resume, checkpoints, metrics, logging, dependency safety) | See `docs/PHASE_STATUS.md` |
+| 5b | Official FaceForensics++ c23 acquisition and validation (no split, no crops, no training) | See `docs/PHASE_STATUS.md` |
 | 6 | Distillation from frozen GenD CLIP-L/14 teacher | Planned |
 | 7 | Compression-robust augmentation | Planned |
 | 8 | Temporal GRU + adaptive frame sampling for video | Planned |

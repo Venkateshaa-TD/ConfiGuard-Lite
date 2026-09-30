@@ -547,6 +547,42 @@ metrics JSON to `<output>/eval/`.
 plus the first compiled op, torch↔torchvision release pairing, and CUDA
 availability. Runs in `scripts/verify_environment.py` and at CLI start.
 
+## FaceForensics++ c23 acquisition (Phase 5b)
+
+The first real dataset. It lives entirely under `CONFIGUARD_DATA_DIR`
+(on this machine `D:\ConfiGuard-Data\datasets\FaceForensics++`) and
+never enters Git.
+
+```
+D:\ConfiGuard-Data\datasets\FaceForensics++\
+├── _official_script\faceforensics_download_v4.py   official script (SHA-256 pinned in scripts/download_faceforensics_c23.py)
+│                    filelist.json                  official 500-pair list (expected file set)
+├── original_sequences\youtube\c23\videos\NNN.mp4               1000 real
+├── manipulated_sequences\{Deepfakes,Face2Face,FaceSwap,NeuralTextures}\c23\videos\TTT_SSS.mp4
+│                                                               1000 fake each; TTT = target original, SSS = source original
+└── _manifests\faceforensics++_c23.jsonl                        canonical Phase 3 manifest (no split)
+               faceforensics++_c23_leakage_groups.json          union-find groups any split must respect
+```
+
+Pipeline:
+1. `scripts/download_faceforensics_c23.py` runs the hash-pinned official
+   script with an allow-list (5 datasets, `c23`, `videos`, `EU2`) and a
+   free-space watchdog (stops before < 40 GB free).
+2. `scripts/validate_faceforensics.py` performs these checks:
+   - `configuard.datasets.faceforensics.validate_ffpp_c23`: structure,
+     no raw/c40/masks/models/DFD/FaceShifter, per-class counts against
+     the official pair list, zero-byte files, `tmp*` partials, ffprobe
+     header + full packet demux of every video, and the
+     `<target>_<source>` relationships.
+   - `FaceForensicsAdapter.build_manifest`: SHA-256 per file; each fake
+     gets `parent` = target original and `paired` = source original.
+   - Phase 3 `validate_samples`, `find_exact_duplicates` and
+     `compute_leakage_groups`.
+   - It writes a JSON + Markdown acquisition report to
+     `CONFIGUARD_OUTPUT_DIR/acquisition/faceforensics/`.
+
+No face crops are extracted and no model consumes this data yet.
+
 ## Repository layout
 
 ```
@@ -564,7 +600,7 @@ ConfiGuard-Lite/
 │   │   │   alignment.py, tracking.py, cache.py, hashing.py, preprocess.py
 │   ├── datasets/              Dataset registry (Phase 3)
 │   │   ├── schema.py, registry.py, manifest.py, splitting.py,
-│   │   │   duplicates.py, storage.py
+│   │   │   duplicates.py, storage.py, faceforensics.py (Phase 5b validation)
 │   │   └── adapters/
 │   │       ├── __init__.py (DatasetAdapter protocol, DatasetAccessError)
 │   │       ├── folder_convention.py, metadata_sidecar.py (the two engines)
@@ -581,7 +617,8 @@ ConfiGuard-Lite/
 │       │   logging_utils.py, trainer.py, runner.py, synthetic.py
 ├── scripts/                 Operational scripts (env verification, preprocessing
 │                              benchmark, storage check, baseline model download,
-│                              model benchmark, ONNX export, train, evaluate)
+│                              model benchmark, ONNX export, train, evaluate,
+│                              FF++ c23 download wrapper + validation)
 ├── tests/                    pytest suite (unit + integration), tests/conftest.py +
 │                              tests/media/conftest.py + tests/datasets/conftest.py +
 │                              tests/models/conftest.py generate all fixtures at

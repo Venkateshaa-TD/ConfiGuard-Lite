@@ -325,3 +325,57 @@ superseded preliminary runs) and `D:\ConfiGuard-Data\outputs\smoke\`
 (5.4 MB) are safe to delete at any time. They are kept only as evidence
 for `docs/EXPERIMENT_LOG.md`. Each future `--smoke` run adds about 60-200 MB
 (latest + best, main + resume run).
+
+---
+
+## RESOLVED — Official FF++ download script can hang forever on a dead connection
+
+**Detected:** Phase 5b (2026-09-30), live: the `original` stream's partial
+file froze at 3,375,104 bytes for about 8 minutes (`urllib.request.urlretrieve`
+has no timeout).
+**Resolved:** a stall watchdog in `scripts/download_faceforensics_c23.py`
+kills and relaunches a stalled stream after 5 minutes without progress
+(finished files are skipped). It auto-recovered a later Face2Face stall
+(`stalled_restart` at 17:35:14 UTC). The same fix made the low-space stop
+kill the whole Windows launcher → interpreter process tree (previously
+it would have orphaned the downloader). See `docs/DECISIONS.md`.
+
+---
+
+## OPEN — FaceForensics++ has no train/val/test split applied
+
+The approved source provides none, so none was applied or invented
+(`docs/DATASETS.md`). Any training on FF++ is blocked until either
+(a) the user approves fetching the official split JSONs from the
+authors' GitHub repo, or (b) a leakage-safe split is generated with
+`configuard.datasets.splitting` as an explicit, documented decision.
+Either way, the split must keep each of the 500 leakage groups (2
+originals + 8 fakes) intact.
+
+---
+
+## OPEN — FF++ manipulated classes differ from originals in duration and resolution
+
+Measured on the c23 download (Phase 5b):
+- **Duration:** FaceSwap and NeuralTextures clips cap at 41.52 s, while
+  originals, Deepfakes and Face2Face reach 72.56 s. The same pair can
+  differ, e.g. `033_097` is 32.4 s (Deepfakes) vs 19.1 s (NeuralTextures).
+- **Resolution:** Face2Face and NeuralTextures have 14 distinct
+  resolutions (348 videos at 640×480), versus 29 for originals, Deepfakes
+  and FaceSwap (257 at 640×480).
+
+**Risk:** clip length, frame count, or native resolution could become
+shortcut cues. The preprocessing/training phases must sample frames by
+position within each clip (Phase 2 nested sampling already does) and
+resize crops to the fixed 224×224 contract. They must not feed raw
+resolution or length to a model.
+
+---
+
+## Informational — FF++ has no identity labels
+
+FF++ publishes no subject identities; `identity_id` stays `null`
+(never inferred). Leakage safety relies on the official filename
+lineage instead (`parent_sample_id` = target original, `paired_sample_id`
+= source original). Possible same-person reappearances across different
+original YouTube IDs are neither documented nor detectable here.

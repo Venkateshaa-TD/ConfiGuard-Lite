@@ -1,6 +1,9 @@
 # Datasets
 
-Status: No training dataset has been downloaded. Phase 3 added a typed
+Status: **FaceForensics++ c23 (videos: original + Deepfakes, Face2Face,
+FaceSwap, NeuralTextures) acquired and validated on 2026-09-30 (Phase 5b)**,
+see "FaceForensics++ c23 acquisition" below. No other dataset has been
+downloaded. Text written before Phase 5b follows: Phase 3 added a typed
 **dataset registry** (`src/configuard/datasets/`) with adapters for five
 named deepfake-detection datasets, built and tested entirely against
 synthetic fixtures - see docs/PHASE_STATUS.md and docs/ARCHITECTURE.md for
@@ -140,3 +143,52 @@ additional model). Training runs used:
   recorded above (now also stored in `EncoderSpec.revision` and in every
   checkpoint's provenance), with `HF_HUB_OFFLINE=1`.
 
+## FaceForensics++ c23 acquisition (Phase 5b, 2026-09-30)
+
+Acquired under the user's official FaceForensics++ access grant, using
+only the official download script URL from the approval email. **Never
+committed**: all data lives outside the repository.
+
+| Item | Value |
+|---|---|
+| Location | `D:\ConfiGuard-Data\datasets\FaceForensics++` (`CONFIGUARD_DATA_DIR`) |
+| Official script URL | The URL from the user's approval email (HTTP, 301-redirects to HTTPS on the same host). **Access information, not committed**: recorded in `D:\ConfiGuard-Data\datasets\FaceForensics++\_official_script\PROVENANCE.md` (outside Git) |
+| Script downloaded (UTC) | 2026-09-30T16:32:53Z, 10,727 bytes |
+| Script SHA-256 | `5d0b220ad0c88bba9d80f45426aef48a89d182e88956ded85c8a9d310f8d04d0` (pinned in `scripts/download_faceforensics_c23.py`) |
+| Official pair list | `v3/misc/filelist.json` on the EU2 server (the file the script itself uses; full URL in `PROVENANCE.md`), fetched 2026-09-30T16:39:03Z, 21,002 bytes, SHA-256 `7099a119c0992751a8fd58fda33569ccb01442d8d13aad7fea9e69dc1d2510f4`, 500 pairs / 1000 unique IDs |
+| Server | `EU2` |
+| Downloaded | `-c c23 -t videos` for `original`, `Deepfakes`, `Face2Face`, `FaceSwap`, `NeuralTextures` only |
+| NOT downloaded | raw/c0, c40, masks, Deepfakes models, extracted images, DeepFakeDetection (+ actors), FaceShifter, YouTube source zips, benchmark data |
+| Download window (UTC) | 2026-09-30 16:34:50 (trial) / 16:37 (full) → 17:52:52 |
+| Terms of use | The official script's TOS prompt (TOS PDF on the chosen server) was acknowledged on the user's behalf; the user holds official access. Restricted: research use, no redistribution |
+
+Files (all h264, validated by `scripts/validate_faceforensics.py`):
+
+| Class | Files | Bytes | Duration range (s) |
+|---|---|---|---|
+| original (`original_sequences/youtube/c23/videos/NNN.mp4`) | 1000 | 1,936,585,266 | 5.07-72.56 |
+| Deepfakes (`manipulated_sequences/Deepfakes/c23/videos/TTT_SSS.mp4`) | 1000 | 1,992,801,584 | 5.60-72.56 |
+| Face2Face | 1000 | 1,946,827,903 | 5.07-72.56 |
+| FaceSwap | 1000 | 1,639,456,740 | 5.07-41.52 |
+| NeuralTextures | 1000 | 1,525,872,246 | 5.07-41.52 |
+| **Total** | **5000** | **9,041,543,739 (8.42 GiB)** | |
+
+Verified filename convention: manipulated videos are `<target>_<source>.mp4`
+where both are original IDs forming an official pair; each pair yields
+both orders (`a_b`, `b_a`) per method.
+
+Derived (on D:, never committed):
+- `...\FaceForensics++\_manifests\faceforensics++_c23.jsonl`: canonical
+  Phase 3 manifest, 5000 samples, SHA-256
+  `966a4b272184a12ca76f4d4920fac029f90b0b8ee1b2e38af5aaa61b6c95a253`.
+- `...\_manifests\faceforensics++_c23_leakage_groups.json`: 500 groups
+  × 10 samples (one official pair's 2 originals + 8 fakes).
+- Acquisition report: `D:\ConfiGuard-Data\outputs\acquisition\faceforensics\acquisition_report_20260930-232450.{json,md}`.
+
+**Split: none applied.** The approved source (official script / EU2
+server) provides no train/val/test split. FF++'s published split JSONs
+are in the authors' GitHub repository (`github.com/ondyari/FaceForensics`,
+`dataset/splits/{train,val,test}.json`), which was not part of the
+approval; they were not fetched and no split was invented. Every
+manifest sample has `official_split = null`. Applying the official split
+requires the user's approval to fetch those files.

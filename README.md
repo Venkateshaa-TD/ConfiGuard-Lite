@@ -10,8 +10,11 @@ operating rules this project is developed under.
 
 ## Status
 
-Phase 5 (reproducible training pipeline) — see
-`docs/PHASE_STATUS.md` for current status. The training pipeline
+Phase 5b (official FaceForensics++ c23 acquisition and validation) —
+see `docs/PHASE_STATUS.md` for current status. FF++ c23 (5000 videos,
+8.4 GiB) is downloaded to `D:` and validated, with a canonical manifest
+but **no split applied yet**. Earlier, Phase 5 built the reproducible
+training pipeline. The training pipeline
 (`configuard.training`) is real and verified on CPU and the RTX 4050,
 but **has only ever trained on synthetic engineering data** — no
 deepfake detector exists yet. The end-to-end pipeline
@@ -215,6 +218,23 @@ Real training, once you have leakage-safe manifests from
 Both CLIs run offline (`HF_HUB_OFFLINE=1`) and never download a model or
 dataset. See `docs/ARCHITECTURE.md` for checkpoint contents, resume
 rules, and metrics.
+
+## Acquire and validate FaceForensics++ c23 (Phase 5b)
+
+Requires your own official FaceForensics++ access. Place the official
+script at `%CONFIGUARD_DATA_DIR%\FaceForensics++\_official_script\`
+(its SHA-256 is pinned), then:
+
+```powershell
+.venv\Scripts\python.exe scripts\download_faceforensics_c23.py --num-videos 5   # trial
+.venv\Scripts\python.exe scripts\download_faceforensics_c23.py                  # c23 videos, EU2, 5 classes only;
+                                                                              # stops before < 40 GB free; restarts stalls
+.venv\Scripts\python.exe scripts\validate_faceforensics.py                      # counts, ffprobe, relationships,
+                                                                              # manifest, leakage groups, report
+```
+
+No split is applied (none is provided by the approved source) - see
+`docs/DATASETS.md`.
 
 ## Project layout
 

@@ -196,3 +196,33 @@ All notable changes to this project are documented here.
   GPU; checkpoints 28.9 / 46.4 MiB. All in `docs/EXPERIMENT_LOG.md`.
 - 111 new tests. Full suite: 422/422 passing.
 - No dataset, GenD, DINOv2, or additional model downloaded. No accuracy claim.
+
+### Phase 5b — Official FaceForensics++ c23 acquisition and validation (2026-09-30)
+
+- Downloaded the official `faceforensics_download_v4.py` (approved URL →
+  HTTPS redirect, same host) to the D: dataset area; read it in full and
+  recorded URL, time, and SHA-256 (`5d0b220a…`).
+- Added `scripts/download_faceforensics_c23.py`: a hash-pinned wrapper
+  that allows only `original`/`Deepfakes`/`Face2Face`/`FaceSwap`/`NeuralTextures`,
+  with `-c c23 -t videos --server EU2` fixed. It stops before < 40 GB
+  free, runs a stall watchdog (the official script can hang forever),
+  kills the whole Windows process tree, and logs JSONL on D:.
+- Downloaded 5000 c23 videos (1000 per class, 8.42 GiB) to
+  `D:\ConfiGuard-Data\datasets\FaceForensics++`. Nothing else was
+  downloaded; D: never went below 83.78 GB free.
+- Added `configuard.datasets.faceforensics` + `scripts/validate_faceforensics.py`:
+  - structure and per-class counts against the official pair list;
+  - zero-byte and partial-download detection;
+  - ffprobe header + full packet demux of every video;
+  - `<target>_<source>` relationships;
+  - manifest, duplicates, leakage groups, and a JSON/Markdown report.
+  Result: VALID.
+- Fixed the FF++ adapter (`FaceForensicsAdapter`). Each fake now links to
+  both originals it was built from (`parent` = target, `paired` =
+  source), so leakage groups are the correct 500 × 10. Previously only
+  the target was linked. Identity labels are never invented.
+- Built the canonical manifest (5000 samples, 0 validation issues, 0
+  duplicates) on D:. **No split applied**: the approved source provides
+  none, and none was invented.
+- 13 new tests; full suite 435/435. No face crops, no training, no GenD,
+  and no model code changed.

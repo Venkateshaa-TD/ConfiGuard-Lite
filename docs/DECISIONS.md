@@ -4,6 +4,124 @@ Format: one entry per decision, newest first.
 
 ---
 
+## 2026-09-30 — FF++ access URLs are kept out of Git
+
+The download-script URL (and the server paths derived from it) are
+distributed by the FF++ authors only to approved users. It contains no
+token, but it is still access information. So it is recorded only in
+`D:\ConfiGuard-Data\datasets\FaceForensics++\_official_script\PROVENANCE.md`,
+outside the repository. Committed docs/code keep only hashes, sizes, and
+times, which is enough to verify a copy but not to obtain one.
+
+---
+
+## 2026-09-30 — FF++ download runs through a hash-pinned, allow-listed, free-space-guarded wrapper
+
+**Context:** The official `faceforensics_download_v4.py` defaults to
+`-c raw` and `-d all` (which includes DeepFakeDetection and FaceShifter),
+blocks on an interactive TOS prompt, and has no disk-space awareness.
+
+**Decision:** `scripts/download_faceforensics_c23.py` wraps it:
+- It refuses to run unless the script's SHA-256 matches the reviewed
+  copy (`5d0b220a…`).
+- It only allows `original`, `Deepfakes`, `Face2Face`, `FaceSwap` and
+  `NeuralTextures`, with `-c c23 -t videos --server EU2` hard-coded.
+- It refuses output paths inside the repo.
+- It terminates the download if free space would fall below 40 GB
+  (+256 MB headroom).
+- It logs JSONL progress to `CONFIGUARD_OUTPUT_DIR/acquisition/faceforensics/`.
+
+The five datasets ran as five independent single-stream instances to
+cut wall-clock time about 5×. The TOS prompt is acknowledged with a
+newline, because the user has official access and explicitly instructed
+the download.
+
+**Added mid-download (2026-09-30, both observed live):**
+- **Stall watchdog.** The official script's `urlretrieve()` has no
+  timeout. The `original` stream hung for about 8 minutes on a dead
+  connection (partial frozen at 3,375,104 bytes). If neither the
+  completed-file count nor the in-flight `tmp*` size changes for 5
+  minutes, the wrapper kills the script, removes its partial, and
+  relaunches it; finished files are skipped, at most 10 times. It later
+  recovered a Face2Face stall with no manual intervention.
+- **Process-tree kill.** On Windows the venv `python.exe` is a launcher
+  that spawns the real interpreter, so `Popen.terminate()` would have
+  orphaned the actual downloader, and the low-space stop would not have
+  stopped anything. The wrapper now uses `taskkill /T /F`.
+  All five streams were moved onto the patched wrapper. This cost only
+  the 5 in-flight partial files.
+
+**Why:** It makes the Phase 5b constraints mechanical rather than a
+matter of typing the right flags. The official script writes to a
+`tmp*` file and renames only on completion, so a watchdog stop can
+never leave a truncated `.mp4`, and re-running resumes.
+
+---
+
+## 2026-09-30 — Followed the approved script URL's HTTP→HTTPS redirect
+
+The approved URL (from the approval email; recorded only in
+`_official_script/PROVENANCE.md` on D:, never in Git, because FF++
+distributes it only to approved users) answers `301` with the same host
+and path over HTTPS. The first fetch saved the 353-byte redirect page. It was replaced
+by fetching with `curl -L --proto-redir =https`. The script was read in
+full before its first execution.
+
+---
+
+## 2026-09-30 — Completeness is measured against the official pair list, not a hard-coded count
+
+The expected file set is derived exactly as the official script derives
+it: from `v3/misc/filelist.json` on the same EU2 server (500 pairs;
+originals = both IDs, each method = `a_b` and `b_a`). That file (21,002
+bytes, SHA-256 `7099a119…`) is stored next to the script and pinned in
+the acquisition report. This is metadata the official script itself
+downloads, not an additional dataset.
+
+---
+
+## 2026-09-30 — FF++ fakes link to BOTH originals; identities are never invented
+
+**Context:** The generic folder engine grouped a fake only by its leading
+filename token, so `000_003.mp4` was tied to `000.mp4` but not to
+`003.mp4`, whose face (swap methods) or expressions (reenactment
+methods) it contains. A split built on that grouping could leak.
+
+**Decision:** Introduce `FaceForensicsAdapter` (FF++ only). For
+`<target>_<source>.mp4` it sets `source_id=<target>`,
+`parent_sample_id` to the target original and `paired_sample_id` to the
+source original. Phase 3's union-find grouping then puts each official
+pair's 2 originals and all 8 derived fakes into one leakage group.
+`identity_id` stays `None`: FF++ publishes no identity labels, and the
+schema reserves that field for dataset-provided identities.
+
+**Why:** This is a correctness fix required for any future FF++ split.
+It is verified by a test that fails against the old adapter (4 groups
+instead of 2) and on the real data (500 groups × 10 members).
+
+---
+
+## 2026-09-30 — No FF++ train/val/test split applied
+
+The approved source, the official script and EU2 server, provides no
+split files. FF++'s published split JSONs live in the authors' GitHub
+repository (`ondyari/FaceForensics`, `dataset/splits/`), which was not
+part of the approval, so they were not fetched and **no split was
+invented**. Manifests carry `official_split=None`. The leakage grouping
+the split must respect is written alongside the manifest. Applying the
+official split needs the user's approval to fetch those files.
+
+---
+
+## 2026-09-30 — "Readable by ffprobe" means header + full packet demux
+
+`ffprobe -count_packets` demuxes every packet of the video stream, so a
+truncated file with an intact header still fails; a plain header probe
+would pass it. A full decode (`ffmpeg -f null`) would take hours for
+5,000 files and belongs to face-crop extraction, which is out of scope.
+
+---
+
 ## 2026-09-30 — Phase 5 is the reproducible training pipeline; roadmap renumbered
 
 **Context:** `docs/PROJECT_PLAN.md` had planned Phase 5 as GenD
