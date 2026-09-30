@@ -10,10 +10,11 @@ operating rules this project is developed under.
 
 ## Status
 
-Phase 5b (official FaceForensics++ c23 acquisition and validation) —
-see `docs/PHASE_STATUS.md` for current status. FF++ c23 (5000 videos,
-8.4 GiB) is downloaded to `D:` and validated, with a canonical manifest
-but **no split applied yet**. Earlier, Phase 5 built the reproducible
+Phase 5c (official FaceForensics++ split integration) — see
+`docs/PHASE_STATUS.md` for current status. FF++ c23 (5000 videos,
+8.4 GiB) is downloaded to `D:`, validated, and split with the authors'
+official train/val/test files (720/140/140 originals, leakage-checked).
+No face crops have been extracted and nothing has been trained on it yet. Earlier, Phase 5 built the reproducible
 training pipeline. The training pipeline
 (`configuard.training`) is real and verified on CPU and the RTX 4050,
 but **has only ever trained on synthetic engineering data** — no
@@ -233,8 +234,13 @@ script at `%CONFIGUARD_DATA_DIR%\FaceForensics++\_official_script\`
                                                                               # manifest, leakage groups, report
 ```
 
-No split is applied (none is provided by the approved source) - see
-`docs/DATASETS.md`.
+Then apply the official split (Phase 5c). This needs the pinned split
+files in `...\FaceForensics++\_official_splits\<revision>\`; see
+`docs/DATASETS.md` for URLs and hashes:
+
+```powershell
+.venv\Scripts\python.exe scripts\apply_faceforensics_splits.py   # refuses on any leakage; writes train/val/test manifests
+```
 
 ## Project layout
 

@@ -9,6 +9,7 @@
 | 4 | Pretrained baseline models and ONNX verification | PASS | 2026-09-29 |
 | 5 | Reproducible training pipeline | PASS | 2026-09-30 |
 | 5b | Official FaceForensics++ c23 acquisition and validation | PASS | 2026-09-30 |
+| 5c | Official FaceForensics++ split integration | PASS | 2026-09-30 |
 
 Full per-phase results are recorded below as they complete.
 
@@ -421,3 +422,50 @@ applied, because the approved source provides none; none was invented.
   shortcut cues.
 - The download wrapper's stall/low-space logic was verified live, not by
   unit tests.
+
+---
+
+## Phase 5c — Official FaceForensics++ split integration
+
+**Status:** PASS
+
+**Summary:** Phase 5b was finalized and committed (`12e2585`) after
+removing FF++ access URLs from the repository. The authors' official
+split files were fetched only from `ondyari/FaceForensics`, pinned to
+commit `b952e41cba017eb37593c39e12bd884a934791e1`, verified against
+GitHub's blob SHAs, and kept on D: (not committed, because the data is
+under the FF++ ToS). They were reconciled against all 1000 originals,
+the 500 official pairs, all 4 methods, and the 500 leakage groups, and
+applied without changing membership. Canonical train/val/test manifests
+were written and audited.
+
+**Requirements:**
+1-3. Split files located; revision pinned; URLs, sizes, SHA-256, and git
+     blob SHAs recorded (`docs/DATASETS.md`). **Met.**
+4. Stored on D: only; the decision not to commit is documented
+   (`docs/DECISIONS.md`). **Met.**
+5. Parsed without modifying membership. The loader refuses altered files.
+   **Met.**
+6. Reconciled: 1000/1000 originals, each in exactly one split; split
+   pairs equal the official 500; all 4 methods present in every split;
+   recomputed leakage groups equal the 5b groups. **Met.**
+7-8. Both source IDs of every fake are in its split; no source, parent,
+     pair, or leakage group crosses partitions. The assignment is refused
+     otherwise (tested for each case). **Met.**
+9. Manifests written: train 3600, val 700, test 700. **Met.**
+10-11. Official scale confirmed from the files: 720/140/140 originals
+       (360/70/70 pairs); 720/140/140 videos per method. **Met.**
+12. Class balance (fake:real 4.0 in every split), group balance (360/70/70
+    groups × 10), and duration and resolution distributions per split
+    are audited. **Met.**
+13. Shortcut risks documented, with binding mitigations
+    (`docs/KNOWN_ISSUES.md`, `docs/DECISIONS.md`). **Met.**
+14-15. 24 new deterministic tests; full suite **459/459**, 0 skipped. **Met.**
+16. Documentation updated. **Met.**
+
+**Open items (see `docs/KNOWN_ISSUES.md`):**
+- Face2Face/NeuralTextures width rounding: whether it is a crop or a
+  squeeze (≤ ~3.3%) must be checked on aligned frames in the face-crop
+  phase.
+- Future evaluation must report per-method results and
+  duration/resolution-stratified breakdowns.

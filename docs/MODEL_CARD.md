@@ -61,9 +61,13 @@ than trusting that attribute (see docs/DECISIONS.md, Phase 4).
 
 ## Training data status
 
-FaceForensics++ c23 was acquired and validated in Phase 5b
-(`docs/DATASETS.md`), but **no model has been trained on it**: no split
-has been applied and no face crops have been extracted yet.
+FaceForensics++ c23 was acquired and validated in Phase 5b, and the
+authors' official split (720/140/140 originals) was applied in Phase 5c
+(`docs/DATASETS.md`). **No model has been trained on it**, and no face
+crops have been extracted yet. Known shortcut cues in FF++ (clip length,
+native resolution) and the binding mitigations are in
+`docs/KNOWN_ISSUES.md` / `docs/DECISIONS.md`. Any future FF++ result
+must be reported per manipulation method.
 
 ## Phase 5 training pipeline: engineering verification only
 

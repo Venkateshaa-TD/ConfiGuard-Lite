@@ -922,3 +922,63 @@ Final Phase 5b verification (after all code and doc changes):
 `pytest -q -p no:cacheprovider -rs` → **435 passed, 0 skipped, 0 failed
 in 192.49s** (422 through Phase 5 + 13 new in
 `tests/datasets/test_faceforensics.py`).
+
+---
+
+## 2026-09-30 — Phase 5b commit
+
+Audit before commit: redacted the FF++ download-script URL from 4 files
+(moved to `_official_script/PROVENANCE.md` on D:). Staged 15 text files;
+0 binaries, 0 data/manifest/report/log files, 0 access hosts, 0 secrets.
+`pytest tests/datasets` → 104 passed. Commit **`12e2585`**.
+
+## 2026-09-30 — Phase 5c official split fetch
+
+```
+# locate + pin (GitHub API, read-only)
+GET https://api.github.com/repos/ondyari/FaceForensics                      # default_branch=master, license=NOASSERTION
+GET .../commits/master                                                        # b952e41cba017eb37593c39e12bd884a934791e1 (2020-07-15)
+GET .../contents/dataset/splits?ref=b952e41cba017eb37593c39e12bd884a934791e1                                     # test 2102, train 10802, val 2102 (+ blob SHAs)
+# fetch pinned copies to D:
+curl -sS -f -o <D:>/_official_splits/b952e41cba017eb37593c39e12bd884a934791e1/<split>.json \
+  https://raw.githubusercontent.com/ondyari/FaceForensics/b952e41cba017eb37593c39e12bd884a934791e1/dataset/splits/<split>.json
+git hash-object <split>.json   # == GitHub blob SHA for all three
+```
+Fetched 2026-09-30T18:05:57Z. LICENSE = MIT (code); README says data is under the FF++ ToS.
+
+## 2026-09-30 — Phase 5c split application, leakage validation, audit
+
+```
+.venv/Scripts/python.exe scripts/apply_faceforensics_splits.py
+```
+Result: **VALID - split applied**, exit 0.
+- Reconciliation: 360/70/70 pairs, 720/140/140 originals, 0 problems.
+  Leakage groups recomputed from the manifest are identical to the Phase
+  5b file.
+- Post-write re-check: the Phase 5 trainer's `find_cross_split_leakage`
+  over the three written manifests reports 0 problems; Phase 3
+  `validate_samples` (with media root) reports 0 issues.
+- Counts: train 3600 (720 per class), val 700, test 700 (140 per class);
+  fake:real = 4.0 in every split; leakage groups 360/70/70, all of size 10.
+- Duration (s), median [p10-p90], max:
+
+  | Split | original / DF / F2F | FaceSwap / NeuralTextures |
+  |---|---|---|
+  | train | 16.62 [11.26-28.64], 53.56 | 13.80 [10.60-20.80], 30.04 |
+  | val | 16.15 [10.89-27.12], 47.37 | 13.34 [10.35-20.93], 25.88 |
+  | test | 16.92 [11.20-30.58], 72.56 | 14.63 [11.02-20.63], 41.52 |
+
+- Resolution share (%) of 1280×720 / 640×480 / 1920×1080 / 854×480 / other:
+  train originals 33.1/24.4/12.4/9.7/20.4 vs F2F/NT 33.1/34.4/12.4/0.0/20.1;
+  val 37.9/28.6/8.6/10.0/15.0 vs 37.9/35.7/8.6/0.0/17.9;
+  test 24.3/29.3/15.7/10.0/20.7 vs 24.3/35.7/15.7/0.0/24.3.
+- Follow-up metadata check (ffprobe width/height/SAR/DAR only, no frames
+  decoded or extracted): F2F/NT round width down to a multiple of 16 in
+  282/1000 videos each; DF/FS unchanged (1000/1000 identical to their
+  target original). No SAR/DAR set.
+- Report: `D:\ConfiGuard-Data\outputs\acquisition\faceforensics\split_report_20260930-233957.{json,md}`.
+Tests:
+```
+.venv/Scripts/python.exe -m pytest tests/datasets/test_faceforensics_splits.py -v -p no:cacheprovider -rs   # 24 passed (incl. real pinned-file integration)
+.venv/Scripts/python.exe -m pytest -q -p no:cacheprovider -rs                                               # 459 passed, 0 skipped, 175.98s
+```

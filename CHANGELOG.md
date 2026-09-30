@@ -226,3 +226,33 @@ All notable changes to this project are documented here.
   none, and none was invented.
 - 13 new tests; full suite 435/435. No face crops, no training, no GenD,
   and no model code changed.
+
+### Phase 5c — Official FaceForensics++ split integration (2026-09-30)
+
+- Committed Phase 5b as `12e2585`, after moving the FF++ download-script
+  URL out of the repository (access information; now only in
+  `PROVENANCE.md` on D:).
+- Located the official `dataset/splits/{train,val,test}.json` in
+  `ondyari/FaceForensics`. Pinned commit `b952e41c`, recorded URLs,
+  sizes, SHA-256, and git blob SHAs, and stored the copies on D: only
+  (data is under the FF++ ToS, so the files are not committed).
+- Added `configuard.datasets.faceforensics_splits`:
+  - hash-pinned loader and strict parser;
+  - reconciliation against the official 500 pairs;
+  - atomic assignment that refuses on any cross-split original,
+    parent/pair link, or leakage group.
+- Added `scripts/apply_faceforensics_splits.py`:
+  - writes the train/val/test manifests on D:;
+  - re-checks them with the trainer's leakage guard and Phase 3
+    validation;
+  - audits counts, group balance, duration, and native resolution per
+    split.
+  Result: 720/140/140 originals (3600/700/700 videos), 0 leakage.
+- Measured FF++ shortcut cues:
+  - FaceSwap/NeuralTextures clips are shorter.
+  - Face2Face/NeuralTextures round frame width down to a multiple of 16
+    (282/1000 videos).
+  Binding rules recorded: fixed frame budgets, aligned 224×224 crops
+  only, and no metadata as model input.
+- 24 new deterministic tests; full suite 459/459. No crops, no training,
+  no distillation, no additional downloads.

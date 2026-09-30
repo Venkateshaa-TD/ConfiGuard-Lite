@@ -4,6 +4,66 @@ Format: one entry per decision, newest first.
 
 ---
 
+## 2026-09-30 — FF++ split = the authors' official files, pinned to commit `b952e41cba01`
+
+**Decision:** Use `dataset/splits/{train,val,test}.json` from
+`ondyari/FaceForensics` at commit `b952e41cba017eb37593c39e12bd884a934791e1` (the repository head; last
+commit 2020-07-15). Membership is used exactly as published: 360/70/70
+pairs, i.e. 720/140/140 originals. `configuard.datasets.faceforensics_splits`
+pins each file's size, SHA-256, and git blob SHA, and refuses a file that
+differs. The whole assignment is refused, and no manifest is written, if
+any of these hold:
+- a pair or original is in two splits, or in none;
+- a split lists a non-official pair;
+- a fake's target and source originals are in different splits;
+- a parent or paired link crosses splits;
+- any Phase 3 leakage group spans splits;
+- Phase 3 cross-split validation reports leakage.
+
+**Why:** It keeps results comparable with the FF++ literature and
+avoids inventing a split. The files were fetched only from the
+authorized source, and all their git blob SHAs matched GitHub's.
+
+---
+
+## 2026-09-30 — Official FF++ split files are NOT committed; only their pins are
+
+**Context:** The repository's LICENSE is MIT for code, but its README
+states the *data* is released under the FaceForensics Terms of Use. The
+split files enumerate dataset video IDs, so they arguably belong to the
+data.
+
+**Decision:** Keep working copies only at
+`D:\ConfiGuard-Data\datasets\FaceForensics++\_official_splits\b952e41cba017eb37593c39e12bd884a934791e1\`.
+Commit the revision, URLs, sizes, SHA-256, and git blob SHAs, which is
+enough to re-fetch and verify them exactly. Tests use synthetic files
+in the same format; one integration test uses the real pinned copies
+when present and skips otherwise.
+
+**Why:** They are small enough that committing would be convenient, but
+the license ambiguity means the conservative choice costs nothing.
+
+---
+
+## 2026-09-30 — Duration, resolution, and source metadata are never model inputs
+
+The Phase 5c audit found systematic, class-correlated metadata:
+- FaceSwap and NeuralTextures clips are shorter.
+- Face2Face and NeuralTextures round the frame width down to a multiple
+  of 16 (282 of 1000 videos each), while originals, Deepfakes, and
+  FaceSwap keep the native width.
+
+**Rules for all later phases:**
+1. Frame sampling uses a **fixed frame budget** per video (4/8/16, by
+   position within the clip; Phase 2 nested sampling). Clip length,
+   frame count, and fps must not change what the model sees.
+2. Frames reach the model only as **aligned 224×224 face crops**, so
+   native resolution is never a direct feature.
+3. File metadata (duration, resolution, codec, bitrate, filename, IDs)
+   is **never** a model input or a feature for calibration.
+
+---
+
 ## 2026-09-30 — FF++ access URLs are kept out of Git
 
 The download-script URL (and the server paths derived from it) are

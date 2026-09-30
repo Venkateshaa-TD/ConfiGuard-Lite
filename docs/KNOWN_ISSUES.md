@@ -342,7 +342,7 @@ it would have orphaned the downloader). See `docs/DECISIONS.md`.
 
 ---
 
-## OPEN — FaceForensics++ has no train/val/test split applied
+## RESOLVED (Phase 5c) — FaceForensics++ has no train/val/test split applied
 
 The approved source provides none, so none was applied or invented
 (`docs/DATASETS.md`). Any training on FF++ is blocked until either
@@ -351,6 +351,10 @@ authors' GitHub repo, or (b) a leakage-safe split is generated with
 `configuard.datasets.splitting` as an explicit, documented decision.
 Either way, the split must keep each of the 500 leakage groups (2
 originals + 8 fakes) intact.
+
+**Resolved 2026-09-30 (Phase 5c):** option (a). The official split at
+commit `b952e41c` was applied with 0 reconciliation or leakage problems
+(`docs/DATASETS.md`).
 
 ---
 
@@ -379,3 +383,29 @@ FF++ publishes no subject identities; `identity_id` stays `null`
 lineage instead (`parent_sample_id` = target original, `paired_sample_id`
 = source original). Possible same-person reappearances across different
 original YouTube IDs are neither documented nor detectable here.
+
+---
+
+## OPEN — FF++ shortcut cues measured per split (Phase 5c audit)
+
+Consistent across train/val/test (full tables in the split report):
+- **Duration:** FaceSwap and NeuralTextures are truncated. Train median
+  13.8 s vs 16.6 s for originals/Deepfakes/Face2Face; max 30.0 s vs
+  53.6 s. The same holds in val (13.3 vs 16.2) and test (14.6 vs 16.9).
+- **Native resolution:** Face2Face and NeuralTextures round the frame
+  width **down to a multiple of 16** relative to the target original, in
+  282 of 1000 videos each (854→832 ×98, 656→640 ×66, 600→576 ×48,
+  720→704 ×27, 654→640 ×20, ...; 22 distinct changes). Deepfakes and
+  FaceSwap keep the exact native resolution. No aspect-ratio metadata
+  is set.
+- **Unverified:** whether that width change is a crop or an anisotropic
+  squeeze (≤ ~3.3% horizontal). A squeeze would survive aligned
+  cropping as a subtle facial-geometry cue for about 28% of F2F/NT fakes.
+  **Must be checked in the face-crop phase** by comparing aligned frames
+  of an affected original/fake pair (e.g. an 854×480 target).
+
+Mitigations (binding, `docs/DECISIONS.md`): fixed per-video frame budgets
+sampled by position; aligned 224×224 crops only; no metadata as input.
+**Also required:** evaluation should report per-method results, and a
+duration-stratified and resolution-stratified breakdown on test, so any
+residual shortcut shows up as a gap.

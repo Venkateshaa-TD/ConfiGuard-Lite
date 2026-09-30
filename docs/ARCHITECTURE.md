@@ -560,8 +560,11 @@ D:\ConfiGuard-Data\datasets\FaceForensics++\
 ├── original_sequences\youtube\c23\videos\NNN.mp4               1000 real
 ├── manipulated_sequences\{Deepfakes,Face2Face,FaceSwap,NeuralTextures}\c23\videos\TTT_SSS.mp4
 │                                                               1000 fake each; TTT = target original, SSS = source original
+├── _official_splits\<revision>\{train,val,test}.json          official split, pinned (Phase 5c; not in Git)
 └── _manifests\faceforensics++_c23.jsonl                        canonical Phase 3 manifest (no split)
                faceforensics++_c23_leakage_groups.json          union-find groups any split must respect
+               faceforensics++_c23_{train,val,test}.jsonl       official-split manifests (Phase 5c)
+               faceforensics++_c23_official_split.jsonl         all 5000 samples, split-labelled (Phase 5c)
 ```
 
 Pipeline:
@@ -583,6 +586,21 @@ Pipeline:
 
 No face crops are extracted and no model consumes this data yet.
 
+**Official split (Phase 5c).** `scripts/apply_faceforensics_splits.py`
+does the following:
+- Loads the pinned official split files
+  (`_official_splits/<revision>/`) through
+  `configuard.datasets.faceforensics_splits.load_official_splits`, which
+  refuses on any size or SHA-256 mismatch.
+- `reconcile_pairs` checks them against the official 500 pairs.
+- `assign_official_splits` labels each Phase 5b manifest sample by its
+  originals' split. It refuses the whole assignment on any cross-split
+  original, parent, pair, or leakage group.
+- It writes `faceforensics++_c23_{train,val,test}.jsonl` and re-checks
+  them with the Phase 5 trainer's own `find_cross_split_leakage`.
+- It audits counts, group balance, duration, and native resolution per
+  split.
+
 ## Repository layout
 
 ```
@@ -600,7 +618,8 @@ ConfiGuard-Lite/
 │   │   │   alignment.py, tracking.py, cache.py, hashing.py, preprocess.py
 │   ├── datasets/              Dataset registry (Phase 3)
 │   │   ├── schema.py, registry.py, manifest.py, splitting.py,
-│   │   │   duplicates.py, storage.py, faceforensics.py (Phase 5b validation)
+│   │   │   duplicates.py, storage.py, faceforensics.py (Phase 5b validation),
+│   │   │   faceforensics_splits.py (Phase 5c official split)
 │   │   └── adapters/
 │   │       ├── __init__.py (DatasetAdapter protocol, DatasetAccessError)
 │   │       ├── folder_convention.py, metadata_sidecar.py (the two engines)

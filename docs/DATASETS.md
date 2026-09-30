@@ -185,10 +185,52 @@ Derived (on D:, never committed):
   × 10 samples (one official pair's 2 originals + 8 fakes).
 - Acquisition report: `D:\ConfiGuard-Data\outputs\acquisition\faceforensics\acquisition_report_20260930-232450.{json,md}`.
 
-**Split: none applied.** The approved source (official script / EU2
-server) provides no train/val/test split. FF++'s published split JSONs
-are in the authors' GitHub repository (`github.com/ondyari/FaceForensics`,
-`dataset/splits/{train,val,test}.json`), which was not part of the
-approval; they were not fetched and no split was invented. Every
-manifest sample has `official_split = null`. Applying the official split
-requires the user's approval to fetch those files.
+**Split (Phase 5b): none applied.** The approved acquisition source
+provided no split. **Superseded in Phase 5c:** the official split was
+fetched with the user's approval and applied (next section).
+
+## FaceForensics++ official split (Phase 5c, 2026-09-30)
+
+Fetched with the user's explicit authorization, **only** from the
+authors' public repository. **Not committed** (see `docs/DECISIONS.md`):
+working copies are at
+`D:\ConfiGuard-Data\datasets\FaceForensics++\_official_splits\b952e41cba017eb37593c39e12bd884a934791e1\`.
+
+| File | URL (pinned revision) | Bytes | SHA-256 | Git blob SHA |
+|---|---|---|---|---|
+| train.json | `https://raw.githubusercontent.com/ondyari/FaceForensics/b952e41cba017eb37593c39e12bd884a934791e1/dataset/splits/train.json` | 10,802 | `e59386911255e6fb0a79a7808ec2210536b8c0474268342694c4bca766d1b347` | `979240f9091412ad17b998ab7b06899e54c3b771` |
+| val.json | `.../dataset/splits/val.json` | 2,102 | `b48cc511f66938e05356aaa9c67e150b1e3638c355db3d745225b0022884b36e` | `731b584efea371a81a55c59b3200c2b1320d72f4` |
+| test.json | `.../dataset/splits/test.json` | 2,102 | `886f5a0da623c25820692e0d8dc33d197ddb1db527a7f1cfcb9bcbca60fe4f40` | `854b8019a5e279473ac41671d0946b8476920d6b` |
+
+- Repository: `ondyari/FaceForensics`, default branch `master`, head
+  commit `b952e41cba017eb37593c39e12bd884a934791e1` (2020-07-15, "Fixed alignment on faceshifter"). Fetched
+  2026-09-30T18:05:57Z. All three git blob SHAs matched GitHub's API.
+- License: repository code is MIT (`LICENSE`); the README states the data
+  is under the FaceForensics Terms of Use.
+- Format: JSON list of `["NNN", "NNN"]` original-ID pairs.
+
+Reconciliation (all passed; `scripts/apply_faceforensics_splits.py`):
+
+| Split | Pairs | Originals | Deepfakes | Face2Face | FaceSwap | NeuralTextures | Total videos | Leakage groups |
+|---|---|---|---|---|---|---|---|---|
+| train | 360 | 720 | 720 | 720 | 720 | 720 | 3600 | 360 × 10 |
+| val | 70 | 140 | 140 | 140 | 140 | 140 | 700 | 70 × 10 |
+| test | 70 | 140 | 140 | 140 | 140 | 140 | 700 | 70 × 10 |
+| **total** | **500** | **1000** | 1000 | 1000 | 1000 | 1000 | **5000** | 500 |
+
+- The 500 split pairs equal the official download pair list exactly;
+  every original is in exactly one split.
+- Both originals of every fake are in its split. No source, parent,
+  pair, or leakage group crosses partitions.
+
+Split manifests (on D:, never committed), in `...\FaceForensics++\_manifests\`:
+
+| File | SHA-256 |
+|---|---|
+| `faceforensics++_c23_train.jsonl` | `c036d648a7e8e2dfab89c0027bb6b314cf603c471589dfb57d47ba1a880a0809` |
+| `faceforensics++_c23_val.jsonl` | `f7d28952d5894e4851d24d76cf36fd7e98fc66d7761d36e067e7e0d254479db9` |
+| `faceforensics++_c23_test.jsonl` | `e8d734379518c4427e40abbd96b38f158c6b590d89b51e395d7666e6b104e2ec` |
+| `faceforensics++_c23_official_split.jsonl` (all 5000, labelled) | `78225658f9c5247be8105631ffc8db99547f8d463a2e518d9df701930890db55` |
+
+The Phase 5b base manifest (`faceforensics++_c23.jsonl`, `966a4b27…`,
+`official_split = null`) is kept unchanged.
