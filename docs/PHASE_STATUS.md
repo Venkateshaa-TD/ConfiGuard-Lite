@@ -19,6 +19,7 @@
 | 7 | Efficient temporal video head (GRU evaluated; rejected) | PASS | 2026-10-01 |
 | 8 | Production ONNX export and optimization | PASS | 2026-10-01 |
 | 9 | Media-quality safety gate | PASS | 2026-10-01 |
+| 9b | Quality-gate hardening (v2 signals) | REJECTED (Phase 9 gate kept) | 2026-10-01 |
 
 Full per-phase results are recorded below as they complete.
 
@@ -969,3 +970,54 @@ bypasses and over-triggering are documented.
 HEAVY_COMPRESSION with near-total abstention; residual resize 0.33 FA
 of 24.5%; noise is not detected; block grid assumed crop-aligned
 (`docs/KNOWN_ISSUES.md`).
+
+---
+
+## Phase 9b — Quality-gate hardening (v2 signals)
+
+**Status:** REJECTED by the pre-registered held-out targets. The Phase
+9 gate stays in production; the v2 code and artifact are kept as an
+experiment.
+
+**Summary:**
+- v2 adds a noise estimator, noise-corrected sharpness and
+  effective resolution, and an offset-robust blockiness check.
+- Developed on `final_train`, tuned on `temp_cal`, verified on the
+  held-out `conformal_cal` families; val was read once, labelled
+  confirmatory.
+- Held-out results:
+  - blur+noise false accusations 29% → 0%;
+  - benign 0.75× rescale decided 87% (Phase 9: 0%);
+  - clean coverage loss 0 pp; 4.2 ms per video.
+- **But** severe downscale (0.33×) false accusations regressed from
+  33.8% to 47.9%. The limit was +1 pp.
+
+**Requirements:**
+1. Developed on train/calibration families only; val not inspected
+   while tuning. **Met.**
+2. Noise estimator and blur+noise interaction (noise-corrected
+   sharpness/resolution, HIGH_NOISE). **Met.**
+3. Grid/offset-robust compression check (any offset; a rescaled or
+   rotated grid is still not handled). **Met (partially robust).**
+4. Train-only quality cases: blur+noise ×3, noise ×3, 0.75 / 0.5 /
+   0.33 resize, JPEG ×3 + offset, H.264 ×3, adversarial. **Met.**
+5. Separate held-out training families (`conformal_cal`) for
+   verification. **Met.**
+6. Downgrade-only rule preserved (tested, randomised). **Met.**
+7. Targets: three of four met; **severe-downscale non-regression
+   failed**. **Not met.**
+8. CPU cost 0.84 ms per crop, 4.2 ms per video (< 5 ms). **Met.**
+9. One confirmatory val run after freezing, labelled (rerun blocked by
+   a marker). **Met.**
+10. Mixed-quality and adversarial bypass cases tested (unit tests,
+    held-out and confirmatory). **Met.**
+11. Targets failed, so Phase 9 is kept and 9b documented as rejected.
+    **Met.**
+12. Targeted tests (21), full suite 584/584 (236 s), docs, commit. **Met.**
+13. No retraining, recalibration, API/UI or test access. **Met.**
+
+**Recommended next step:** combine the v2 noise correction and
+offset-robust blockiness with v1's FFT effective-resolution band (or a
+downscale-specific detector). Re-verify on fresh held-out training
+families (e.g. a new split of `final_train`), because `conformal_cal`
+has now been used once for gate verification.

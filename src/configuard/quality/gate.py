@@ -38,11 +38,13 @@ from configuard.crops.store import atomic_write_bytes, canonical_json
 from configuard.io_types import Verdict
 from configuard.quality.signals import SIGNALS, crop_signals
 
-LOW_SHARPNESS, LOW_RESOLUTION, HEAVY_COMPRESSION, SMALL_FACE = (
-    "LOW_SHARPNESS", "LOW_RESOLUTION", "HEAVY_COMPRESSION", "SMALL_FACE")
+LOW_SHARPNESS, LOW_RESOLUTION, HEAVY_COMPRESSION, SMALL_FACE, HIGH_NOISE = (
+    "LOW_SHARPNESS", "LOW_RESOLUTION", "HEAVY_COMPRESSION", "SMALL_FACE", "HIGH_NOISE")
 QUALITY_DEPENDENT = "QUALITY_DEPENDENT_VERDICT"
 FRAME_CODES = (LOW_SHARPNESS, LOW_RESOLUTION, HEAVY_COMPRESSION)
 SCHEMA = "p9-quality-gate-1"
+SCHEMA_V2 = "p9b-quality-gate-2"
+FRAME_CODES_V2 = (LOW_SHARPNESS, LOW_RESOLUTION, HEAVY_COMPRESSION, HIGH_NOISE)
 
 
 class QualityGateMismatchError(Exception):
@@ -58,10 +60,46 @@ class GateThresholds:
     majority: float = 0.5
     percentile: float = 0.0  # tail percentile the thresholds came from (provenance)
 
+    codes = FRAME_CODES
+    schema = SCHEMA
+
     def frame_flags(self, q: np.ndarray) -> np.ndarray:
         """q (n, 3) -> (n, 3) bool in FRAME_CODES order."""
         q = np.atleast_2d(q)
         return np.stack([q[:, 0] < self.sharpness_min, q[:, 1] < self.hf_ratio_min, q[:, 2] > self.blockiness_max], 1)
+
+    @staticmethod
+    def signal_fn(img_bgr: np.ndarray) -> np.ndarray:
+        return crop_signals(img_bgr)
+
+
+@dataclass(frozen=True)
+class GateThresholdsV2:
+    """Phase 9b: v2 signals (configuard.quality.signals_v2) - noise-corrected sharpness /
+    effective resolution, offset-robust blockiness, and a noise estimate."""
+
+    sharpness_min: float
+    hf_ratio_min: float
+    blockiness_max: float
+    noise_max: float
+    face_px_min: float
+    majority: float = 0.5
+    percentile: float = 0.0
+
+    codes = FRAME_CODES_V2
+    schema = SCHEMA_V2
+
+    def frame_flags(self, q: np.ndarray) -> np.ndarray:
+        """q (n, 4) -> (n, 4) bool in FRAME_CODES_V2 order."""
+        q = np.atleast_2d(q)
+        return np.stack([q[:, 0] < self.sharpness_min, q[:, 1] < self.hf_ratio_min,
+                         q[:, 2] > self.blockiness_max, q[:, 3] > self.noise_max], 1)
+
+    @staticmethod
+    def signal_fn(img_bgr: np.ndarray) -> np.ndarray:
+        from configuard.quality.signals_v2 import crop_signals_v2
+
+        return crop_signals_v2(img_bgr)
 
 
 @dataclass(frozen=True)
@@ -82,15 +120,15 @@ class GatedResult:
 
 
 def apply_gate(result: AdaptiveResult, quality_by_slot: dict[int, np.ndarray], face_px: float | None,
-               thr: GateThresholds, calibrator: Calibrator, policy: StagePolicy) -> GatedResult:
+               thr: "GateThresholds | GateThresholdsV2", calibrator: Calibrator, policy: StagePolicy) -> GatedResult:
     slots = [t["slot"] for t in result.timeline]
     logits = np.array([t["logit"] for t in result.timeline], np.float64)
     if not slots:
         return GatedResult(Verdict.UNCERTAIN, result.verdict, [], False, {}, 0, 0, result)
     q = np.stack([np.asarray(quality_by_slot[s], np.float32) for s in slots])
     flags = thr.frame_flags(q)
-    frac = {c: float(flags[:, i].mean()) for i, c in enumerate(FRAME_CODES)}
-    reasons = [c for c in FRAME_CODES if frac[c] >= thr.majority]
+    frac = {c: float(flags[:, i].mean()) for i, c in enumerate(thr.codes)}
+    reasons = [c for c in thr.codes if frac[c] >= thr.majority]
     if face_px is not None and face_px < thr.face_px_min:
         reasons.append(SMALL_FACE)
     bad = flags.any(axis=1)
@@ -105,7 +143,7 @@ def apply_gate(result: AdaptiveResult, quality_by_slot: dict[int, np.ndarray], f
         else:
             same = False
         if not same:
-            reasons = [QUALITY_DEPENDENT] + [c for c in FRAME_CODES if frac[c] > 0]
+            reasons = [QUALITY_DEPENDENT] + [c for c in thr.codes if frac[c] > 0]
     gated = result.verdict is not Verdict.UNCERTAIN and bool(reasons)
     verdict = Verdict.UNCERTAIN if gated else result.verdict
     assert verdict in (result.verdict, Verdict.UNCERTAIN)  # the gate can only downgrade
@@ -117,8 +155,8 @@ class QualityAwareScorer:
     quality signals from those same pixels, and runs the detector (e.g. an ONNX
     ShapePinnedRunner) on them. Quality never enters the detector's input."""
 
-    def __init__(self, runner, crop_paths_by_slot: dict[int, str | Path]) -> None:
-        self.runner, self.paths = runner, crop_paths_by_slot
+    def __init__(self, runner, crop_paths_by_slot: dict[int, str | Path], signal_fn=crop_signals) -> None:
+        self.runner, self.paths, self.signal_fn = runner, crop_paths_by_slot, signal_fn
         self.quality: dict[int, np.ndarray] = {}
         self.frames_scored = 0
 
@@ -127,29 +165,33 @@ class QualityAwareScorer:
 
         imgs = [cv2.imdecode(np.fromfile(str(self.paths[s]), np.uint8), cv2.IMREAD_COLOR) for s in slots]
         for s, img in zip(slots, imgs):
-            self.quality[s] = crop_signals(img)
+            self.quality[s] = self.signal_fn(img)
         pixels = np.stack([img[:, :, ::-1].transpose(2, 0, 1) for img in imgs]).astype(np.float32)
         self.frames_scored += len(slots)
         return np.asarray(self.runner(pixels), np.float32)
 
 
-def save_thresholds(path: str | Path, thr: GateThresholds, binding: dict[str, Any]) -> dict[str, Any]:
-    body = {"schema": SCHEMA, "signals": list(SIGNALS), "thresholds": thr.__dict__, "binding": binding}
+def save_thresholds(path: str | Path, thr: "GateThresholds | GateThresholdsV2", binding: dict[str, Any]) -> dict[str, Any]:
+    if thr.schema == SCHEMA_V2:
+        from configuard.quality.signals_v2 import SIGNALS_V2 as names
+    else:
+        names = SIGNALS
+    body = {"schema": thr.schema, "signals": list(names), "thresholds": thr.__dict__, "binding": binding}
     art = body | {"content_sha256": hashlib.sha256(canonical_json(body)).hexdigest()}
     atomic_write_bytes(Path(path), canonical_json(art))
     return art
 
 
-def load_thresholds(path: str | Path, expected_binding: dict[str, Any] | None = None) -> GateThresholds:
+def load_thresholds(path: str | Path, expected_binding: dict[str, Any] | None = None) -> "GateThresholds | GateThresholdsV2":
     art = json.loads(Path(path).read_text(encoding="utf-8"))
     body = {k: v for k, v in art.items() if k != "content_sha256"}
-    if art.get("schema") != SCHEMA or hashlib.sha256(canonical_json(body)).hexdigest() != art.get("content_sha256"):
+    if art.get("schema") not in (SCHEMA, SCHEMA_V2) or hashlib.sha256(canonical_json(body)).hexdigest() != art.get("content_sha256"):
         raise QualityGateMismatchError(f"{path}: unknown schema or edited content")
     if expected_binding is not None:
         for k, v in expected_binding.items():
             if art["binding"].get(k) != v:
                 raise QualityGateMismatchError(f"{path}: bound to {k}={art['binding'].get(k)!r}, expected {v!r}")
-    return GateThresholds(**art["thresholds"])
+    return (GateThresholdsV2 if art["schema"] == SCHEMA_V2 else GateThresholds)(**art["thresholds"])
 
 
 class GatedVideoAnalyzer:
@@ -161,14 +203,15 @@ class GatedVideoAnalyzer:
     downgrade. `enabled=False` returns the ungated verdict unchanged (reasons are
     still reported), which preserves the previous pipeline exactly."""
 
-    def __init__(self, calibrator: Calibrator, policy: StagePolicy, thresholds: GateThresholds, enabled: bool = True) -> None:
+    def __init__(self, calibrator: Calibrator, policy: StagePolicy, thresholds: "GateThresholds | GateThresholdsV2",
+                 enabled: bool = True) -> None:
         from configuard.adaptive.analyzer import AdaptiveVideoAnalyzer
 
         self.analyzer = AdaptiveVideoAnalyzer(calibrator, policy)
         self.calibrator, self.policy, self.thresholds, self.enabled = calibrator, policy, thresholds, enabled
 
     def analyze(self, runner, crop_paths_by_slot: dict[int, str | Path], face_px: float | None) -> GatedResult:
-        scorer = QualityAwareScorer(runner, crop_paths_by_slot)
+        scorer = QualityAwareScorer(runner, crop_paths_by_slot, self.thresholds.signal_fn)
         result = self.analyzer.analyze(scorer, available=set(crop_paths_by_slot))
         assert scorer.frames_scored == result.frames_used  # no frame is ever scored twice
         g = apply_gate(result, scorer.quality, face_px, self.thresholds, self.calibrator, self.policy)

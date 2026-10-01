@@ -4,6 +4,32 @@ Format: one entry per decision, newest first.
 
 ---
 
+## 2026-10-01 — Phase 9b: v2 quality signals rejected; Phase 9 gate stays in production
+
+- **Protocol:** design on `final_train`, percentile on `temp_cal`,
+  frozen, verified on held-out `conformal_cal` against pre-registered
+  targets, then one labelled confirmatory val run.
+- **Outcome:**
+  - v2 met clean coverage (0 pp), benign 0.75× (87% decided),
+    blur+noise (29% → 0% false accusations) and cost (4.2 ms/video).
+  - It failed severe-downscale non-regression: 0.33× false accusations
+    33.8% → 47.9% held-out (val 24.5% → 37.4%).
+  - **Rejected**: `quality_gate.json` (Phase 9) remains the production
+    gate, and `PHASE9B_REJECTED.json` marks the v2 artifact.
+- **Root cause:** speed work replaced v1's FFT band ratio with a
+  spatial-filter proxy that responds weakly to strong down-scaling.
+  The trade-off (0.55 ms per crop saved) was made before verification
+  and was not tuned afterwards.
+- **Kept for reuse:** `GateThresholdsV2`, `signals_v2`, the v2 artifact
+  schema and the pluggable signal function in `QualityAwareScorer` /
+  `GatedVideoAnalyzer`.
+  - The noise estimator, noise correction and offset-robust blockiness
+    are the parts worth carrying into a combined design.
+  - That design needs a fresh held-out split, because `conformal_cal`
+    has now been used for one gate verification.
+
+---
+
 ## 2026-10-01 — Phase 9: downgrade-only quality gate, enabled by default
 
 - **Downgrade-only contract.** The gated verdict is either the ungated

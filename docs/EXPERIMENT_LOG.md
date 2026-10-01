@@ -2044,3 +2044,135 @@ for fakes):
 .venv/Scripts/python.exe -m pytest tests/quality tests/adaptive tests/export -q -p no:cacheprovider   # 26 passed
 .venv/Scripts/python.exe -m pytest -q -p no:cacheprovider -rs                                        # 576 passed, 0 skipped, 232.99 s
 ```
+
+---
+
+## 2026-10-01 — Phase 9b quality-gate hardening (v2 signals) — REJECTED
+
+```
+.venv/Scripts/python.exe scripts/quality_gate_v2.py quantiles      # v2 signals of all final_train crops (45,600; 137 s)
+.venv/Scripts/python.exe scripts/quality_gate_v2.py cases          # 20 train-only quality cases x temp_cal + conformal_cal (~16 min)
+.venv/Scripts/python.exe scripts/quality_gate_v2.py fit            # percentile chosen on temp_cal -> FROZEN
+.venv/Scripts/python.exe scripts/quality_gate_v2.py bench --videos 120
+.venv/Scripts/python.exe scripts/quality_gate_v2.py verify         # held-out conformal_cal
+.venv/Scripts/python.exe scripts/quality_gate_v2.py confirm-val    # ONE confirmatory val run (marker file prevents reruns)
+```
+
+**Data discipline:**
+- Signal design: synthetic degradations of `final_train` crops only.
+- Thresholds: `final_train` quantiles, with the percentile chosen on
+  `temp_cal` (72 families).
+- Verification: held-out `conformal_cal` (71 families, 355 videos).
+- Val was read only once, after freezing, in the run labelled
+  CONFIRMATORY.
+- Case logits: ONNX FP32 CPU (1 thread per worker; the deployment CPU
+  path). Model, calibration and ONNX are unchanged.
+
+**v2 signals** (`configuard.quality.signals_v2`; 0.73–0.84 ms per crop
+with OpenCV single-threaded):
+- Immerkær noise σ.
+- Noise-corrected sharpness: Laplacian variance − 20σ².
+- Noise-corrected effective resolution: high-band/broad-band
+  spatial-filter energy minus σ²·gain. It replaces the 0.55 ms FFT of
+  v1 for speed.
+- Offset-robust blockiness: per-offset block-edge phase contrast at
+  periods 8/16, minus the contrast half a period away, so 2/4-px
+  interpolation ripple cancels.
+- Design check on train crops (medians, v2 vs v1):
+  - blur σ2 + noise σ4 sharpness 0.91 (v1 1.49; clean 2.05);
+  - 0.75× rescale blockiness 0.131 (clean 0.136; v1 1.27, false alarm);
+  - JPEG q50 on a 3-px-shifted grid 0.61 (clean p99 0.55).
+  - A rescaled/rotated (source-frame) JPEG grid is still not detected.
+- Two blockiness designs were rejected during train-only design: the
+  whole-crop FFT profile and banded FFT spectra. Both were insensitive
+  to JPEG and inflated by blur.
+
+**Fit (temp_cal):** largest percentile with clean coverage loss
+≤ 1.5 pp and 0.75× rescale decided ≥ 80%.
+
+| p (%) | 0.25 | 0.5 | 1 | 1.5 | 2 | 3 | 5 |
+|---|---|---|---|---|---|---|---|
+| clean loss | **0.011** | 0.017 | 0.050 | 0.069 | 0.075 | 0.117 | 0.214 |
+| resize 0.75 decided | **0.864** | 0.853 | 0.803 | 0.758 | 0.722 | 0.633 | 0.525 |
+
+- Frozen at p = 0.25: sharpness < 1.023, effective resolution < −1.643,
+  blockiness > 0.814, noise σ > 2.186, face width < 60.7 px.
+- `quality_gate_v2.json` (`f56ea47e…`, content `62f71139…`) is bound to
+  the export manifest, ONNX FP32, adaptive calibration and the
+  signals_v2 code hash.
+
+**Cost** (live CPU pipeline, 120 conformal_cal videos, decode + ONNX
+FP32 CPU + adaptive decision; average 5.0 frames):
+- v2 signals: 0.84 ms per crop, i.e. **4.20 ms per video (target
+  < 5 ms ✓)**.
+- Pipeline: 29.9 → 34.1 ms mean (+13.9%) and 24.0 → 27.3 ms P50.
+- The target was "< 5 ms per video OR < 10% overhead", so it is met
+  via the first clause.
+
+**Held-out verification** (conformal_cal, 355 videos). Columns:
+ungated / Phase 9 gate / Phase 9b gate.
+
+| case | decided | FA (real → manipulated) | fake detection |
+|---|---|---|---|
+| clean | 0.887 / 0.870 / **0.887** | 0 / 0 / 0 | 0.873 / 0.859 / 0.873 |
+| blur σ1 | 0.862 / 0.530 / 0.803 | 0.028 / 0.028 / 0.028 | 0.863 / 0.486 / 0.796 |
+| blur σ2 | 0.961 / 0.000 / 0.000 | 0.803 / 0 / 0 | – |
+| blur σ2 + noise σ2 / σ4 / σ6 | 0.98/0.31/0.27 → 0.76/0.31/0.27 → **0/0/0** | 0.944/0.141/0 → 0.732/0.141/0 → **0/0/0** | – |
+| noise σ4 / σ8 / σ12 | 0.75/0.93/0.90 → same → **0/0/0** (HIGH_NOISE) | 0 | 0.16/0/0 (missed fakes) → abstain |
+| **resize 0.75 (benign)** | 0.879 / **0.000** / **0.868** | 0.042 / 0 / 0.042 | 0.880 / 0 / 0.866 |
+| resize 0.5 | 0.868 / 0.749 / 0.828 | 0.042 / 0.042 / 0.042 | |
+| **resize 0.33 (severe)** | 0.890 / 0.518 / 0.808 | 0.507 / **0.338** / **0.479** | |
+| JPEG q75 / q50 / q30 | 0.80/0.78/0.78 → 0.13/0.00/0.00 → 0.80/0.69/0.17 | 0 | |
+| JPEG q50 at grid offset 3 | 0.744 / 0.561 / 0.699 | 0 | |
+| x264 CRF23 / 30 / 37 | 0.76/0.75/0.69 → 0.76/0.75/0.53 → 0.76/0.75/0.69 | ≤ 0.014 | |
+| blur + unsharp (adversarial) | 0.955 / 0.014 / 0.037 | 0.789 / 0.000 / 0.056 | |
+
+- Per method, clean (Phase 9b = ungated): DF/F2F/FS/NT detection
+  0.96 / 0.87 / 0.97 / 0.69. Phase 9 cost 0.01–0.03 detection.
+- Resize 0.33, Phase 9b: fakes decided 0.79–0.92, but originals 0.62
+  decided with FA 0.48.
+
+**Pre-registered targets (held-out):**
+
+| target | result |
+|---|---|
+| clean coverage loss ≤ 2 pp | 0.0 pp ✓ |
+| 0.75× rescale decided ≥ 75% | 86.8% ✓ |
+| blur+noise FA ≥ 50% and ≥ 3 pp below Phase 9 | 29.1% → 0% ✓ |
+| cost < 5 ms/video or < 10% | 4.2 ms ✓ |
+| severe blur/downscale FA ≤ Phase 9 + 1 pp | blur σ2 0% → 0% ✓; **resize 0.33 33.8% → 47.9% ✗** |
+
+**→ Phase 9b REJECTED.** The Phase 9 gate (`quality_gate.json`) stays
+in production; marker `PHASE9B_REJECTED.json` sits beside the v2
+artifact. Cause: the spatial-filter effective-resolution proxy (chosen
+for speed) is far less sensitive to strong down-scaling than v1's FFT
+band ratio. No further tuning was done after verification, because
+that would contaminate the held-out set.
+
+**CONFIRMATORY val run** (once, after freezing; 695 videos per set;
+ungated / Phase 9 / Phase 9b):
+
+| set | decided | FA |
+|---|---|---|
+| clean | 0.868 / 0.862 / 0.865 | 0.014 / 0.014 / 0.014 |
+| adv blur σ2 + noise σ4 | 0.285 / 0.285 / **0.000** | 0.144 / 0.144 / **0.000** |
+| resize 0.75 | 0.856 / 0.003 / **0.847** | 0.050 / 0 / 0.050 |
+| resize 0.33 | 0.875 / 0.453 / 0.709 | 0.460 / **0.245** / **0.374** |
+| blur σ1 | 0.843 / 0.486 / 0.745 | 0.058 / 0.043 / 0.058 |
+| blur σ2 | 0.965 / 0 / 0 | 0.842 / 0 / 0 |
+| JPEG q50 / q30 | 0.78/0.77 → 0/0 → 0.62/0.20 | 0 |
+| social resize0.5+JPEG60 | 0.673 / 0 / 0.504 | 0 |
+| noise σ4 / σ10 | 0.72/0.96 → same → 0/0 | 0 |
+| blur + unsharp | 0.950 / 0.029 / 0.027 | 0.791 / 0.022 / 0.043 |
+| bypass: one / half / all bad frames | FA 0.036/0.086/0.842 → 0.029/0/0 → 0.029/0/0 | |
+
+Val confirms the held-out picture: v2 fixes the blur+noise bypass and
+the 0.75× over-trigger, but weakens strong-downscale and mild-blur
+protection.
+
+## 2026-10-01 — Phase 9b tests
+
+```
+.venv/Scripts/python.exe -m pytest tests/quality -q -p no:cacheprovider     # 21 passed (13 Phase 9 + 8 Phase 9b)
+.venv/Scripts/python.exe -m pytest -q -p no:cacheprovider -rs              # 584 passed, 0 skipped, 236.10 s
+```

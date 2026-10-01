@@ -881,6 +881,23 @@ On this machine the store root is `D:\ConfiGuard-Data\cache\ffpp_face_crops\stor
   (`ShapePinnedRunner`, ONNX FP32) → `AdaptiveVideoAnalyzer` (6d
   calibration) → quality gate → verdict + reason codes.
 
+## Quality gate v2 experiment (Phase 9b; rejected, not in production)
+
+- **`quality/signals_v2.py`**: `crop_signals_v2` returns noise-corrected
+  sharpness, noise-corrected effective resolution (spatial filters),
+  offset-robust blockiness and Immerkær noise σ (about 0.8 ms per
+  crop).
+- **`quality/gate.py`**: `GateThresholdsV2` (adds HIGH_NOISE) with a
+  `signal_fn` hook, plus schema `p9b-quality-gate-2`.
+  - `QualityAwareScorer` / `GatedVideoAnalyzer` take the signal
+    function from the thresholds, so v1 and v2 share the same
+    downgrade-only gate.
+  - `load_thresholds` returns the matching class.
+- **`scripts/quality_gate_v2.py`**: `quantiles`, `cases`, `fit`,
+  `verify`, `bench` and `confirm-val` (once; blocked by a marker).
+- **Production:** `GatedVideoAnalyzer` with
+  `load_thresholds(.../quality_gate.json)` (Phase 9 v1).
+
 ## Repository layout
 
 ```
@@ -928,8 +945,8 @@ ConfiGuard-Lite/
 │   │   ├── embeddings.py, gru.py
 │   ├── export/                  Production ONNX export + hash-checked package (Phase 8)
 │   │   ├── onnx_student.py, package.py
-│   ├── quality/                 Downgrade-only media-quality safety gate (Phase 9)
-│   │   ├── signals.py, gate.py
+│   ├── quality/                 Downgrade-only media-quality safety gate (Phase 9; v2 experiment 9b)
+│   │   ├── signals.py, signals_v2.py, gate.py
 │   ├── memory_guard.py          available-RAM floor (Phase 6e)
 │   └── training/                Reproducible training pipeline (Phase 5)
 │       ├── config.py, paths.py, splits.py, datasets.py, sampling.py,
@@ -945,7 +962,8 @@ ConfiGuard-Lite/
 │                              calibration split/fit, adaptive video evaluation,
 │                              robust stress suite + evaluation,
 │                              temporal GRU experiment, production ONNX export,
-│                              quality gate compute/fit/evaluate)
+│                              quality gate compute/fit/evaluate,
+│                              quality gate v2 experiment)
 ├── tests/                    pytest suite (unit + integration), tests/conftest.py +
 │                              tests/media/conftest.py + tests/datasets/conftest.py +
 │                              tests/models/conftest.py generate all fixtures at

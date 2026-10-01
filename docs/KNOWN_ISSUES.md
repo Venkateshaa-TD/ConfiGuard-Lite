@@ -4,6 +4,18 @@ Format: one entry per issue. Mark resolved issues rather than deleting them.
 
 ---
 
+## OPEN — Phase 9b hardening rejected; Phase 9 gate weaknesses remain in production (Phase 9b)
+
+The production gate is still Phase 9 (v1 signals). Its blur+noise
+bypass and its 0.75× over-trigger (below) remain.
+
+The v2 signals fix both on held-out and confirmatory data, but weaken
+strong-downscale protection: 0.33× false accusations 47.9% vs 33.8%
+held-out, 37.4% vs 24.5% val. So v2 is not deployed.
+
+`conformal_cal` has been used once for gate verification. The next
+attempt needs a fresh held-out set of training families.
+
 ## OPEN — Quality gate is bypassed by blur + noise (Phase 9)
 
 Gaussian blur σ2 followed by σ4 noise passes every check: 0 reason

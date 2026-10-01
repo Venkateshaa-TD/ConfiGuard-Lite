@@ -435,3 +435,23 @@ All notable changes to this project are documented here.
 - Found and documented: blur + noise bypass, resize 0.75 over-trigger,
   residual resize 0.33 false accusations.
 - 13 new tests; full suite 576/576. No retraining, recalibration, API/UI or test access.
+
+### Phase 9b — Quality-gate hardening (rejected) (2026-10-01)
+
+- Added `configuard.quality.signals_v2`: Immerkær noise σ,
+  noise-corrected sharpness and effective resolution, offset-robust
+  phase-contrast blockiness (0.8 ms per crop).
+- Added `GateThresholdsV2` (HIGH_NOISE), the v2 artifact schema and a
+  pluggable signal function in the scorer/analyzer. v1 behaviour is
+  unchanged.
+- Added `scripts/quality_gate_v2.py` (train-only cases, temp_cal fit,
+  held-out conformal_cal verification, CPU bench, one confirmatory val
+  run).
+- Held-out results:
+  - blur+noise false accusations 29% → 0%;
+  - benign 0.75× rescale decided 87%;
+  - clean loss 0 pp; 4.2 ms/video;
+  - **0.33× downscale false accusations 33.8% → 47.9% (regression)**.
+- **Rejected**; the Phase 9 gate stays in production. Val confirmatory
+  run agrees.
+- 8 new tests; full suite 584/584. No retraining, recalibration, API/UI or test access.
