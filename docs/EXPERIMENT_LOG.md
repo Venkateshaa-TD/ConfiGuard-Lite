@@ -1541,3 +1541,176 @@ fp32 vs fp16 logits).
 .venv/Scripts/python.exe -m pytest tests/adaptive tests/calibration -q -p no:cacheprovider   # 17 passed
 .venv/Scripts/python.exe -m pytest -q -p no:cacheprovider -rs                               # 546 passed, 0 skipped, 212.52 s
 ```
+
+---
+
+## 2026-10-01 — Phase 6e robust augmentation and stress suite
+
+**Training augmentation** (`configuard.robust.degrade.RobustAugmentConfig`
+defaults). Applied after the unchanged 6b blur/jitter, with the same
+probabilities and severities for every class and method (the function
+never sees the label).
+
+| op | probability | mild → moderate range |
+|---|---|---|
+| gamma | 0.3 | γ ≈ 0.95–1.05 → 0.80–1.25 |
+| down/up-scale | 0.3 | 0.9× → 0.45× |
+| blur | 0.2 | σ 0.3 → 1.5 |
+| Gaussian noise | 0.2 | σ 1 → 8 (uint8 levels) |
+| JPEG | 0.35 | quality 90 → 40 |
+| H.264-style emulation | 0.3 | QP 22 → 36 |
+
+- JPEG and H.264 are mutually exclusive.
+- The H.264 emulation is 4:2:0 chroma + 4×4 DCT quantisation + light
+  deblocking (PSNR 39.6 / 34.9 / 30.7 dB at QP 22 / 30 / 36).
+- Curriculum: the severity cap is 0.5 at epoch 0 and rises linearly to
+  1.0 at epoch 4.
+- GenD targets stay the CLEAN cached logits; only the student's view is
+  degraded.
+- Cost: about 3.4 ms/crop average. Measured by micro-benchmark after
+  replacing einsum (16 ms) with a block-diagonal DCT (5.7 ms for the
+  H.264 op).
+
+**Stress suite** (`scripts/robust_eval.py build`):
+- Tag `p6e-2974c51936f46856`, at `D:\ConfiGuard-Data\cache\robust_stress\`.
+- 17 deterministic conditions × 11,120 official-val crops, 12.2 GiB in
+  about 6.5 min. D: free went 75.6 → 63.3 GB (floor 40).
+- H.264 conditions use **real libx264** (preset medium, yuv420p,
+  threads 1) over each video's 16 crops; a round-trip is
+  byte-deterministic.
+- Seven conditions are outside the training range (marked *).
+
+**Robust student:**
+
+```
+.venv/Scripts/python.exe scripts/train_distill_student.py train --run-name student_distilled_robust_p80 --alpha 0.5 --temperature 2 --train-partition final_train --robust
+```
+- Setup: the fixed 6b config (α 0.5, T 2, early stopping on clean val,
+  patience 3) on the same 80% `final_train` partition as the current
+  model `student_distilled_p80`.
+- `best.pt` SHA-256 `5919c0a1…1c40`.
+- **First attempt stopped and restarted.** With the new numpy/OpenCV
+  degradations, 12 spawn workers × 16 BLAS/OpenCV threads
+  oversubscribed the CPU: 236 img/s, GPU 6–38%. It was stopped before
+  any epoch was written. Workers are now single-threaded
+  (`single_thread_workers` + `worker_init`), giving 1,037 img/s. The
+  results do not depend on this.
+- **Training cost:**
+
+  | model | epochs | best epoch | minutes (train+val) | median img/s | peak VRAM |
+  |---|---|---|---|---|---|
+  | current p80 | 20 | 18 | 23.8 | 779 | 604 MB |
+  | robust p80 | 7 (early stop) | 3 | 12.9 | 566 | 604 MB |
+
+- The robust run stopped at epoch 6, two epochs after the curriculum
+  reached full severity. That is likely premature: clean-val early
+  stopping was not designed for a curriculum.
+
+**Evaluation:**
+
+```
+.venv/Scripts/python.exe scripts/robust_eval.py evaluate --runs student_distilled_p80,student_distilled_robust_p80 --workers 4 --ram-floor-gb 4
+.venv/Scripts/python.exe scripts/compare_students.py --runs student_distilled_p80,student_distilled_robust_p80
+```
+- **A first attempt was killed by Claude Code for low system RAM.** It
+  used 12 workers and scored all conditions in one pass, and saved
+  nothing.
+- It was resumed with 4 workers, sequential per-condition scoring,
+  per-condition `.npy` saved immediately (`<run>\stress\<suite>\<ckpt12>\`)
+  and a 4 GB available-RAM floor (`configuard.memory_guard`).
+- Available RAM stayed at or above 5.6 GB. The two models took 889 s
+  and 924 s.
+- Report: `...\distill\reports\robust_eval_20261001-184550.json`;
+  latency in `compare_20261001-184647.json`.
+
+**Video / frame AUROC and video FPR** (real videos with raw P(fake) ≥
+0.5; both models are uncalibrated here):
+
+| condition | severity | current vAUC | robust vAUC | current fAUC | robust fAUC | current FPR@0.5 | robust FPR@0.5 |
+|---|---|---|---|---|---|---|---|
+| **clean** | – | **0.9735** | 0.9274 | **0.9488** | 0.8863 | 0.166 | 0.166 |
+| jpeg_q75 | mild | 0.9454 | 0.9216 | 0.9119 | 0.8786 | 0.050 | 0.180 |
+| jpeg_q50 | moderate | 0.9037 | 0.9140 | 0.8581 | 0.8670 | 0.000 | 0.180 |
+| jpeg_q30 | severe* | 0.8641 | 0.9005 | 0.8055 | 0.8497 | 0.000 | 0.187 |
+| x264_crf23 | mild | 0.9427 | 0.9085 | 0.9096 | 0.8665 | 0.151 | 0.259 |
+| x264_crf30 | moderate | 0.9037 | 0.8911 | 0.8660 | 0.8471 | 0.122 | 0.273 |
+| x264_crf37 | severe* | 0.8548 | 0.8630 | 0.8083 | 0.8211 | 0.144 | 0.317 |
+| resize_0.75 | mild | 0.9619 | 0.9147 | 0.9302 | 0.8713 | 0.237 | 0.281 |
+| resize_0.5 | moderate | 0.9560 | 0.9022 | 0.9168 | 0.8568 | 0.345 | 0.302 |
+| resize_0.33 | severe* | 0.8883 | 0.8620 | 0.8362 | 0.8137 | **0.849** | 0.410 |
+| blur_s1.0 | moderate | 0.9560 | 0.9029 | 0.9219 | 0.8570 | 0.237 | 0.281 |
+| blur_s2.0 | severe* | 0.8212 | 0.8250 | 0.7729 | 0.7810 | **1.000** | 0.540 |
+| noise_s4 | moderate | 0.8945 | 0.9174 | 0.8461 | 0.8730 | 0.007 | 0.223 |
+| noise_s10 | severe* | **0.6922** | 0.8841 | 0.6650 | 0.8345 | 0.000 | 0.259 |
+| gamma_0.7 | severe* | 0.9720 | 0.9271 | 0.9455 | 0.8855 | 0.187 | 0.209 |
+| gamma_1.4 | severe* | 0.9628 | 0.9056 | 0.9374 | 0.8659 | 0.259 | 0.252 |
+| social_resize0.5_jpeg60 | moderate | 0.8955 | 0.8945 | 0.8432 | 0.8454 | 0.094 | 0.245 |
+| stream_resize0.5_x264crf30 | moderate | 0.8890 | 0.8698 | 0.8325 | 0.8247 | 0.252 | 0.317 |
+
+\* outside the training augmentation range.
+
+**Summary (video AUROC):**
+
+| | current p80 | robust p80 |
+|---|---|---|
+| clean | **0.9735** | 0.9274 |
+| worst case | 0.6922 (noise_s10) | **0.8250** (blur_s2.0) |
+| mean over 17 degraded | **0.9002** | 0.8943 |
+| mild / moderate / severe mean | **0.950 / 0.914** / 0.865 | 0.915 / 0.899 / **0.881** |
+| worst-case ΔAUROC vs own clean | −0.281 | −0.102 |
+| max / mean degraded FPR@0.5 | 1.000 / 0.231 | 0.540 / 0.277 |
+
+- Paired video bootstrap, clean (robust − current): Δ −0.046, 95% CI
+  [−0.062, −0.032].
+- **Per manipulation, video AUROC:**
+
+| condition | current DF / F2F / FS / NT | robust DF / F2F / FS / NT |
+|---|---|---|
+| clean | 0.988 / 0.985 / 0.994 / 0.927 | 0.962 / 0.963 / 0.961 / 0.824 |
+| jpeg_q50 | 0.963 / 0.940 / 0.987 / 0.724 | 0.958 / 0.954 / 0.953 / 0.791 |
+| x264_crf30 | 0.945 / 0.930 / 0.988 / 0.752 | 0.943 / 0.936 / 0.947 / 0.738 |
+| x264_crf37 | 0.920 / 0.865 / 0.961 / 0.672 | 0.930 / 0.891 / 0.924 / 0.707 |
+| resize_0.5 | 0.982 / 0.966 / 0.987 / 0.890 | 0.939 / 0.945 / 0.941 / 0.783 |
+| blur_s2.0 | 0.907 / 0.821 / 0.861 / 0.696 | 0.883 / 0.847 / 0.873 / 0.696 |
+| noise_s10 | 0.801 / 0.720 / 0.671 / 0.578 | 0.948 / 0.934 / 0.935 / 0.720 |
+| social_resize0.5_jpeg60 | 0.969 / 0.923 / 0.929 / 0.761 | 0.943 / 0.938 / 0.942 / 0.755 |
+| **worst over 17** | 0.801 / 0.720 / 0.671 / 0.578 | 0.883 / 0.847 / 0.873 / 0.696 |
+| **mean over 17** | 0.950 / 0.918 / 0.944 / 0.790 | 0.941 / 0.933 / 0.939 / 0.764 |
+
+- **Latency, size and VRAM:** the architecture is identical.
+  - `best.pt` 9.7 MiB for both.
+  - CPU bs 1: 27.5 vs 38.5 ms, and GPU fp16 bs 64: 2,602 vs 2,871
+    img/s. Both differences are run-to-run noise on a busy laptop,
+    since the networks are the same.
+  - Inference VRAM is the same as Phase 6b.
+
+**Decision rule:** prefer robust only if worst-case AND mean degraded
+video AUROC improve, and clean video AUROC loss ≤ 0.01. Result:
+worst-case improves, mean does not, and the clean loss is 0.046.
+**Keep the current model** (`student_distilled_p80`) as the production
+default. The robust model is recorded as an experiment only.
+
+**Calibration:** `calibration.json` and `adaptive_calibration.json`
+(bound to the current checkpoint) both refuse the robust checkpoint
+with `CalibrationMismatchError`. Any retrained model must be
+recalibrated before use.
+
+**Findings:**
+1. The current model has a blur/downscale → "fake" shortcut. With
+   σ 2 blur, all real videos score ≥ 0.5, and at 0.33× downscale, 85%
+   do. Fakes are blurrier in FF++ (Phase 5d). Additive noise pushes it
+   the other way (FPR 0, AUROC 0.69).
+2. Robust training halves those failure FPRs and lifts the worst case
+   by 0.13. It wins on strong JPEG and noise, but costs about 0.05 clean
+   and mild-condition AUROC. NeuralTextures suffers most (clean 0.927 →
+   0.824).
+3. The comparison is confounded by the early stop at epoch 6. A fair
+   robust run needs early stopping that waits for the curriculum (or
+   selects on a degraded dev set), not a new hyperparameter search.
+
+## 2026-10-01 — Phase 6e tests
+
+```
+.venv/Scripts/python.exe -m pytest tests/robust tests/distill tests/calibration tests/adaptive -q -p no:cacheprovider   # 40 passed
+.venv/Scripts/python.exe -m pytest -q -p no:cacheprovider -rs     # 553 passed, 0 skipped, 271.94 s
+```

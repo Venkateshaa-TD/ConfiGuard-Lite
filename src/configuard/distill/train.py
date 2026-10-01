@@ -31,6 +31,8 @@ from configuard.distill.data import (
     balanced_weights,
     load_crop_rows,
     load_teacher_margins,
+    single_thread_workers,
+    worker_init,
 )
 from configuard.distill.evaluate import evaluate_logits
 from configuard.distill.losses import distillation_loss
@@ -74,6 +76,17 @@ class DistillConfig:
     # ("" = all train rows, the Phase 6b behaviour). Omitted from to_dict when
     # empty so Phase 6b run configs/checkpoints stay byte-identical.
     train_partition: str = ""
+    # Phase 6e: RobustAugmentConfig fields ({} = off, the Phase 6b behaviour). Omitted
+    # from to_dict when empty, like train_partition. Teacher targets stay the CLEAN
+    # cached GenD logits; only the student's view is degraded.
+    robust_augment: dict[str, Any] = field(default_factory=dict)
+
+    def robust_config(self):  # -> RobustAugmentConfig | None
+        if not self.robust_augment:
+            return None
+        from configuard.robust.degrade import RobustAugmentConfig
+
+        return RobustAugmentConfig.from_dict(dict(self.robust_augment))
 
     def augment_config(self) -> AugmentConfig:
         a = dict(self.augment)
@@ -87,6 +100,10 @@ class DistillConfig:
         d["augment"] = {k: list(v) if isinstance(v, tuple) else v for k, v in asdict(self.augment_config()).items()}
         if not d["train_partition"]:
             del d["train_partition"]
+        if self.robust_augment:
+            d["robust_augment"] = self.robust_config().to_dict()
+        else:
+            del d["robust_augment"]
         return d
 
     @classmethod
@@ -96,6 +113,7 @@ class DistillConfig:
             raise ValueError(f"Unknown DistillConfig keys: {unknown}")
         cfg = cls(**data)
         cfg.augment_config()  # validates augment keys
+        cfg.robust_config()  # validates robust keys
         if not 0.0 <= cfg.alpha <= 1.0 or cfg.temperature <= 0:
             raise ValueError("alpha must be in [0, 1] and temperature > 0")
         return cfg
@@ -183,15 +201,19 @@ class StudentTrainer:
                                           balanced_weights(self.train_rows, config.balance_class, config.balance_source))
         self.val_sampler = EpochSampler(len(self.val_rows), len(self.val_rows), config.seed, None)
         # Persistent workers: Windows spawn start-up costs ~5 s per worker, paid once per loader.
+        single_thread_workers()
         val_workers = max(1, config.num_workers // 2) if config.num_workers else 0
         pin = self.device.type == "cuda"
         self.train_loader = DataLoader(
-            CropDataset(self.train_rows, crop_store, train_m, config.augment_config(), config.seed),
+            CropDataset(self.train_rows, crop_store, train_m, config.augment_config(), config.seed,
+                        robust_cfg=config.robust_config()),
             batch_size=config.batch_size, sampler=self.train_sampler, drop_last=True, num_workers=config.num_workers,
-            pin_memory=pin, persistent_workers=config.num_workers > 0)
+            pin_memory=pin, persistent_workers=config.num_workers > 0,
+            worker_init_fn=worker_init if config.num_workers else None)
         self.val_loader = DataLoader(CropDataset(self.val_rows, crop_store, val_m, None, config.seed),
                                      batch_size=128, sampler=self.val_sampler, num_workers=val_workers,
-                                     pin_memory=pin, persistent_workers=val_workers > 0)
+                                     pin_memory=pin, persistent_workers=val_workers > 0,
+                                     worker_init_fn=worker_init if val_workers else None)
 
         self.steps_per_epoch = n // config.batch_size
         self.optimizer = torch.optim.AdamW(self.model.parameters(), lr=config.lr, weight_decay=config.weight_decay)

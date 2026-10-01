@@ -10,7 +10,7 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader
 
-from configuard.distill.data import CropDataset, EpochSampler
+from configuard.distill.data import CropDataset, EpochSampler, single_thread_workers, worker_init
 from configuard.distill.train import Normalizer
 from configuard.models.registry import create_encoder
 
@@ -29,8 +29,10 @@ def predict_rows(model: torch.nn.Module, norm: Normalizer, rows: Sequence[dict[s
                  device: str = "cuda", batch_size: int = 128, num_workers: int = 6, amp: bool = True) -> np.ndarray:
     """(N,) float32 student logits, aligned with `rows`."""
     ds = CropDataset(rows, crop_root, np.zeros(len(rows), np.float32), None, seed=0)
+    single_thread_workers()
     loader = DataLoader(ds, batch_size=batch_size, sampler=EpochSampler(len(rows), len(rows), 0, None),
-                        num_workers=num_workers, pin_memory=device == "cuda")
+                        num_workers=num_workers, pin_memory=device == "cuda",
+                        worker_init_fn=worker_init if num_workers else None)
     out = np.empty(len(rows), np.float32)
     use_amp = amp and device == "cuda"
     for x, _, _, idx in loader:

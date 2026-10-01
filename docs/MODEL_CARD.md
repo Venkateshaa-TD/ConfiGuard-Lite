@@ -73,6 +73,20 @@ resolution and duration. The Phase 5d audit found the F2F/NT width
 change to be a centred crop with no residual geometric cue. Fakes are
 somewhat blurrier than their matched reals (a genuine artifact).
 
+## Phase 6e robustness (development data only)
+
+- **Production default:** `student_distilled_p80` (unchanged).
+- **Stress results (17 degradations of the val crops):**
+  - video AUROC 0.900 on average and 0.692 in the worst case (strong
+    noise), against 0.974 clean;
+  - **strong blur or downscaling makes it call real videos fake**
+    (FPR@0.5 up to 100%).
+- **Robust experiment (`student_distilled_robust_p80`, not selected):**
+  - worst case 0.825, but clean 0.927;
+  - uncalibrated: the existing calibration artifacts refuse it.
+- Do not deploy on re-encoded or low-resolution media until the
+  shortcut is addressed.
+
 ## Phase 6d adaptive video inference (FF++ c23, development data only)
 
 - **How it works:** videos are scored on 4 → 8 → 16 nested frames, and

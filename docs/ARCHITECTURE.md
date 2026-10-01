@@ -790,6 +790,32 @@ On this machine the store root is `D:\ConfiGuard-Data\cache\ffpp_face_crops\stor
   simulates fixed vs adaptive on dev, runs the live GPU/CPU latency and
   agreement checks, and writes `adaptive_report.json`.
 
+## Robust training and stress suite (Phase 6e, `src/configuard/robust/`)
+
+- **`degrade.py`**: primitives (`jpeg`, `h264_style`, `resize_down_up`,
+  `gaussian_blur`, `add_noise`, `gamma`) and `RobustAugmentConfig` +
+  `robust_degrade(img, cfg, rng, epoch)`.
+  - The function is label-free; severity is capped by a curriculum.
+  - Enabled by `DistillConfig.robust_augment` (omitted when empty, so
+    older configs are unchanged) and applied in `CropDataset` after the
+    base augmentation, only for training items (epoch ≥ 0).
+- **`stress.py`**: `StressSuite` holds 17 deterministic conditions
+  (`CONDITIONS`) over official val crops.
+  - Real libx264 for H.264; atomic, resumable, tag-versioned;
+    `StaleStressSuiteError`.
+  - Accepts val rows only (`ProtectedSplitError` otherwise).
+  - `condition_rows(name)` returns rows with absolute paths.
+- **`scoring.py`**: `score_conditions` scores conditions sequentially
+  through one loader, saves each condition's logits when complete,
+  resumes from saved files, and stops on `LowMemoryError`.
+- **`configuard.memory_guard`**: `available_ram_gb` (Windows
+  `GlobalMemoryStatusEx`, Linux `/proc/meminfo`) and `RamGuard`.
+- **`configuard.distill.data`**: `single_thread_workers()` /
+  `worker_init` keep DataLoader workers single-threaded.
+- **`scripts/robust_eval.py`**: `build` (suite, free-space floor) and
+  `evaluate` (per-condition metrics, decision rule, calibration
+  invalidation check).
+
 ## Repository layout
 
 ```
@@ -831,6 +857,9 @@ ConfiGuard-Lite/
 │   │   ├── partitions.py, core.py, artifact.py
 │   ├── adaptive/                Adaptive 4/8/16-frame video inference (Phase 6d)
 │   │   ├── policy.py, analyzer.py
+│   ├── robust/                  Robust augmentation, stress suite, safe scoring (Phase 6e)
+│   │   ├── degrade.py, stress.py, scoring.py
+│   ├── memory_guard.py          available-RAM floor (Phase 6e)
 │   └── training/                Reproducible training pipeline (Phase 5)
 │       ├── config.py, paths.py, splits.py, datasets.py, sampling.py,
 │       │   dataloader.py, optim.py, metrics.py, checkpoint.py,
@@ -842,7 +871,8 @@ ConfiGuard-Lite/
 │                              matched face-crop extraction + shortcut audit,
 │                              GenD teacher download + teacher-logit caching,
 │                              student training/pilot + student comparison,
-│                              calibration split/fit, adaptive video evaluation)
+│                              calibration split/fit, adaptive video evaluation,
+│                              robust stress suite + evaluation)
 ├── tests/                    pytest suite (unit + integration), tests/conftest.py +
 │                              tests/media/conftest.py + tests/datasets/conftest.py +
 │                              tests/models/conftest.py generate all fixtures at

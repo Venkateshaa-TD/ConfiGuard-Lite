@@ -366,3 +366,22 @@ All notable changes to this project are documented here.
   - P50 33 vs 81 ms on GPU.
 - 8 new tests; full suite 546/546. Test split sealed; no GRU, robustness training or test
   evaluation.
+
+### Phase 6e — Compression-robust student training (2026-10-01)
+
+- Added `configuard.robust`:
+  - `degrade`: label-free JPEG / H.264-style / resize / blur / noise /
+    gamma with a mild → moderate curriculum;
+  - `stress`: deterministic 17-condition val stress suite with real
+    libx264;
+  - `scoring`: sequential, per-condition-saved, RAM-floored scoring.
+- Added `configuard.memory_guard` and `DistillConfig.robust_augment`
+  (omitted when empty), plus single-thread DataLoader workers, a
+  `--robust` training flag and `scripts/robust_eval.py`.
+- Trained `student_distilled_robust_p80` (fixed 6b setup, 80%
+  partition).
+- Results: worst-case video AUROC 0.825 vs 0.692, but clean 0.927 vs
+  0.974. **Not selected**; the current model stays the default.
+- Found a blur/downscale → "fake" shortcut in the current model.
+  Calibration artifacts refuse the robust checkpoint.
+- 7 new tests; full suite 553/553. Test split sealed; no recalibration.

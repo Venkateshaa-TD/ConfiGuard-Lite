@@ -15,6 +15,7 @@
 | 6b | MobileNetV4 student distillation (baseline vs distilled) | PASS | 2026-10-01 |
 | 6c | Calibration and the "uncertain" output | PASS | 2026-10-01 |
 | 6d | Adaptive 4/8/16-frame video inference | PASS | 2026-10-01 |
+| 6e | Compression-robust student training (experiment; not selected) | PASS | 2026-10-01 |
 
 Full per-phase results are recorded below as they complete.
 
@@ -757,3 +758,61 @@ evaluation.
 **Open items:** higher abstention (originals 17%, NeuralTextures 30%);
 P95 latency is not reduced; coverage is still empirical under shift
 (`docs/KNOWN_ISSUES.md`).
+
+---
+
+## Phase 6e — Compression-robust student training
+
+**Status:** PASS. The phase is complete. The robust model is recorded
+as an experiment and was **not** selected.
+
+**Summary:**
+- Added class-independent JPEG, H.264-style, resize, blur, noise and
+  gamma augmentation with a mild → moderate curriculum. GenD targets
+  stay clean.
+- Built a deterministic 17-condition stress suite of the val crops
+  (real libx264; 12.2 GiB on D:).
+- Trained one robust distilled MobileNetV4 with the fixed 6b setup on
+  the same 80% partition.
+- Robust vs current: worst-case video AUROC 0.825 vs 0.692, but clean
+  0.927 vs 0.974 (−0.046, CI [−0.062, −0.032]) and mean degraded 0.894
+  vs 0.900.
+- The current model stays the production default.
+- The stress test exposed a blur/downscale → "fake" shortcut in the
+  current model (FPR@0.5 up to 100% on strongly blurred real videos).
+
+**Requirements:**
+1. JPEG, H.264-style, downscale/upscale, blur, noise and gamma
+   augmentations. **Met.**
+2. Identical probabilities and severities for every class and method
+   (label-free function, tested). **Met.**
+3. Mild → moderate curriculum; severe settings kept out of training.
+   **Met.**
+4. Clean cached GenD logits for distillation; student sees the
+   degraded views. **Met.**
+5. Deterministic clean/degraded dev stress suite with mild, moderate
+   and severe levels (rebuild is byte-identical, tested). **Met.**
+6. One robust model, fixed 6b setup, no search. **Met.**
+7. Current vs robust compared on clean and degraded dev data. **Met.**
+8. Clean AUROC, worst-case AUROC, ΔAUROC, FPR, per-method results,
+   latency and training cost reported. **Met.**
+9. Decision rule applied: robust not preferred (clean loss 0.046 >
+   0.01; mean degraded not improved). **Met.**
+10. Caches on D: (suite 12.2 GiB, per-condition logits); D: 64 GB free
+    (floor 40). **Met.**
+11. Targeted tests (40), full suite 553/553 (272 s), docs, commit. **Met.**
+
+**Incidents:**
+- The first robust training attempt was CPU-oversubscribed. It was
+  stopped before any epoch was saved and fixed with single-thread
+  workers.
+- The first evaluation was killed for low system RAM. It was resumed
+  as a sequential, per-condition-saved, RAM-floored evaluation with 4
+  workers (minimum RAM seen 5.6 GB).
+
+**Not done (by instruction):** recalibration, adaptive production
+inference, test-split access, Phase 6f/7.
+
+**Open items:** the blur/downscale shortcut; early stopping
+confounded by the curriculum; calibration artifacts apply only to the
+current model (`docs/KNOWN_ISSUES.md`).

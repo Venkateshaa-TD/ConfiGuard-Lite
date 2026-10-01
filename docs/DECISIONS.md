@@ -4,6 +4,47 @@ Format: one entry per decision, newest first.
 
 ---
 
+## 2026-10-01 — Phase 6e: robust augmentation recorded as an experiment; current p80 model stays the default
+
+- **Rule:** prefer the robust model only if worst-case and mean
+  degraded video AUROC both improve and clean video AUROC drops by at
+  most 0.01. Measured: worst case +0.133, mean −0.006, clean −0.046.
+  Not preferred. `student_distilled_p80` and its 6c/6d calibration stay
+  the default. The robust checkpoint is kept on D: as an experiment.
+- **Augmentation design:**
+  - It is label-free by construction (same probabilities and severity
+    distributions for every class and method), avoiding a new
+    class-conditional cue.
+  - It runs after the 6b blur/jitter.
+  - One compression per sample: JPEG or an H.264-style emulation. The
+    emulation is cheap enough for training workers; real libx264 is
+    reserved for the stress suite so evaluation does not just test the
+    emulation.
+  - Severities stop at "moderate", and the suite's "severe" levels are
+    outside the training range.
+- **Distillation targets** stay the clean cached GenD logits. The
+  student learns to reproduce clean-image teacher judgments from
+  degraded views. GenD is not re-run on degraded crops.
+- **Stress suite:**
+  - It degrades aligned crops, not full frames before detection: fast
+    and deterministic, but it ignores detector/alignment failures
+    under degradation.
+  - It is versioned by a tag over conditions + val manifest + ffmpeg
+    version + x264 settings.
+- **Engineering:** DataLoader workers are single-threaded
+  (OMP/OpenBLAS/MKL = 1, `cv2.setNumThreads(1)`).
+  - Long evaluations run sequentially per condition, save each result
+    at once, and stop at a 4 GB available-RAM floor
+    (`configuard.memory_guard`).
+  - Both changes came from incidents in this phase.
+- **Not adopted, for a later phase if approved:**
+  - early stopping that waits for the curriculum or selects on a
+    degraded dev split;
+  - a blur/downscale-specific fix for the shortcut;
+  - recalibration of any retrained model.
+
+---
+
 ## 2026-10-01 — Phase 6d: adaptive 4 → 8 → 16 with per-stage calibration and α spending 0.015/0.015/0.02
 
 **Stages:**

@@ -4,6 +4,40 @@ Format: one entry per issue. Mark resolved issues rather than deleting them.
 
 ---
 
+## OPEN — Current model treats blur/downscaling as evidence of manipulation (Phase 6e)
+
+On the stress suite, the production-default student
+(`student_distilled_p80`) scores every real val video as P(fake) ≥ 0.5
+after σ 2 Gaussian blur, and 85% after 0.33× downscaling. This matches
+the Phase 5d finding that FF++ fakes are blurrier than their matched
+reals. Heavy noise does the opposite (FPR 0, AUROC 0.69).
+
+Real-world re-encoded or low-resolution genuine videos are therefore at
+risk of false accusation. The Phase 6c/6d conformal thresholds were
+fitted on clean crops and do not protect against this shift. The
+robust experiment roughly halves these FPRs but loses 0.046 clean
+AUROC. This needs fixing before any deployment.
+
+## OPEN — Robust run early-stopped during the curriculum (Phase 6e)
+
+The fixed 6b early stopping (clean val frame AUROC, patience 3)
+stopped the robust model at epoch 6, two epochs after the severity
+curriculum reached full strength (best epoch 3). The clean-AUROC loss
+therefore partly reflects under-training, so the robust result is a
+lower bound on what robust training can do.
+
+## OPEN — Stress suite degrades aligned crops, not source frames (Phase 6e)
+
+Real re-encoding happens before face detection and alignment and can
+move or lose the face. The suite tests the classifier only, so
+end-to-end robustness is not yet measured.
+
+## OPEN — Calibration artifacts belong to the current checkpoint only (Phase 6e)
+
+`calibration.json` and `adaptive_calibration.json` refuse any other
+checkpoint (verified against the robust one). A retrained model has no
+valid calibration until Phase 6c/6d fitting is rerun for it.
+
 ## OPEN — Adaptive inference abstains more, especially on originals and NeuralTextures (Phase 6d)
 
 On dev, adaptive inference returns "uncertain" for 13.2% of videos

@@ -13,6 +13,8 @@ Usage:
     .venv/Scripts/python.exe scripts/train_distill_student.py train --run-name student_distilled --alpha 0.5 --temperature 2
     # Phase 6c: same settings, trained on the 80% final_train partition only
     .venv/Scripts/python.exe scripts/train_distill_student.py train --run-name student_distilled_p80 --alpha 0.5 --temperature 2 --train-partition final_train
+    # Phase 6e: same, plus class-independent compression/quality degradations (default RobustAugmentConfig)
+    .venv/Scripts/python.exe scripts/train_distill_student.py train --run-name student_distilled_robust_p80 --alpha 0.5 --temperature 2 --train-partition final_train --robust
 """
 
 from __future__ import annotations
@@ -36,6 +38,7 @@ import torch  # noqa: E402
 
 from configuard.calibration.partitions import default_partitions_path  # noqa: E402
 from configuard.distill.train import DistillConfig, StudentTrainer  # noqa: E402
+from configuard.robust.degrade import RobustAugmentConfig  # noqa: E402
 from configuard.storage_guard import FreeSpaceGuard  # noqa: E402
 from configuard.training.paths import resolve_cache_dir, resolve_checkpoint_dir  # noqa: E402
 
@@ -79,6 +82,7 @@ def main() -> int:
     ap.add_argument("--temperature", type=float)
     ap.add_argument("--max-epochs", type=int)
     ap.add_argument("--train-partition", help="Phase 6c: e.g. final_train (needs scripts/calibrate_student.py split)")
+    ap.add_argument("--robust", action="store_true", help="Phase 6e: default RobustAugmentConfig degradations")
     ap.add_argument("--epochs", type=int, default=3, help="pilot: epochs per run")
     ap.add_argument("--samples-per-epoch", type=int, help="pilot default 20000; train default from config")
     ap.add_argument("--alphas", default="0.5,0.9")
@@ -101,7 +105,8 @@ def main() -> int:
     if args.mode == "train":
         cfg = DistillConfig.from_yaml(args.config, run_name=args.run_name, alpha=args.alpha,
                                       temperature=args.temperature, max_epochs=args.max_epochs,
-                                      samples_per_epoch=args.samples_per_epoch, train_partition=args.train_partition)
+                                      samples_per_epoch=args.samples_per_epoch, train_partition=args.train_partition,
+                                      robust_augment=RobustAugmentConfig().to_dict() if args.robust else None)
         t0 = time.time()
         s = run(cfg, root)
         log.info("done in %.1f min: %s", (time.time() - t0) / 60, json.dumps(brief(s), default=float))

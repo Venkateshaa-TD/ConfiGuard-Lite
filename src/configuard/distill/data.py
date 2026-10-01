@@ -127,18 +127,43 @@ class EpochSampler(Sampler):
         return self.num_rows if self.weights is None else self.num_samples
 
 
+WORKER_THREAD_ENV = ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS")
+
+
+def single_thread_workers() -> None:
+    """Make DataLoader worker processes single-threaded (call before workers spawn).
+
+    Each Windows spawn worker imports numpy/OpenCV with a full-size thread pool;
+    12 workers x 16 BLAS/OpenCV threads oversubscribed the 16 cores and starved
+    the GPU once the Phase 6e degradations (numpy matmul, OpenCV) were added.
+    Spawned children inherit these variables; the main process's already
+    initialised pools are unaffected. Results do not change, only scheduling.
+    """
+    import os
+
+    for k in WORKER_THREAD_ENV:
+        os.environ[k] = "1"
+
+
+def worker_init(_worker_id: int) -> None:
+    cv2.setNumThreads(1)
+
+
 class CropDataset(Dataset):
     """Item (index, epoch) -> (uint8 RGB CHW crop, label 0/1, teacher margin, index).
     Normalisation happens on the device (configuard.distill.train.Normalizer)."""
 
     def __init__(self, rows: Sequence[dict[str, Any]], crop_root: str | Path, teacher_margins: np.ndarray,
-                 augment_cfg: AugmentConfig | None, seed: int) -> None:
+                 augment_cfg: AugmentConfig | None, seed: int, robust_cfg: Any = None) -> None:
         if len(teacher_margins) != len(rows):
             raise TeacherLogitMismatchError("teacher margins must align with rows")
         self.paths = [str(Path(crop_root) / r["crop_path"]) for r in rows]
         self.labels = np.array([r["label"] == "fake" for r in rows], np.float32)
         self.margins = np.asarray(teacher_margins, np.float32)
         self.augment_cfg, self.seed = augment_cfg, seed
+        # Phase 6e: optional class-independent degradation (configuard.robust.degrade),
+        # applied after the base augmentation, on its own seeded stream. Training only.
+        self.robust_cfg = robust_cfg
 
     def __len__(self) -> int:
         return len(self.paths)
@@ -150,5 +175,9 @@ class CropDataset(Dataset):
             raise OSError(f"could not decode {self.paths[index]}")
         if self.augment_cfg is not None:
             img = augment(img, self.augment_cfg, augment_rng(self.seed, epoch, index))
+        if self.robust_cfg is not None and epoch >= 0:
+            from configuard.robust.degrade import robust_degrade
+
+            img, _ = robust_degrade(img, self.robust_cfg, np.random.default_rng([self.seed, epoch, index, 6]), epoch)
         rgb = np.ascontiguousarray(img[:, :, ::-1].transpose(2, 0, 1))
         return torch.from_numpy(rgb), float(self.labels[index]), float(self.margins[index]), index
