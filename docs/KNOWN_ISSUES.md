@@ -4,6 +4,39 @@ Format: one entry per issue. Mark resolved issues rather than deleting them.
 
 ---
 
+## OPEN — Phase 6b numbers are model-selection estimates on val (Phase 6b)
+
+The FF++ val split (140 originals, 695 videos after quarantine) did
+three jobs: it chose α/T in the pilot, picked the early-stopping epoch,
+and is the split we report. The reported AUROC/calibration numbers are
+therefore optimistic. Only the untouched test split (a later, explicitly
+approved phase) gives an unbiased estimate. A fresh val-internal holdout
+was not possible without shrinking an already small split.
+
+## OPEN — NeuralTextures is the weakest manipulation for students and teacher (Phase 6b)
+
+Val frame AUROC on NeuralTextures is 0.924 for the baseline, 0.900 for
+the distilled student and 0.906 for the teacher. The other methods are
+0.97–0.98. NT also has the blurriest fakes (Phase 5d). Distillation
+transfers the teacher's NT weakness, so NT may need method-specific
+attention in the robustness phase.
+
+## OPEN — Baseline student becomes overconfident as training continues (Phase 6b)
+
+Baseline val NLL rose from 0.30 (epoch 1) to 0.60 (epoch 16) while
+AUROC kept creeping up. Selection on AUROC therefore picks a poorly
+calibrated checkpoint (ECE 0.071). Any decision threshold or conformal
+set built on the baseline needs post-hoc calibration first. The
+distilled student is much less affected (NLL 0.22).
+
+## Informational — Student training is data-loader-bound (Phase 6b)
+
+GPU step speed is about 1,060 img/s (NCHW). End-to-end training runs at
+about 750 img/s with 12 PNG-decoding workers, and Windows worker spawn
+adds about 70 s per run. An epoch takes about 77 s + 6 s val. A
+decoded uint8 cache would remove the PNG cost, but it was not needed at
+this scale.
+
 ## OPEN — GenD per-frame training lists are not independently verifiable (Phase 6a)
 
 The claim that the teacher was trained on the FF++ train split rests on

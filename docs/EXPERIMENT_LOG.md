@@ -1180,3 +1180,136 @@ throughput with more than 4 GiB of headroom.
 .venv/Scripts/python.exe -m pytest tests/teacher -q                 # 10 passed (real-teacher test ran, not skipped)
 .venv/Scripts/python.exe -m pytest -q -p no:cacheprovider -rs       # 513 passed, 0 skipped, 214.35 s
 ```
+
+---
+
+## 2026-10-01 — Phase 6b setup measurements
+
+- Crop loading (one process): reading takes 2,652 files/s, and
+  read + PNG decode runs at 358 img/s.
+- DataLoader steady state: 974 img/s with 8 workers and 1,349 img/s
+  with 12. Windows spawn start-up costs 44 s and 67 s respectively,
+  paid once per persistent loader.
+- Train-step micro-benchmark (MobileNetV4-Conv-Small, bs 64, fp16
+  autocast, synthetic tensors):
+
+  | format | cudnn.benchmark off | on |
+  |---|---|---|
+  | channels_last | 370 img/s | 368 img/s |
+  | NCHW | 1,063 img/s | 1,033 img/s |
+
+  `channels_last` is about 3× slower here, so it was removed after the
+  pilot.
+- The pilot ran with channels_last. Memory format does not change the
+  algorithm, so the α/T choice still holds.
+- Both full runs used NCHW. Steady state was about 750 img/s, limited
+  by data loading.
+
+## 2026-10-01 — Phase 6b pilot (α / T selection)
+
+```
+.venv/Scripts/python.exe scripts/train_distill_student.py pilot --epochs 4 --samples-per-epoch 25000
+```
+- Budget: 4 epochs × 25,000 balanced draws, with a full cosine schedule.
+- Grid: α ∈ {0.5, 0.9} × T ∈ {1, 2, 4}, plus a baseline. Same seed,
+  data and augmentation for every run.
+- Selection rule: highest val frame AUROC among the distilled runs;
+  ties go to lower val NLL.
+- Report: `D:\ConfiGuard-Data\checkpoints\distill\pilot\pilot_report_20261001-142414.json`.
+
+| run | α | T | frame AUROC | video AUROC | frame NLL | frame ECE | frame AUROC DF/F2F/FS/NT |
+|---|---|---|---|---|---|---|---|
+| pilot_baseline | 0 | – | 0.9496 | 0.9724 | 0.3012 | 0.0614 | 0.968/0.964/0.973/0.893 |
+| pilot_a0.5_t1 | 0.5 | 1 | 0.9421 | 0.9660 | 0.2684 | 0.0542 | 0.965/0.960/0.965/0.877 |
+| **pilot_a0.5_t2** | 0.5 | 2 | **0.9468** | 0.9718 | **0.2533** | **0.0493** | 0.970/0.962/0.970/0.885 |
+| pilot_a0.5_t4 | 0.5 | 4 | 0.9427 | 0.9657 | 0.2681 | 0.0589 | 0.965/0.958/0.971/0.876 |
+| pilot_a0.9_t1 | 0.9 | 1 | 0.9388 | 0.9642 | 0.2737 | 0.0627 | 0.964/0.958/0.970/0.863 |
+| pilot_a0.9_t2 | 0.9 | 2 | 0.9357 | 0.9596 | 0.2778 | 0.0593 | 0.962/0.954/0.972/0.855 |
+| pilot_a0.9_t4 | 0.9 | 4 | 0.9355 | 0.9615 | 0.2770 | 0.0550 | 0.961/0.956/0.972/0.853 |
+
+- Chosen: **α 0.5, T 2**.
+- α 0.9 (teacher-dominated) is worse on every method.
+- At the pilot budget the baseline already edges the best distilled run
+  on AUROC, while distillation wins on NLL and ECE.
+
+## 2026-10-01 — Phase 6b full runs (identical settings; only α/T differ)
+
+```
+.venv/Scripts/python.exe scripts/train_distill_student.py train --run-name student_baseline --alpha 0 --temperature 1
+.venv/Scripts/python.exe scripts/train_distill_student.py train --run-name student_distilled --alpha 0.5 --temperature 2
+.venv/Scripts/python.exe scripts/compare_students.py --runs student_baseline,student_distilled
+```
+- Config: `configs/distill/mobilenetv4_student.yaml`.
+  - Seed 42; MobileNetV4-Conv-Small (ImageNet, 2,494,305 params).
+  - bs 64; AdamW lr 3e-4, wd 0.05; 300 warm-up steps, then cosine over
+    20 epochs.
+  - fp16 AMP (init scale 1024); grad clip 1.0.
+  - 57,040 balanced draws per epoch: real 1/2, each method 1/8.
+  - Augmentation (train only, every class): blur p 0.3, σ 0.3–1.0;
+    horizontal jitter p 0.5, x-scale 0.95–1.05, x-shift ±4 px.
+  - Early stopping on val frame AUROC (tiebreak lower NLL), patience 3.
+- Verified identical across the two runs (tested): initial weights, the
+  per-epoch draws and the augmented pixels.
+- Baseline: best epoch 13 of 17 run, 25.3 min. Distilled: best epoch 11
+  of 15 run, 22.6 min. 0 skipped AMP steps.
+- Peak train VRAM 604 MB for both.
+- Data: Phase 5d train crops (57,040) and val crops (11,120 frames /
+  695 videos). Teacher margins come from cache `t6a-f87ebb7553a64e99`.
+  GenD was never loaded, and test was never opened.
+- Run dirs: `D:\ConfiGuard-Data\checkpoints\distill\student_{baseline,distilled}`.
+  Comparison report: `...\distill\reports\compare_20261001-160341.json`.
+
+**Validation, frame level (11,120 frames):**
+
+| model | AUROC | AUPRC | acc@0.5 | bal-acc@0.5 | ECE | Brier | NLL | AUROC DF/F2F/FS/NT | AUPRC DF/F2F/FS/NT |
+|---|---|---|---|---|---|---|---|---|---|
+| baseline (α 0) | **0.9631** | **0.9905** | 0.9169 | 0.8847 | 0.0713 | 0.0751 | 0.5039 | 0.976/**0.974**/0.978/**0.924** | 0.977/**0.978**/0.978/**0.937** |
+| distilled (α 0.5, T 2) | 0.9562 | 0.9881 | **0.9237** | **0.8930** | **0.0329** | **0.0610** | **0.2157** | **0.978**/0.967/**0.980**/0.900 | **0.980**/0.966/**0.981**/0.883 |
+| GenD teacher (cached, ref.) | 0.9598 | 0.9891 | 0.9174 | 0.9005 | 0.0479 | 0.0639 | 0.2201 | 0.985/0.965/0.983/0.906 | 0.984/0.966/0.982/0.909 |
+
+**Validation, video level (mean frame logit, 695 videos):**
+
+| model | AUROC | AUPRC | acc@0.5 | bal-acc@0.5 | ECE | Brier | NLL | AUROC DF/F2F/FS/NT | AUPRC DF/F2F/FS/NT |
+|---|---|---|---|---|---|---|---|---|---|
+| baseline (α 0) | **0.9808** | **0.9955** | 0.9396 | 0.9137 | 0.0520 | 0.0528 | 0.2887 | 0.991/0.988/0.994/**0.950** | 0.993/0.991/0.995/**0.962** |
+| distilled (α 0.5, T 2) | 0.9791 | 0.9950 | **0.9468** | **0.9263** | **0.0443** | **0.0432** | **0.1632** | **0.992**/**0.989**/**0.995**/0.941 | 0.993/0.991/**0.996**/0.950 |
+| GenD teacher (cached, ref.) | 0.9792 | 0.9950 | 0.9338 | 0.9263 | 0.0500 | 0.0471 | 0.1692 | 0.994/0.983/0.998/0.941 | 0.996/0.987/0.998/0.949 |
+
+- **Paired video bootstrap** (2,000 stratified resamples): Δ AUROC
+  (distilled − baseline) = −0.0016, 95% CI [−0.0079, +0.0040],
+  P(Δ ≤ 0) = 0.71. Not significant.
+- **Efficiency:** both students are the same architecture.
+
+  | | baseline | distilled |
+  |---|---|---|
+  | `best.pt` (fp32 weights + metadata) | 9.7 MiB | 9.7 MiB |
+  | CPU bs 1 (8 threads) | 22.7 ms | 23.2 ms |
+  | CPU bs 32 | 179 ms | 178 ms |
+  | GPU fp32 bs 1 | 16.0 ms | 16.5 ms |
+  | GPU fp16 bs 64 | 3,449 img/s | 3,450 img/s |
+  | Peak inference VRAM (bs 64) | 179 MB | 179 MB |
+  | Peak train VRAM | 604 MB | 604 MB |
+
+  For reference, the GenD teacher is 1.216 GB and runs at 90 img/s
+  (fp16, 1.84 GiB peak; Phase 6a).
+- **Reading:**
+  - Distillation does not improve ranking. Video AUROC is tied and
+    frame AUROC is 0.007 lower, mostly on NeuralTextures and Face2Face.
+  - It roughly halves NLL and ECE: frame NLL 0.50 → 0.22, ECE 0.071 →
+    0.033.
+  - It improves balanced accuracy at 0.5 (frame +0.008, video +0.013).
+  - The baseline keeps sharpening after AUROC plateaus, and its val NLL
+    rose from 0.30 to 0.60 over training.
+  - The distilled student matches or slightly beats the teacher on
+    every aggregate except NeuralTextures frame AUPRC.
+- **Caveat:** the same val split chose α/T, did early stopping, and is
+  reported here. These are optimistic, model-selection numbers, not
+  held-out estimates. The test split stays untouched for a later
+  phase.
+
+## 2026-10-01 — Phase 6b tests
+
+```
+.venv/Scripts/python.exe -m pytest tests/distill -q -p no:cacheprovider    # 15 passed
+.venv/Scripts/python.exe -m pytest -q -p no:cacheprovider -rs          # 528 passed, 0 skipped, 215.00 s
+```

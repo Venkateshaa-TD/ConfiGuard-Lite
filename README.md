@@ -10,7 +10,7 @@ operating rules this project is developed under.
 
 ## Status
 
-Phase 6a (frozen GenD CLIP-L/14 teacher; train/val logits cached on `D:`; no student trained yet). Before that, Phase 5d (matched face-crop extraction and shortcut audit) — see
+Phase 6b (MobileNetV4 students trained on FF++ crops: BCE baseline vs GenD-distilled; val only, test untouched - see `docs/EXPERIMENT_LOG.md`). Phase 6a cached frozen GenD CLIP-L/14 teacher logits for train/val. Before that, Phase 5d (matched face-crop extraction and shortcut audit) — see
 `docs/PHASE_STATUS.md` for current status. FF++ c23 (5000 videos,
 8.4 GiB) is downloaded to `D:`, validated, and split with the authors'
 official train/val/test files (720/140/140 originals, leakage-checked).
@@ -277,6 +277,22 @@ for **train and val only**; `test` is refused.
 Rerunning resumes from the completed shards. A cache built with a
 different teacher config, crop manifest or shard size is refused as
 stale.
+
+## Train the MobileNetV4 students (Phase 6b)
+
+Needs the Phase 5d crop store and the Phase 6a teacher-logit cache on D:
+(GenD itself is not loaded). It trains on train crops and early-stops on
+val crops. The test split is refused.
+
+```powershell
+.venv\Scripts\python.exe scripts\train_distill_student.py pilot --epochs 4 --samples-per-epoch 25000   # alpha/T grid
+.venv\Scripts\python.exe scripts\train_distill_student.py train --run-name student_baseline --alpha 0
+.venv\Scripts\python.exe scripts\train_distill_student.py train --run-name student_distilled --alpha 0.5 --temperature 2
+.venv\Scripts\python.exe scripts\compare_students.py --runs student_baseline,student_distilled
+```
+
+Runs resume from `last.pt`. Reusing a `run_name` with a different config
+is refused.
 
 ## Project layout
 

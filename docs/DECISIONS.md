@@ -4,6 +4,57 @@ Format: one entry per decision, newest first.
 
 ---
 
+## 2026-10-01 — Phase 6b: distil with α 0.5, T 2; keep both students; prefer the distilled one for calibration-driven stages
+
+**Loss:** `(1−α)·BCE(z, y) + α·T²·BCE(σ(z/T), σ(m/T))`.
+- `m = logit_fake − logit_real` is the cached GenD margin, so `σ(m)` is
+  GenD's softmax P(fake) exactly.
+- The student keeps its single-logit head, so the Phase 4 export and
+  inference contracts are unchanged.
+
+**Choice:** a 4-epoch × 25k pilot over α ∈ {0.5, 0.9} × T ∈ {1, 2, 4}
+picked α 0.5, T 2 (val frame AUROC, tiebreak NLL). α 0.9 hurt every
+manipulation.
+
+**Outcome:**
+- Distillation does not improve discrimination. Video AUROC is tied
+  (CI includes 0) and frame AUROC is 0.007 lower.
+- It halves NLL/ECE and raises balanced accuracy at 0.5.
+- The ranking is the same as the baseline's, and the later
+  calibration/conformal "uncertain" class depends on well-behaved
+  probabilities. So the distilled student is the default candidate for
+  the next stages.
+- The baseline is kept as the control.
+- Neither is a final model: there is no robustness training yet and no
+  test evaluation.
+
+**Implementation choices:**
+- New `configuard.distill` package instead of extending
+  `configuard.training`. That trainer is built around raw-media
+  `Sample` manifests with on-the-fly face detection; Phase 6b trains on
+  the hash-verified Phase 5d crop manifests and needs per-row teacher
+  targets.
+- Reused pieces: Phase 4 encoder registry, Phase 5 AUROC/AP metrics,
+  warm-up-cosine schedule, storage paths, Phase 5d atomic writes and
+  Phase 6a split protection.
+- Sampling: class × method balancing (real 1/2, each manipulation 1/8),
+  with replacement, one draw per train row per epoch. The epoch draw is
+  seeded by (seed, epoch); augmentation is seeded by (seed, epoch,
+  index). Runs that share a seed therefore see identical pixels
+  regardless of worker layout.
+- Augmentation is the Phase 5d recommendation only: mild Gaussian blur
+  and horizontal x-scale/shift (reflect-101). The functions never
+  receive the label. There is no flip, colour, or compression
+  augmentation (robustness is a later phase).
+- NCHW, not channels_last: 3× faster on this GPU (EXPERIMENT_LOG).
+- Checkpoints hold only tensors and primitives and load with
+  `torch.load(weights_only=True)`. `best.pt` is weights + config +
+  provenance (crop/teacher tags, manifest hashes). `last.pt` adds
+  optimizer/scheduler/scaler state for epoch-level resume, refused on
+  config or provenance mismatch.
+
+---
+
 ## 2026-10-01 — GenD CLIP-L/14 teacher: rebuilt locally, strict-loaded from hash-pinned weights, frozen, fp16 bs 64; logits cached for train/val only
 
 **Source:** Hugging Face `yermandy/GenD_CLIP_L_14` @

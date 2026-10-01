@@ -694,6 +694,43 @@ On this machine the store root is `D:\ConfiGuard-Data\cache\ffpp_face_crops\stor
 - The teacher is only a frozen, offline distillation target. It is
   never trained, exported or used for serving.
 
+## Student training and distillation (Phase 6b, `src/configuard/distill/`)
+
+- **`data.py`**:
+  - `load_crop_rows` reads `crops_{train,val}.jsonl` and checks its
+    SHA-256 against the Phase 5d summary. `test` raises
+    `ProtectedSplitError`.
+  - `load_teacher_margins` aligns the Phase 6a consolidated logits row
+    by row (crop SHA-256, sample id, slot, tag, manifest SHA-256) and
+    returns `m = logit_fake − logit_real`. GenD itself is never loaded.
+  - `balanced_weights`: real 1/2, each method 1/8.
+  - `EpochSampler` yields `(index, epoch)` pairs, so augmentation is
+    seeded per item while workers stay persistent.
+  - `CropDataset` returns uint8 RGB CHW tensors, the label, the margin
+    and the index.
+- **`augment.py`**: class-independent mild Gaussian blur plus horizontal
+  x-scale/shift, seeded by (seed, epoch, index). Train only.
+- **`losses.py`**: `(1−α)·BCE + α·T²·BCE(σ(z/T), σ(m/T))`; α = 0 is
+  the baseline.
+- **`evaluate.py`**:
+  - Frame and video metrics; video score = mean frame logit per
+    `sample_id`.
+  - Threshold-free: AUROC, AUPRC. Calibration: ECE (15 bins), Brier,
+    NLL. At 0.5: accuracy, balanced accuracy.
+  - Per-manipulation metrics vs all originals.
+- **`train.py`**: `DistillConfig` (YAML, unknown keys rejected) and
+  `StudentTrainer`.
+  - Normalisation on the GPU; fp16 AMP; AdamW + warm-up-cosine; grad
+    clip.
+  - Early stopping on val frame AUROC (tiebreak NLL).
+  - Writes `best.pt` and `last.pt` (`weights_only`-loadable), plus
+    `epochs.jsonl`, `val_best_logits.npy` and `summary.json`.
+  - Epoch-level resume; stale config or provenance is refused.
+- **Scripts:** `scripts/train_distill_student.py` (`train` / `pilot`)
+  and `scripts/compare_students.py` (val metrics, paired bootstrap,
+  size/latency/VRAM). Config: `configs/distill/mobilenetv4_student.yaml`.
+  Runs are written to `CONFIGUARD_CHECKPOINT_DIR\distill\`.
+
 ## Repository layout
 
 ```
@@ -729,6 +766,8 @@ ConfiGuard-Lite/
 │   │   │   manifests.py, audit_stats.py
 │   ├── teacher/                 Frozen GenD CLIP-L/14 teacher + logit cache (Phase 6a)
 │   │   ├── gend.py, cache.py
+│   ├── distill/                 Student training + logit distillation on crops (Phase 6b)
+│   │   ├── data.py, augment.py, losses.py, evaluate.py, train.py
 │   └── training/                Reproducible training pipeline (Phase 5)
 │       ├── config.py, paths.py, splits.py, datasets.py, sampling.py,
 │       │   dataloader.py, optim.py, metrics.py, checkpoint.py,
@@ -738,7 +777,8 @@ ConfiGuard-Lite/
 │                              model benchmark, ONNX export, train, evaluate,
 │                              FF++ c23 download wrapper + validation, official split,
 │                              matched face-crop extraction + shortcut audit,
-│                              GenD teacher download + teacher-logit caching)
+│                              GenD teacher download + teacher-logit caching,
+│                              student training/pilot + student comparison)
 ├── tests/                    pytest suite (unit + integration), tests/conftest.py +
 │                              tests/media/conftest.py + tests/datasets/conftest.py +
 │                              tests/models/conftest.py generate all fixtures at

@@ -305,3 +305,23 @@ All notable changes to this project are documented here.
 - Cached teacher logits for 57,040 train and 11,120 val crops. Val
   frame AUC is 0.960 and video AUC 0.979. Test was never opened.
 - 10 new tests; full suite 513/513. No student training.
+
+### Phase 6b — MobileNetV4 student distillation (2026-10-01)
+
+- Added `configuard.distill`:
+  - `data`: hash-checked crop rows, aligned cached teacher margins,
+    class × method balanced `EpochSampler`, `CropDataset`;
+  - `augment`: mild class-independent blur + horizontal jitter;
+  - `losses`: BCE + T²-scaled binary logit KD;
+  - `evaluate`: frame/video AUROC, AUPRC, ECE, Brier, NLL,
+    per-manipulation;
+  - `train`: `DistillConfig`, `StudentTrainer` with AMP, early
+    stopping, `weights_only` checkpoints and epoch resume.
+- Added `configs/distill/mobilenetv4_student.yaml`,
+  `scripts/train_distill_student.py` (train/pilot) and
+  `scripts/compare_students.py`.
+- Pilot (7 runs) chose α 0.5, T 2.
+- Full runs (val): baseline video AUROC 0.981 and frame NLL 0.504;
+  distilled 0.979 and 0.216. Size, latency and VRAM are identical.
+  Test split untouched; GenD not loaded.
+- 15 new tests; full suite 528/528. No robustness/GRU/test evaluation.

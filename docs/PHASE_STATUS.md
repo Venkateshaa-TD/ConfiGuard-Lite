@@ -12,6 +12,7 @@
 | 5c | Official FaceForensics++ split integration | PASS | 2026-09-30 |
 | 5d | Matched face-crop extraction and shortcut audit | PASS | 2026-10-01 |
 | 6a | Frozen GenD teacher setup and logit caching | PASS | 2026-10-01 |
+| 6b | MobileNetV4 student distillation (baseline vs distilled) | PASS | 2026-10-01 |
 
 Full per-phase results are recorded below as they complete.
 
@@ -607,3 +608,52 @@ atomic, stale-refusing store on D:.
 
 **Open items:** gated GenD frame lists; crop-distribution mismatch
 with GenD's own detector; caching is I/O-bound (`docs/KNOWN_ISSUES.md`).
+
+---
+
+## Phase 6b — MobileNetV4 student distillation
+
+**Status:** PASS
+
+**Summary:** two MobileNetV4-Conv-Small students were trained on the
+Phase 5d FF++ train crops under identical settings. One uses
+ground-truth BCE only; the other adds GenD logit distillation from the
+cached logits (α 0.5, T 2, chosen by a 7-run pilot).
+- Val video AUROC is tied: 0.981 vs 0.979, bootstrap Δ −0.002, CI
+  [−0.008, 0.004].
+- Frame AUROC: 0.963 baseline vs 0.956 distilled.
+- The distilled student is much better calibrated: frame NLL 0.504 →
+  0.216, ECE 0.071 → 0.033; video ECE 0.052 → 0.044.
+- Size, latency and VRAM are identical: 9.7 MiB, 23 ms CPU bs 1,
+  3,450 img/s GPU fp16, 604 MB train VRAM.
+- GenD was not loaded and the test split was not opened.
+
+**Requirements:**
+1. Two comparable MobileNetV4 models (baseline BCE; BCE + logit KD).
+   **Met.**
+2. Identical seed, splits, sampling and settings. Only α/T differ;
+   identical init, draws and augmentation are tested. **Met.**
+3. Class- and source-balanced sampling (real 1/2, each method 1/8).
+   **Met.**
+4. Only mild class-independent blur and horizontal geometry jitter;
+   val is not augmented (tested). **Met.**
+5. Pilot over α ∈ {0.5, 0.9} × T ∈ {1, 2, 4}; best trained with early
+   stopping (patience 3). **Met.**
+6. Frame and video AUROC/AUPRC, calibration (ECE, Brier, NLL) and
+   per-manipulation val results (`docs/EXPERIMENT_LOG.md`). **Met.**
+7. Accuracy, checkpoint size, CPU/GPU latency and VRAM compared.
+   **Met.**
+8. Test split untouched: the loaders raise `ProtectedSplitError`.
+   **Met.**
+9. Targeted tests (15) during development; full suite 528/528 (215 s).
+   **Met.**
+10. Docs updated; commit contains code, configs, tests and docs only.
+    **Met.**
+
+**Not done (by instruction):** robustness training, GRU, and test
+evaluation.
+
+**Open items:** the val split is used for selection and reporting;
+NeuralTextures is the weakest method (frame AUROC 0.90–0.92); fixed
+0.5-threshold metrics are uncalibrated; the training step is
+data-loader-bound (`docs/KNOWN_ISSUES.md`).

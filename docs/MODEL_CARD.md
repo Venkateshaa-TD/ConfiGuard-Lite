@@ -73,6 +73,34 @@ resolution and duration. The Phase 5d audit found the F2F/NT width
 change to be a centred crop with no residual geometric cue. Fakes are
 somewhat blurrier than their matched reals (a genuine artifact).
 
+## Phase 6b students: MobileNetV4-Conv-Small (FF++ c23, validation only)
+
+- **What they are:** two FF++-trained students, a BCE baseline and a
+  GenD-distilled model (α 0.5, T 2).
+- **Checkpoints:** on D: only (`checkpoints\distill\student_*\best.pt`,
+  9.7 MiB fp32). 2.49M params. Inputs are 224×224 aligned RGB face
+  crops with ImageNet mean/std. Output is one logit, P(fake) = σ(z).
+- **Val results** (FF++ val, 695 videos):
+
+  | | baseline | distilled |
+  |---|---|---|
+  | Video AUROC | 0.981 | 0.979 |
+  | Frame AUROC | 0.963 | 0.956 |
+  | Frame NLL | 0.504 | 0.216 |
+  | Frame ECE | 0.071 | 0.033 |
+
+  NeuralTextures is weakest (frame AUROC 0.92 / 0.90).
+- **Not established yet:**
+  - These are optimistic val numbers, since val also picked α/T and the
+    epoch.
+  - There is no test-split result, no cross-dataset result and no
+    compression robustness.
+  - There is no calibrated threshold or conformal "uncertain" class
+    yet.
+  - Do not deploy.
+- `configuard.models` encoders loaded without these checkpoints remain
+  untrained (see the warning above).
+
 ## Frozen teacher: GenD CLIP-L/14 (Phase 6a, distillation only)
 
 - **What it is:** `yermandy/GenD_CLIP_L_14` @ `891ce014…` (MIT),
