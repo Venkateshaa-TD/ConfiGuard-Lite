@@ -95,3 +95,26 @@ def test_baseline_and_distilled_share_init_and_batches(synthetic_store, tmp_path
     xa = next(iter(a.train_loader))[0]
     xb = next(iter(b.train_loader))[0]
     assert torch.equal(xa, xb)
+
+
+def test_training_on_a_partition_filters_rows_and_records_provenance(tmp_path):
+    from configuard.calibration.partitions import build_partitions, save_partitions, select_rows
+    from configuard.distill.data import load_crop_rows
+
+    from .conftest import build_store
+
+    store = build_store(tmp_path, {"train": 10, "val": 2}, frames=1)
+    rows, sha = load_crop_rows(store, CROP_TAG, "train")
+    parts = build_partitions(rows, sha, seed=42)
+    path = tmp_path / "parts.json"
+    parts_sha = save_partitions(path, parts)
+    cfg = _cfg(run_name="p80", train_partition="final_train")
+    with pytest.raises(ValueError, match="partitions file"):
+        StudentTrainer(cfg, store, store.parent / "teacher", tmp_path / "runs", device="cpu")
+    t = StudentTrainer(cfg, store, store.parent / "teacher", tmp_path / "runs2", device="cpu", partitions_path=path)
+    expected = select_rows(rows, parts, "final_train")
+    assert [r["crop_sha256"] for r in t.train_rows] == [r["crop_sha256"] for r in expected]
+    assert 0 < len(t.train_rows) < len(rows)
+    assert t.provenance["partitions_sha256"] == parts_sha and t.provenance["train_partition"] == "final_train"
+    assert len(t.train_loader.dataset) == len(expected)
+    assert "train_partition" not in _cfg().to_dict()  # Phase 6b configs unchanged

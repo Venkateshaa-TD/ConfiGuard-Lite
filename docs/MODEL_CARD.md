@@ -73,6 +73,25 @@ resolution and duration. The Phase 5d audit found the F2F/NT width
 change to be a centred crop with no residual geometric cue. Fakes are
 somewhat blurrier than their matched reals (a genuine artifact).
 
+## Phase 6c calibrated student (FF++ c23, development data only)
+
+- **Model:** `student_distilled_p80` (`best.pt` SHA-256 `03f648b1…8957`),
+  i.e. the 6b distilled config trained on 80% of FF++ train families,
+  plus `calibration.json`.
+- **Outputs:** calibrated P(fake) and a verdict (likely real / likely
+  manipulated / uncertain). Frame/image and video levels are
+  calibrated separately.
+- **Dev results (official val, 695 videos), video level:**
+  - AUROC 0.974; ECE 0.043 raw → 0.035 temperature-scaled.
+  - Default mondrian α 0.05: 5.8% uncertain, 2.2% of real videos
+    called "likely manipulated", 92.2% of decided videos correct.
+  - Coverage 0.927, below the nominal 0.95.
+- **Limitations:**
+  - The coverage guarantee did not hold on FF++ val, so it should not
+    be expected on other data.
+  - No test-split, cross-dataset or compression-robustness results.
+  - Do not deploy.
+
 ## Phase 6b students: MobileNetV4-Conv-Small (FF++ c23, validation only)
 
 - **What they are:** two FF++-trained students, a BCE baseline and a

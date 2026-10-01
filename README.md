@@ -10,7 +10,7 @@ operating rules this project is developed under.
 
 ## Status
 
-Phase 6b (MobileNetV4 students trained on FF++ crops: BCE baseline vs GenD-distilled; val only, test untouched - see `docs/EXPERIMENT_LOG.md`). Phase 6a cached frozen GenD CLIP-L/14 teacher logits for train/val. Before that, Phase 5d (matched face-crop extraction and shortcut audit) — see
+Phase 6c (calibrated distilled student with likely real / likely manipulated / uncertain verdicts; development data only, test sealed). Phase 6b trained the MobileNetV4 students (BCE baseline vs GenD-distilled). Phase 6a cached frozen GenD CLIP-L/14 teacher logits for train/val. Before that, Phase 5d (matched face-crop extraction and shortcut audit) — see
 `docs/PHASE_STATUS.md` for current status. FF++ c23 (5000 videos,
 8.4 GiB) is downloaded to `D:`, validated, and split with the authors'
 official train/val/test files (720/140/140 originals, leakage-checked).
@@ -293,6 +293,22 @@ val crops. The test split is refused.
 
 Runs resume from `last.pt`. Reusing a `run_name` with a different config
 is refused.
+
+## Calibrate the student and get the "uncertain" output (Phase 6c)
+
+```powershell
+.venv\Scripts\python.exe scripts\calibrate_student.py split                                   # 80/10/10 train families
+.venv\Scripts\python.exe scripts\train_distill_student.py train --run-name student_distilled_p80 --alpha 0.5 --temperature 2 --train-partition final_train
+.venv\Scripts\python.exe scripts\calibrate_student.py fit --run student_distilled_p80         # writes calibration.json
+```
+
+In code:
+
+```python
+from configuard.calibration.artifact import load_calibration
+cal = load_calibration(run_dir / "calibration.json", run_dir / "best.pt")  # refuses mismatches
+out = cal.predict(video_mean_logits, level="video")   # out.p_fake, out.verdicts
+```
 
 ## Project layout
 

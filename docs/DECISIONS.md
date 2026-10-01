@@ -4,6 +4,50 @@ Format: one entry per decision, newest first.
 
 ---
 
+## 2026-10-01 — Phase 6c: family-component partitions, per-level temperature, label-conditional (mondrian) conformal at α 0.05 as default
+
+**Partitions:**
+- Calibration data comes from the official TRAIN families, not from
+  val, so val stays an independent development set and test stays
+  sealed.
+- Assignment is by donor-linked component, i.e. FF++ reciprocal pairs:
+  a family and the donor whose face appears in its fakes never land in
+  different partitions.
+- The partition file is pinned by SHA-256 into the model's provenance.
+
+**Model:** the 6b distilled config (α 0.5, T 2) is retrained on
+`final_train` with no new tuning; early stopping still uses val. The 6b
+checkpoints stay as they are.
+
+**Temperature scaling:** one scalar T per level, fitted by NLL on
+temp_cal.
+- Frame and video are fitted separately: the video score is a mean of
+  16 correlated frame logits and is far less noisy than one frame.
+- Results: frame T 0.95, effectively 1; video T 0.62.
+
+**Conformal:** split conformal on conformal_cal, nonconformity
+1 − p(true class), over temperature-scaled probabilities.
+- Default mode is **mondrian** (one threshold per class). FF++ is 80%
+  fake, and marginal conformal spends its error budget on reals: on
+  dev, 18% of real videos got a fake-only set. Mondrian gives 2.2%,
+  with per-class coverage guarantees.
+- Default α is **0.05**. α 0.01 needs at least 99 real calibration
+  videos (we have 71).
+- Empty or two-label sets become `UNCERTAIN`.
+- Accepted cost: mondrian decisions are less accurate than
+  confidence-ranked abstention at the same abstention rate. It shifts
+  the fake boundary to p ≥ 0.88, trading missed detections for fewer
+  false accusations. Revisit with a risk-controlling threshold
+  (conformal risk control / LTT on the false-accusation and miss
+  rates) in a later phase.
+
+**Artifact:** `calibration.json` beside `best.pt` holds the checkpoint
+SHA-256, model config (+ SHA-256), model and calibration provenance,
+all fitted (mode, α) thresholds and a content SHA-256.
+`load_calibration` refuses any mismatch or edit.
+
+---
+
 ## 2026-10-01 — Phase 6b: distil with α 0.5, T 2; keep both students; prefer the distilled one for calibration-driven stages
 
 **Loss:** `(1−α)·BCE(z, y) + α·T²·BCE(σ(z/T), σ(m/T))`.

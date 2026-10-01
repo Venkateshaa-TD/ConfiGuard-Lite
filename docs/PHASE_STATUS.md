@@ -13,6 +13,7 @@
 | 5d | Matched face-crop extraction and shortcut audit | PASS | 2026-10-01 |
 | 6a | Frozen GenD teacher setup and logit caching | PASS | 2026-10-01 |
 | 6b | MobileNetV4 student distillation (baseline vs distilled) | PASS | 2026-10-01 |
+| 6c | Calibration and the "uncertain" output | PASS | 2026-10-01 |
 
 Full per-phase results are recorded below as they complete.
 
@@ -657,3 +658,50 @@ evaluation.
 NeuralTextures is the weakest method (frame AUROC 0.90–0.92); fixed
 0.5-threshold metrics are uncalibrated; the training step is
 data-loader-bound (`docs/KNOWN_ISSUES.md`).
+
+---
+
+## Phase 6c — Calibration and the "uncertain" output
+
+**Status:** PASS
+
+**Summary:**
+- Official FF++ train families were split 80/10/10 (570/72/71 families),
+  keeping donor pairs whole.
+- The distilled student was retrained on the 80% with the fixed 6b
+  settings (dev frame/video AUROC 0.949/0.974).
+- Temperature was fitted on temp_cal only and conformal thresholds on
+  conformal_cal only, separately for frame/image and video.
+- A hash-bound `calibration.json` maps logits to calibrated P(fake) and
+  a `Verdict` (likely real / likely manipulated / uncertain).
+- Default (video, mondrian α 0.05, dev): 5.8% uncertain, real coverage
+  0.978, overall coverage 0.927 (nominal 0.95; reached on the
+  calibration partition but not on the harder val split).
+- Test split sealed.
+
+**Requirements:**
+1. Deterministic 80/10/10 split of TRAIN families; complete families
+   and donor partners kept together (tested). **Met.**
+2. Retrained on 80% with the fixed 6b config; no tuning. **Met.**
+3. Temperature fitted only on temp_cal. **Met.**
+4. Split-conformal thresholds fitted only on conformal_cal (mondrian +
+   marginal; α 0.01/0.05/0.10). **Met.**
+5. Three outputs via `configuard.io_types.Verdict`. **Met.**
+6. Frame/image and video calibrated separately (own T and thresholds).
+   **Met.**
+7. ECE, NLL, Brier, coverage, abstention, selective accuracy and
+   risk-coverage curves on dev. **Met.**
+8. Raw vs temperature-scaled vs conformal compared (plus a
+   confidence-abstention baseline). **Met.**
+9. Artifact bound to the checkpoint SHA-256, model config/provenance
+   and its own content hash; mismatches refused (tested). The trainer
+   and the fit refuse a different partitions file. **Met.**
+10. Test sealed; full suite 538/538; docs and commit. **Met.**
+
+**Not done (by instruction):** adaptive 4/8/16 inference, robustness
+training, test evaluation.
+
+**Open items:** val is harder than held-out train families, so
+coverage falls short on dev; mondrian costs selective accuracy;
+video α 0.01 is unsupported at n = 71 reals; frames within a video are
+not exchangeable (`docs/KNOWN_ISSUES.md`).

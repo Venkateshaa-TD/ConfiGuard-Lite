@@ -325,3 +325,25 @@ All notable changes to this project are documented here.
   distilled 0.979 and 0.216. Size, latency and VRAM are identical.
   Test split untouched; GenD not loaded.
 - 15 new tests; full suite 528/528. No robustness/GRU/test evaluation.
+
+### Phase 6c — Calibration and the "uncertain" output (2026-10-01)
+
+- Added `configuard.calibration`:
+  - `partitions`: deterministic 80/10/10 split of TRAIN families by
+    donor-linked component;
+  - `core`: temperature scaling, mondrian/marginal split conformal,
+    verdict mapping, ECE/NLL/Brier/coverage/abstention/selective
+    accuracy/risk-coverage;
+  - `artifact`: hash-bound `calibration.json`, `Calibrator`,
+    `CalibrationMismatchError`.
+- Added `configuard.distill.infer` and `DistillConfig.train_partition`
+  (omitted when empty, so 6b configs are unchanged), plus a
+  `--train-partition` CLI flag.
+- Added `scripts/calibrate_student.py` (`split` / `fit`).
+- Retrained the distilled student on 80% of train families. Fitted
+  frame and video calibration (T 0.95 / 0.62).
+- Default video verdicts on dev: 5.8% uncertain, 2.2% of reals
+  flagged. Coverage 0.927 vs nominal 0.95 (calibration/dev shift,
+  documented).
+- 10 new tests; full suite 538/538. Test split sealed; no adaptive
+  inference, robustness training or GRU.

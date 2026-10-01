@@ -11,6 +11,8 @@ Usage:
     .venv/Scripts/python.exe scripts/train_distill_student.py pilot --epochs 3 --samples-per-epoch 20000
     .venv/Scripts/python.exe scripts/train_distill_student.py train --run-name student_baseline --alpha 0
     .venv/Scripts/python.exe scripts/train_distill_student.py train --run-name student_distilled --alpha 0.5 --temperature 2
+    # Phase 6c: same settings, trained on the 80% final_train partition only
+    .venv/Scripts/python.exe scripts/train_distill_student.py train --run-name student_distilled_p80 --alpha 0.5 --temperature 2 --train-partition final_train
 """
 
 from __future__ import annotations
@@ -32,6 +34,7 @@ load_dotenv(REPO_ROOT / ".env")
 
 import torch  # noqa: E402
 
+from configuard.calibration.partitions import default_partitions_path  # noqa: E402
 from configuard.distill.train import DistillConfig, StudentTrainer  # noqa: E402
 from configuard.storage_guard import FreeSpaceGuard  # noqa: E402
 from configuard.training.paths import resolve_cache_dir, resolve_checkpoint_dir  # noqa: E402
@@ -51,8 +54,9 @@ def setup_logging(path: Path) -> None:
 
 def run(cfg: DistillConfig, run_root: Path, max_epochs: int | None = None) -> dict:
     cache = resolve_cache_dir()
+    parts = default_partitions_path(cache, cfg.crop_tag) if cfg.train_partition else None
     trainer = StudentTrainer(cfg, cache / "ffpp_face_crops" / "store", cache / "teacher_logits" / "gend_clip_l14",
-                             run_root, device="cuda")
+                             run_root, device="cuda", partitions_path=parts)
     try:
         return trainer.fit(max_epochs)
     finally:
@@ -74,6 +78,7 @@ def main() -> int:
     ap.add_argument("--alpha", type=float)
     ap.add_argument("--temperature", type=float)
     ap.add_argument("--max-epochs", type=int)
+    ap.add_argument("--train-partition", help="Phase 6c: e.g. final_train (needs scripts/calibrate_student.py split)")
     ap.add_argument("--epochs", type=int, default=3, help="pilot: epochs per run")
     ap.add_argument("--samples-per-epoch", type=int, help="pilot default 20000; train default from config")
     ap.add_argument("--alphas", default="0.5,0.9")
@@ -96,7 +101,7 @@ def main() -> int:
     if args.mode == "train":
         cfg = DistillConfig.from_yaml(args.config, run_name=args.run_name, alpha=args.alpha,
                                       temperature=args.temperature, max_epochs=args.max_epochs,
-                                      samples_per_epoch=args.samples_per_epoch)
+                                      samples_per_epoch=args.samples_per_epoch, train_partition=args.train_partition)
         t0 = time.time()
         s = run(cfg, root)
         log.info("done in %.1f min: %s", (time.time() - t0) / 60, json.dumps(brief(s), default=float))

@@ -70,6 +70,10 @@ class DistillConfig:
     balance_source: bool = True
     augment: dict[str, Any] = field(default_factory=lambda: asdict(AugmentConfig()))
     schema: str = SCHEMA
+    # Phase 6c: train only on one partition of the official train families
+    # ("" = all train rows, the Phase 6b behaviour). Omitted from to_dict when
+    # empty so Phase 6b run configs/checkpoints stay byte-identical.
+    train_partition: str = ""
 
     def augment_config(self) -> AugmentConfig:
         a = dict(self.augment)
@@ -81,6 +85,8 @@ class DistillConfig:
     def to_dict(self) -> dict[str, Any]:
         d = asdict(self)
         d["augment"] = {k: list(v) if isinstance(v, tuple) else v for k, v in asdict(self.augment_config()).items()}
+        if not d["train_partition"]:
+            del d["train_partition"]
         return d
 
     @classmethod
@@ -132,7 +138,7 @@ def _json_safe(x: Any) -> Any:
 
 class StudentTrainer:
     def __init__(self, config: DistillConfig, crop_store: Path, teacher_cache: Path, run_root: Path,
-                 device: str = "cuda") -> None:
+                 device: str = "cuda", partitions_path: Path | None = None) -> None:
         self.cfg, self.device = config, torch.device(device)
         self.run_dir = Path(run_root) / config.run_name
         self.run_dir.mkdir(parents=True, exist_ok=True)
@@ -148,6 +154,18 @@ class StudentTrainer:
         self.provenance = {"crop_tag": config.crop_tag, "teacher_tag": config.teacher_tag,
                            "crops_train_sha256": train_sha, "crops_val_sha256": val_sha}
         train_m = load_teacher_margins(teacher_cache, config.teacher_tag, "train", self.train_rows, train_sha)
+        if config.train_partition:
+            from configuard.calibration.partitions import load_partitions, select_rows
+
+            if partitions_path is None:
+                raise ValueError("train_partition is set but no partitions file was given")
+            parts, parts_sha = load_partitions(partitions_path, train_sha)
+            keep = {id(r) for r in select_rows(self.train_rows, parts, config.train_partition)}
+            mask = np.array([id(r) in keep for r in self.train_rows])
+            self.train_rows = [r for r, k in zip(self.train_rows, mask) if k]
+            train_m = train_m[mask]
+            self.provenance |= {"partitions_sha256": parts_sha, "train_partition": config.train_partition,
+                                "train_rows": len(self.train_rows)}
         val_m = load_teacher_margins(teacher_cache, config.teacher_tag, "val", self.val_rows, val_sha)
         self.val_teacher_margins = val_m
 

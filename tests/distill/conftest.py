@@ -37,7 +37,7 @@ def build_store(root: Path, videos_per_class: dict[str, int], frames: int = 2, s
                     rel = f"crops/{split}/{method or 'orig'}/{v}_{slot}.png"
                     sha = _write(store / rel, cv2.imencode(".png", img)[1].tobytes())
                     rows.append({"crop_path": rel, "crop_sha256": sha, "label": "fake" if method else "real",
-                                 "metadata": {"method": method, "split": split, "source_id": str(v)},
+                                 "metadata": {"method": method, "split": split, "source_id": str(v), "family_id": f"{v:03d}"},
                                  "sample_id": sid, "slot": slot})
                     margin = 3.0 if method else -3.0
                     tlines.append({"crop_path": rel, "crop_sha256": sha, "sample_id": sid, "slot": slot,

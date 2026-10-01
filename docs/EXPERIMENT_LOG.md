@@ -1313,3 +1313,131 @@ throughput with more than 4 GiB of headroom.
 .venv/Scripts/python.exe -m pytest tests/distill -q -p no:cacheprovider    # 15 passed
 .venv/Scripts/python.exe -m pytest -q -p no:cacheprovider -rs          # 528 passed, 0 skipped, 215.00 s
 ```
+
+---
+
+## 2026-10-01 — Phase 6c partitions (official TRAIN families only)
+
+```
+.venv/Scripts/python.exe scripts/calibrate_student.py split
+```
+- File: `D:\ConfiGuard-Data\cache\calibration_splits\p5d-b451b5ca770c8923\partitions_seed42.json`,
+  SHA-256 `e2deca855599e93d629fb3cb197b2cb69bec4af486ec773b70c063f04cc763a0`.
+- Built from `crops_train.jsonl` `38635dd3…`; seed 42.
+- Unit of assignment: a donor-linked family component. FF++ donors are
+  reciprocal pairs, giving 360 components of 1–2 families. Components
+  are ordered by SHA-256(seed:key) and cut 288/36/36.
+
+| partition | families | videos | frames | per class (real / each method) |
+|---|---|---|---|---|
+| final_train | 570 | 2,850 | 45,600 | 9,120 |
+| temp_cal | 72 | 360 | 5,760 | 1,152 |
+| conformal_cal | 71 | 355 | 5,680 | 1,136 |
+
+## 2026-10-01 — Phase 6c retrain on final_train (fixed Phase 6b settings)
+
+```
+.venv/Scripts/python.exe scripts/train_distill_student.py train --run-name student_distilled_p80 --alpha 0.5 --temperature 2 --train-partition final_train
+```
+- Unchanged from 6b: `configs/distill/mobilenetv4_student.yaml` with
+  α 0.5, T 2. Only the train rows differ (45,600; one draw per row per
+  epoch, as in 6b).
+- Early stopping on official val, as in 6b. Best epoch 18 of 20 run;
+  24.1 min.
+- `best.pt` SHA-256 `03f648b166135ff78a300f2c48daf88cd76c966880198f63865f4be9b0798957`.
+- Dev (official val) discrimination: frame AUROC 0.9488 / AUPRC 0.9866;
+  video AUROC 0.9735 / AUPRC 0.9937.
+- For comparison, the 6b distilled model trained on 100% of train
+  scored 0.9562 / 0.9791.
+- On held-out train families the same model scores higher:
+  - temp_cal: frame 0.9609, video 0.9895;
+  - conformal_cal: frame 0.9647, video 0.9876.
+
+## 2026-10-01 — Phase 6c calibration fit and development results
+
+```
+.venv/Scripts/python.exe scripts/calibrate_student.py fit --run student_distilled_p80
+```
+- Fitting data:
+  - temperature on `temp_cal` only (5,760 frames / 360 videos);
+  - conformal thresholds on `conformal_cal` only (5,680 frames / 355
+    videos; 71 real + 284 fake videos), using temperature-scaled
+    probabilities.
+- Frame/image and video levels are fitted separately; video score is
+  the mean frame logit.
+- Development data: official val (11,120 frames / 695 videos), never
+  used for fitting. Test is sealed.
+- Artifact: `...\student_distilled_p80\calibration.json`.
+  - File SHA-256 `86b355c0491ed0b919aedbd9c273b76a87fe3283bb4c2881c2859288f3ffd6be`.
+  - Content SHA-256 `8df62834…c03c`.
+  - Model config SHA-256 `d8e7c086…26ba`.
+  - It was round-trip loaded with all checks.
+- Report: `...\calibration_report.json`.
+
+**Raw vs temperature-scaled (dev).** Temperature scaling never changes
+decisions at 0.5 or the ranking, so accuracy and AURC are unchanged.
+
+| level | T | | ECE | NLL | Brier | acc@0.5 | AURC |
+|---|---|---|---|---|---|---|---|
+| frame | 0.947 | raw | 0.0354 | 0.2427 | 0.0706 | 0.9100 | 0.0220 |
+| | | temp-scaled | 0.0363 | 0.2448 | 0.0710 | 0.9100 | 0.0219 |
+| video | 0.623 | raw | 0.0428 | 0.1826 | 0.0524 | 0.9295 | 0.0109 |
+| | | temp-scaled | 0.0348 | 0.1883 | 0.0552 | 0.9295 | 0.0109 |
+
+- On `temp_cal` itself, video TS improves ECE 0.061 → 0.037 and NLL
+  0.132 → 0.110. The frame level is already near-calibrated
+  (T ≈ 0.95).
+- The video gain does not fully transfer to the harder val split:
+  ECE improves, but NLL and Brier get slightly worse.
+
+**Risk-coverage (dev, abstain on least confident first; selective risk
+at coverage):**
+
+| coverage | 0.24 | 0.43 | 0.62 | 0.81 | 0.90 | 0.95 | 1.00 |
+|---|---|---|---|---|---|---|---|
+| frame | 0.0042 | 0.0090 | 0.0209 | 0.0429 | 0.0612 | 0.0729 | 0.0900 |
+| video | 0.0000 | 0.0034 | 0.0023 | 0.0213 | 0.0366 | 0.0544 | 0.0705 |
+
+**Conformal (dev).** Coverage = true label in the set. Abstain = the
+"uncertain" verdict. The last column is plain confidence-ranked
+abstention at the same abstention rate.
+
+| level | mode | α | coverage | real cov | fake cov | abstain | selective acc | confidence-abstain acc |
+|---|---|---|---|---|---|---|---|---|
+| frame | mondrian | 0.01 | 0.983 | 0.989 | 0.982 | 0.449 | 0.969 | 0.985 |
+| frame | **mondrian** | **0.05** | 0.929 | 0.950 | 0.924 | 0.125 | 0.919 | 0.946 |
+| frame | mondrian | 0.10 | 0.871 | 0.888 | 0.867 | 0.026 | 0.895 | 0.920 |
+| frame | marginal | 0.05 | 0.932 | 0.860 | 0.950 | 0.051 | 0.928 | 0.928 |
+| video | mondrian | 0.01 | 0.981 | 1.000 | 0.977 | 0.850 | 0.875 | 1.000 |
+| video | **mondrian** | **0.05** | 0.927 | 0.978 | 0.914 | 0.058 | 0.922 | 0.950 |
+| video | mondrian | 0.10 | 0.866 | 0.863 | 0.867 | 0.084 | 0.945 | 0.959 |
+| video | marginal | 0.05 | 0.919 | 0.820 | 0.944 | 0.016 | 0.934 | 0.934 |
+
+- On `conformal_cal` itself, coverage is nominal: mondrian α 0.05 gives
+  frame 0.951 and video 0.958.
+- On dev it is 2–3 points short. Val is harder than held-out train
+  families, so exchangeability between them does not hold (see
+  `KNOWN_ISSUES.md`).
+- **Default verdicts (video, mondrian α 0.05) on 695 dev videos:**
+  180 likely real, 475 likely manipulated, 40 uncertain.
+  - 2.2% of real videos are wrongly called "likely manipulated".
+  - Marginal α 0.05 would wrongly flag 18% of real videos.
+- **Mondrian trade-off:**
+  - Per-class coverage protects reals.
+  - Decided cases are less accurate than with confidence-ranked
+    abstention at the same rate (video 0.922 vs 0.950). They are even
+    below no abstention (0.930).
+  - Cause: with q_fake 0.12, any p < 0.88 that does not fall in the
+    uncertain band gets a real-only set. Fakes with moderate scores
+    become "likely real" (missed detections, not false accusations).
+- Video α 0.01 is not supported: 71 real calibration videos is below
+  the 99 needed, so q_real = 1 and 85% of videos become uncertain.
+
+## 2026-10-01 — Phase 6c tests
+
+```
+.venv/Scripts/python.exe -m pytest tests/calibration tests/distill -q -p no:cacheprovider   # 9 + 16 passed
+.venv/Scripts/python.exe -m pytest -q -p no:cacheprovider -rs                               # 538 passed, 0 skipped, 213.56 s
+```
+- New tests: `tests/calibration/test_calibration.py` (9 tests) and 1
+  trainer-partition test in `tests/distill` (16 there now).

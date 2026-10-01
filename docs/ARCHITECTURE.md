@@ -731,6 +731,37 @@ On this machine the store root is `D:\ConfiGuard-Data\cache\ffpp_face_crops\stor
   size/latency/VRAM). Config: `configs/distill/mobilenetv4_student.yaml`.
   Runs are written to `CONFIGUARD_CHECKPOINT_DIR\distill\`.
 
+## Calibration and the "uncertain" output (Phase 6c, `src/configuard/calibration/`)
+
+- **`partitions.py`**: deterministic 80/10/10 split of official TRAIN
+  families (`final_train`, `temp_cal`, `conformal_cal`).
+  - Union-find joins each family with its donor family; components are
+    ordered by SHA-256(seed:key).
+  - Written once to `<cache>\calibration_splits\<crop_tag>\partitions_seed42.json`.
+    A different file at the same path, or a different train manifest,
+    is refused.
+  - `DistillConfig.train_partition` trains on one partition and pins
+    the file's SHA-256 into the checkpoint provenance.
+- **`core.py`**:
+  - `fit_temperature` (NLL, log-T grid + golden section);
+  - `fit_conformal` (mondrian/marginal split conformal),
+    `prediction_sets`, `verdicts_from_sets`;
+  - metrics: ECE/NLL/Brier, coverage, abstention, selective accuracy,
+    risk-coverage/AURC, and a confidence-abstention baseline.
+- **`artifact.py`**: `build_artifact` / `save_artifact` /
+  `load_calibration` with checkpoint SHA-256, config/provenance and
+  content-hash checks (`CalibrationMismatchError`).
+  `Calibrator.predict(logits, level, alpha, mode)` returns calibrated
+  P(fake) plus `Verdict`s.
+  - `level="frame"` is for single images/frames.
+  - `level="video"` takes the mean frame logit.
+- **`configuard.distill.infer`**: `load_student` / `predict_rows`
+  (checkpoint → logits for crop rows).
+- **`scripts/calibrate_student.py`**: `split` builds the partitions;
+  `fit` computes logits (cached, keyed by checkpoint hash), fits per
+  level, writes `calibration.json` and `calibration_report.json`, and
+  refuses models not trained on `final_train`.
+
 ## Repository layout
 
 ```
@@ -767,7 +798,9 @@ ConfiGuard-Lite/
 │   ├── teacher/                 Frozen GenD CLIP-L/14 teacher + logit cache (Phase 6a)
 │   │   ├── gend.py, cache.py
 │   ├── distill/                 Student training + logit distillation on crops (Phase 6b)
-│   │   ├── data.py, augment.py, losses.py, evaluate.py, train.py
+│   │   ├── data.py, augment.py, losses.py, evaluate.py, train.py, infer.py
+│   ├── calibration/             Partitions, temperature, conformal, artifacts (Phase 6c)
+│   │   ├── partitions.py, core.py, artifact.py
 │   └── training/                Reproducible training pipeline (Phase 5)
 │       ├── config.py, paths.py, splits.py, datasets.py, sampling.py,
 │       │   dataloader.py, optim.py, metrics.py, checkpoint.py,
@@ -778,7 +811,8 @@ ConfiGuard-Lite/
 │                              FF++ c23 download wrapper + validation, official split,
 │                              matched face-crop extraction + shortcut audit,
 │                              GenD teacher download + teacher-logit caching,
-│                              student training/pilot + student comparison)
+│                              student training/pilot + student comparison,
+│                              calibration split/fit)
 ├── tests/                    pytest suite (unit + integration), tests/conftest.py +
 │                              tests/media/conftest.py + tests/datasets/conftest.py +
 │                              tests/models/conftest.py generate all fixtures at

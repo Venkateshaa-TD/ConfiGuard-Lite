@@ -4,6 +4,37 @@ Format: one entry per issue. Mark resolved issues rather than deleting them.
 
 ---
 
+## OPEN — Conformal coverage falls short on official val (calibration/dev shift) (Phase 6c)
+
+The student does better on held-out TRAIN families than on official val
+(video AUROC 0.988–0.990 vs 0.974). Thresholds fitted on conformal_cal
+therefore cover at nominal level there (0.951 frame, 0.958 video at
+α 0.05) but only 0.929 / 0.927 on val. The shortfall is concentrated in
+fakes (0.92 / 0.91). Real coverage holds (0.950 / 0.978).
+
+The guarantee assumes exchangeability between calibration and
+deployment data, and that does not hold even inside FF++. Expect
+larger gaps on other datasets and compressions. Options for later
+phases: calibrate on data closer to deployment, use a smaller α,
+or use a shift-aware / risk-controlling method.
+
+## OPEN — Mondrian conformal lowers selective accuracy (Phase 6c)
+
+At the default (video, α 0.05), decided cases are 92.2% correct. That
+is below no abstention (93.0%) and below confidence-ranked abstention at
+the same 5.8% rate (95.0%). The label-conditional fake threshold is
+strict (q_fake 0.12, i.e. p ≥ 0.88 needed for a fake-only set). This is
+deliberate, since it keeps false accusations of real videos at 2.2%,
+but missed fakes rise. See `docs/DECISIONS.md`.
+
+## OPEN — Video-level α 0.01 is not supported; frame-level sets are approximate (Phase 6c)
+
+- conformal_cal has 71 real videos. α 0.01 needs n ≥ 99 per class, so
+  q_real = 1 and 85% of videos are "uncertain".
+- Frame-level conformal treats the 16 frames of a video as
+  exchangeable units, but they are correlated. The frame-level
+  guarantee is approximate; video level is the principled one.
+
 ## OPEN — Phase 6b numbers are model-selection estimates on val (Phase 6b)
 
 The FF++ val split (140 originals, 695 videos after quarantine) did
