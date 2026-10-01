@@ -4,6 +4,45 @@ Format: one entry per issue. Mark resolved issues rather than deleting them.
 
 ---
 
+## OPEN — Quality gate is bypassed by blur + noise (Phase 9)
+
+Gaussian blur σ2 followed by σ4 noise passes every check: 0 reason
+codes, and 14.4% of real val videos are still called "likely
+manipulated". The median-denoised sharpness and spectral measures
+recover enough high-frequency energy from the noise to clear the
+0.5th-percentile thresholds. Blur + unsharp masking IS caught (FA 79%
+→ 2%).
+
+A noise-aware sharpness estimate, e.g. edge-width or structure-tensor
+based, is needed. It must be designed and checked on train data, then
+re-evaluated.
+
+## OPEN — Gate over-triggers on mild 0.75× rescaling with the wrong reason code (Phase 9)
+
+Crop-level 0.75× down/up-scaling (a 4/3 ratio) creates a period-4
+interpolation pattern aligned with the block grid. The blockiness
+signal reads it as HEAVY_COMPRESSION: 693/695 videos become uncertain,
+although the detector is accurate there (accuracy 0.95, FA 0.05).
+
+Real-world rescaling happens before alignment, so the pattern is
+unlikely to be grid-aligned in practice. The fix is a blockiness
+measure robust to other periodicities, validated on train data.
+
+## OPEN — Residual false accusations after strong downscaling (Phase 9)
+
+At 0.33× down-scaling the gate leaves 32% of real videos decided, and
+24.5% of all real videos are still called "likely manipulated"
+(ungated 46%). Combined with the Phase 6e blur/downscale shortcut, very
+low-resolution genuine media remains a false-accusation risk.
+
+## OPEN — Quality signals assume a crop-aligned block grid; noise is not gated (Phase 9)
+
+- Blockiness measures 8/4-px blocks on the aligned crop. Compression
+  applied to source frames before alignment produces a rotated and
+  rescaled grid, so real-world HEAVY_COMPRESSION recall is unmeasured.
+- Heavy noise lowers detection (noise σ10: 0% of fakes caught) but is
+  not gated, because it does not cause false accusations.
+
 ## OPEN — INT8 exports are not calibrated (Phase 8)
 
 Both static INT8 recipes shift logits relative to the FP32 model that

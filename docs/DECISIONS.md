@@ -4,6 +4,43 @@ Format: one entry per decision, newest first.
 
 ---
 
+## 2026-10-01 — Phase 9: downgrade-only quality gate, enabled by default
+
+- **Downgrade-only contract.** The gated verdict is either the ungated
+  verdict or UNCERTAIN, asserted in code.
+  - The gate never changes which frames the adaptive analyzer scores.
+    Re-routing escalation could turn a confident "fake" at 4 frames
+    into a "real" at 16, which would be a class change caused by
+    quality.
+  - Quality comes from the crops the scorer already decoded, so no
+    frame is scored twice.
+- **Rules:**
+  - Majority: ≥ 50% of used frames fail the same check.
+  - QUALITY_DEPENDENT_VERDICT: any frame fails and the passing frames
+    alone give a different or non-singleton decision at the same
+    stage's calibration. This blocks single-frame manipulation of the
+    mean logit.
+  - SMALL_FACE: from the detector's face width.
+- **Thresholds:** tail percentiles of TRAIN frame quality. The
+  percentile is the largest one (of 0.5–10%) whose coverage loss on
+  the calibration partitions is ≤ 3 pp, a margin under the 5 pp
+  target. That gives p = 0.5%.
+  - Val was used only for the final evaluation. Signal flaws found
+    there are recorded, not fixed, because fixing them would mean
+    tuning on val.
+- **Decision:** both pre-registered targets were met, so the gate is
+  enabled by default (`GatedVideoAnalyzer(enabled=True)`).
+  - The artifact is bound to the export manifest, the ONNX FP32 SHA,
+    the adaptive calibration and the signals-code hash.
+- **Accepted limits:**
+  - It abstains on most JPEG ≤ q75 and social-media-style crops. The
+    detector is unreliable there anyway (jpeg q50 decided accuracy
+    0.62).
+  - Noise is not a gate signal: noise makes the model miss fakes, not
+    accuse reals.
+
+---
+
 ## 2026-10-01 — Phase 8: ONNX FP32 is the CPU and GPU default; INT8 rejected; onnxruntime-gpu 1.23.2
 
 - **Graph contract:** RGB 0..255 float32 crops in, one logit out, with

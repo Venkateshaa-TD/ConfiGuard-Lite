@@ -18,6 +18,7 @@
 | 6e | Compression-robust student training (experiment; not selected) | PASS | 2026-10-01 |
 | 7 | Efficient temporal video head (GRU evaluated; rejected) | PASS | 2026-10-01 |
 | 8 | Production ONNX export and optimization | PASS | 2026-10-01 |
+| 9 | Media-quality safety gate | PASS | 2026-10-01 |
 
 Full per-phase results are recorded below as they complete.
 
@@ -915,3 +916,56 @@ normalisation inside the graph.
 - The CUDA provider needs one session per shape.
 - The GPU-provider runtime pins `onnxruntime-gpu` 1.23.2 because of
   CUDA 12 (`docs/KNOWN_ISSUES.md`).
+
+---
+
+## Phase 9 — Media-quality safety gate
+
+**Status:** PASS. Targets met and the gate is enabled by default. Known
+bypasses and over-triggering are documented.
+
+**Summary:**
+- A downgrade-only gate sits on top of ONNX FP32 adaptive 4/8/16
+  inference. It uses sharpness, effective resolution and blockiness
+  from the same decoded crops, plus the detector's face width.
+- Reason codes: LOW_SHARPNESS, LOW_RESOLUTION, HEAVY_COMPRESSION,
+  SMALL_FACE, QUALITY_DEPENDENT_VERDICT.
+- Thresholds come from TRAIN data, with the percentile chosen on the
+  calibration partitions; no val or test tuning.
+- Clean val coverage loss is 0.58 pp. Blur/downscale false accusations
+  fall from 36.0% to 9.0% (blur σ2 84% → 0%; resize 0.33 46% → 24.5%).
+
+**Requirements:**
+1. Lightweight checks for blur, effective resolution, downscaling and
+   compression (about 2 ms per crop). **Met.**
+2. Signals are kept out of model inputs (scorer interface tested).
+   **Met.**
+3. Thresholds fitted on train/calibration data only. **Met.**
+4. Downgrade to UNCERTAIN only (asserted; 300-case randomised test).
+   **Met.**
+5. Clear reason codes. **Met.**
+6. Clean val plus all 17 stress conditions (and 2 adversarial + 3
+   bypass sets). **Met.**
+7. Coverage loss, decided accuracy, FA, detection, uncertainty and
+   per-method results. **Met.**
+8. ≤ 5 pp clean coverage loss (0.58) and a material blur/downscale FA
+   reduction (−75% relative). **Met.**
+9. Bypass cases:
+   - one bad frame: caught when it changes the verdict;
+   - mixed and all bad: UNCERTAIN;
+   - blur + unsharp: caught;
+   - **blur + noise: NOT caught**.
+
+   **Met (tested; one bypass found).**
+10. Integrated with adaptive 4/8/16 ONNX via `QualityAwareScorer` /
+    `GatedVideoAnalyzer`: frames decoded and scored once, no
+    re-scoring. **Met.**
+11. Targets met, so the gate is on by default; `enabled=False` keeps
+    the previous pipeline. **Met.**
+12. Targeted tests (26), full suite 576/576 (233 s), docs, commit. **Met.**
+13. No API/UI, retraining, recalibration or test access. **Met.**
+
+**Open items:** the blur + noise bypass; resize 0.75 mislabelled
+HEAVY_COMPRESSION with near-total abstention; residual resize 0.33 FA
+of 24.5%; noise is not detected; block grid assumed crop-aligned
+(`docs/KNOWN_ISSUES.md`).

@@ -419,3 +419,19 @@ All notable changes to this project are documented here.
   verdict agreement ≥ 99.86%). INT8 rejected (agreement 76% / 88–90%).
   CPU and GPU default: ONNX FP32.
 - 5 new tests; full suite 563/563. No API/UI, no test data, no recalibration.
+
+### Phase 9 — Media-quality safety gate (2026-10-01)
+
+- Added `configuard.quality`:
+  - `signals`: sharpness, effective resolution, blockiness;
+  - `gate`: downgrade-only `apply_gate` with reason codes,
+    `QualityAwareScorer`, `GatedVideoAnalyzer`, hash-bound threshold
+    artifact.
+- Added `scripts/quality_gate.py` (compute / fit / evaluate).
+- Thresholds come from TRAIN data, with the percentile picked on the
+  calibration partitions (p = 0.5%).
+- Results: clean coverage loss 0.58 pp; blur/downscale false
+  accusations 36.0% → 9.0%. Enabled by default.
+- Found and documented: blur + noise bypass, resize 0.75 over-trigger,
+  residual resize 0.33 false accusations.
+- 13 new tests; full suite 576/576. No retraining, recalibration, API/UI or test access.

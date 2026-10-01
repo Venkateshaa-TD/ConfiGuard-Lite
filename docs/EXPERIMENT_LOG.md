@@ -1938,3 +1938,109 @@ Times are in ms. GPU memory is the device-wide `nvidia-smi` delta
 - The full suite was run twice. The first run's summary line was not
   captured (the output tail showed only ffmpeg stderr from an existing
   corrupt-video test), so it was re-run to record the result.
+
+---
+
+## 2026-10-01 — Phase 9 media-quality safety gate
+
+```
+.venv/Scripts/python.exe scripts/quality_gate.py compute     # decode once -> quality + ONNX FP32 logit; 4 workers, 4 GB RAM floor
+.venv/Scripts/python.exe scripts/quality_gate.py fit         # thresholds from TRAIN only; percentile picked on temp_cal+conformal_cal
+.venv/Scripts/python.exe scripts/quality_gate.py evaluate
+```
+
+**Signals** (`configuard.quality.signals`, never model inputs):
+- Sharpness: log Laplacian variance after a 3×3 median filter.
+- Effective resolution: spectral energy share in 0.25–0.5 cycles/px.
+- Blockiness: block-boundary vs same-parity mid-block gradients,
+  periods 8 and 4.
+- Source face width: from the detector (Phase 5d audit sidecar). Only
+  train/val `sample_id` lines are parsed; other lines are skipped
+  before decoding.
+- Design was checked on synthetic degradations of TRAIN crops only.
+  That check found the 2× up-scale ripple, which was fixed before any
+  val run.
+
+**Compute:**
+- 279,640 crops: train 57,040, val 11,120, 17 stress conditions,
+  2 adversarial blur sets made on the fly.
+- About 30 min at about 170 crops/s, limited by worker-to-main pixel
+  transfer. Minimum RAM 7.8 GB.
+- Cache: `D:\ConfiGuard-Data\cache\quality_gate\4e365f0d9942\`
+  (4.4 MB, keyed by ONNX SHA + signals version + row hashes).
+- Logits come from the package default ONNX FP32 on CUDA (per-shape
+  sessions).
+
+**Fit (train / calibration only):**
+- Each threshold is a tail percentile p of TRAIN frame quality (face
+  width: of TRAIN videos).
+- p is the largest value whose clean coverage loss on temp_cal +
+  conformal_cal (715 videos, ungated decided rate as base) is ≤ 3 pp.
+
+| p (%) | 0.5 | 1 | 2 | 3 | 5 | 7.5 | 10 |
+|---|---|---|---|---|---|---|---|
+| calib coverage loss | **0.020** | 0.041 | 0.074 | 0.102 | 0.154 | 0.206 | 0.274 |
+
+- Chosen p = 0.5: sharpness < 1.195, effective resolution < −2.967,
+  blockiness > 1.210, face width < 61.5 px.
+- A video is gated at ≥ 50% failing frames, or on a quality-dependent
+  verdict.
+- Artifact: `D:\ConfiGuard-Data\checkpoints\quality_gate\p80\quality_gate.json`
+  (content `548cc52b…`). It is bound to the export manifest, the ONNX
+  FP32 SHA, the adaptive calibration, the signals version and the
+  fit-row hash.
+
+**Evaluation: ONNX FP32 → adaptive 4/8/16 (6d calibration) → gate, 695
+val videos per set.** Decided = not UNCERTAIN. FA = real videos called
+"likely manipulated". Detection = fakes called "likely manipulated".
+
+| set | decided | decided acc | FA | detection | main reason codes (videos) |
+|---|---|---|---|---|---|
+| **clean val** | 0.868 → 0.862 | 0.959 → 0.958 | 0.014 → 0.014 | 0.836 → 0.829 | 5 total |
+| jpeg q75 / q50 / q30 | 0.80/0.78/0.77 → 0.15/0.00/0.00 | 0.83/0.62/0.44 → 0.83/–/– | 0 → 0 | 0.60/0.35/0.17 → 0.12/0/0 | HEAVY_COMPRESSION 563/695/695 |
+| x264 CRF23 / 30 / 37 | 0.79/0.75/0.68 → 0.78/0.73/0.50 | 0.90/0.81/0.71 → 0.90/0.81/0.74 | 0.014/0.007/0.007 → same | 0.69/0.55/0.40 → 0.68/0.54/0.31 | HEAVY_COMPRESSION 7/15/142 |
+| resize 0.75 | 0.856 → 0.003 | 0.950 → 1.0 | 0.050 → 0.000 | 0.833 → 0.004 | HEAVY_COMPRESSION 693 (**wrong code**, see issues) |
+| resize 0.5 | 0.850 → 0.673 | 0.954 → 0.953 | 0.079 → 0.072 | 0.862 → 0.673 | LOW_RESOLUTION 86, LOW_SHARPNESS 77 |
+| resize 0.33 | 0.875 → 0.453 | 0.885 → 0.886 | **0.460 → 0.245** | 0.937 → 0.482 | LOW_SHARPNESS 313 |
+| blur σ1 | 0.843 → 0.486 | 0.942 → 0.926 | 0.058 → 0.043 | 0.815 → 0.450 | LOW_RESOLUTION 249 |
+| blur σ2 | 0.965 → 0.000 | 0.826 → – | **0.842 → 0.000** | 0.995 → 0 | LOW_SHARPNESS 671, LOW_RESOLUTION 692 |
+| noise σ4 / σ10 | 0.72/0.96 → same | 0.46/0.21 → same | 0 → 0 | 0.17/0.00 → same | none (noise is not a gate signal) |
+| gamma 0.7 / 1.4 | 0.86/0.88 → 0.85/0.87 | ≈ same | 0.022/0.043 → 0.022/0.036 | ≈ same | ≤ 8 |
+| social resize0.5+jpeg60 | 0.673 → 0.000 | 0.746 → – | 0 → 0 | 0.419 → 0 | HEAVY_COMPRESSION 695 |
+| stream resize0.5+x264 CRF30 | 0.643 → 0.604 | 0.841 → 0.840 | 0.043 → 0.043 | 0.514 → 0.477 | LOW_SHARPNESS 33 |
+| **adv blur σ2 + noise σ4** | 0.285 → 0.285 | 0.884 → 0.884 | **0.144 → 0.144** | 0.311 → 0.311 | **none: bypass** |
+| adv blur σ2 + unsharp | 0.950 → 0.029 | 0.833 → 0.850 | 0.791 → 0.022 | 0.987 → 0.031 | LOW_RESOLUTION 583 |
+| bypass: 1 blurred frame (slot 0) | 0.878 → 0.840 | 0.957 → 0.957 | 0.036 → 0.029 | 0.862 → 0.817 | QUALITY_DEPENDENT_VERDICT 23 |
+| bypass: half the frames blurred | 0.773 → 0.000 | 0.976 → – | 0.086 → 0.000 | 0.917 → 0 | LOW_SHARPNESS 629 |
+| bypass: all frames blurred | 0.965 → 0.000 | 0.826 → – | 0.842 → 0.000 | 0.995 → 0 | LOW_SHARPNESS 671 |
+
+**Per method, clean val** (decided rate; FA for originals, detection
+for fakes):
+
+| | ungated | gated |
+|---|---|---|
+| original | 0.827, FA 0.014 | 0.827, FA 0.014 |
+| Deepfakes | 0.914, 0.892 | 0.906, 0.885 |
+| Face2Face | 0.935, 0.914 | 0.928, 0.906 |
+| FaceSwap | 0.957, 0.950 | 0.950, 0.942 |
+| NeuralTextures | 0.705, 0.590 | 0.698, 0.583 |
+
+- Resize 0.33, gated: originals decided 0.324 with FA 0.245, so most
+  real videos that pass the gate are still accused. Fakes are decided
+  0.43–0.55 with accuracy ≥ 0.98.
+
+**Pre-registered targets:**
+- Clean coverage loss ≤ 5 pp: **0.58 pp ✓**.
+- Blur/downscale FA (mean of blur σ1/σ2, resize 0.5/0.33) reduced by
+  ≥ 50% relative and ≥ 5 pp: **0.360 → 0.090 ✓**.
+- **Gate enabled by default.** The ungated path stays available
+  (`GatedVideoAnalyzer(enabled=False)`).
+- The gate only ever downgrades: verdicts are asserted in code and
+  tested on random inputs.
+
+## 2026-10-01 — Phase 9 tests
+
+```
+.venv/Scripts/python.exe -m pytest tests/quality tests/adaptive tests/export -q -p no:cacheprovider   # 26 passed
+.venv/Scripts/python.exe -m pytest -q -p no:cacheprovider -rs                                        # 576 passed, 0 skipped, 232.99 s
+```

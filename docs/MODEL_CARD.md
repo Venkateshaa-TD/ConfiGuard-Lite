@@ -73,6 +73,17 @@ resolution and duration. The Phase 5d audit found the F2F/NT width
 change to be a centred crop with no residual geometric cue. Fakes are
 somewhat blurrier than their matched reals (a genuine artifact).
 
+## Phase 9 quality gate (development data only)
+
+- **What it does:** low-quality inputs (blur, low effective resolution,
+  heavy blocking, small faces) turn confident verdicts into UNCERTAIN,
+  with reason codes. It never changes real ↔ fake.
+- **Clean val:** coverage −0.6 pp.
+- **False accusations of real videos:** blur σ2 84% → 0%, 0.33×
+  downscale 46% → 24.5%.
+- **Not protected:** blur + noise (bypass), heavy noise (missed fakes),
+  and residual low-resolution false accusations.
+
 ## Phase 8 deployment formats (development data only)
 
 - **ONNX FP32** (9.5 MiB) is the default on CPU and GPU. It reproduces

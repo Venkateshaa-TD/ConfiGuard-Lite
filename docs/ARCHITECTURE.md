@@ -860,6 +860,27 @@ On this machine the store root is `D:\ConfiGuard-Data\cache\ffpp_face_crops\stor
   logit over the nested 4/8/16 slots. `configuard.distill` +
   `best.pt` stay the PyTorch reference.
 
+## Media-quality safety gate (Phase 9, `src/configuard/quality/`)
+
+- **`signals.py`**: `crop_signals(img)` returns sharpness, effective
+  resolution and blockiness. Never a model input.
+- **`gate.py`**:
+  - `GateThresholds`; `apply_gate(result, quality_by_slot, face_px,
+    thresholds, calibrator, policy)` returns a `GatedResult` (verdict,
+    base verdict, reason codes, failing fractions). Downgrade-only.
+  - `QualityAwareScorer` decodes each requested crop once, computes
+    quality and runs the detector runner.
+  - `GatedVideoAnalyzer(calibrator, policy, thresholds, enabled=True)`
+    combines adaptive 4/8/16 analysis and the gate in one call.
+  - `save_thresholds` / `load_thresholds` handle the hash-bound
+    artifact (`QualityGateMismatchError`).
+- **`scripts/quality_gate.py`**: `compute` / `fit` / `evaluate`.
+  Artifact at
+  `CONFIGUARD_CHECKPOINT_DIR\quality_gate\p80\quality_gate.json`.
+- **Production video path:** crops → `QualityAwareScorer`
+  (`ShapePinnedRunner`, ONNX FP32) → `AdaptiveVideoAnalyzer` (6d
+  calibration) → quality gate → verdict + reason codes.
+
 ## Repository layout
 
 ```
@@ -907,6 +928,8 @@ ConfiGuard-Lite/
 │   │   ├── embeddings.py, gru.py
 │   ├── export/                  Production ONNX export + hash-checked package (Phase 8)
 │   │   ├── onnx_student.py, package.py
+│   ├── quality/                 Downgrade-only media-quality safety gate (Phase 9)
+│   │   ├── signals.py, gate.py
 │   ├── memory_guard.py          available-RAM floor (Phase 6e)
 │   └── training/                Reproducible training pipeline (Phase 5)
 │       ├── config.py, paths.py, splits.py, datasets.py, sampling.py,
@@ -921,7 +944,8 @@ ConfiGuard-Lite/
 │                              student training/pilot + student comparison,
 │                              calibration split/fit, adaptive video evaluation,
 │                              robust stress suite + evaluation,
-│                              temporal GRU experiment, production ONNX export)
+│                              temporal GRU experiment, production ONNX export,
+│                              quality gate compute/fit/evaluate)
 ├── tests/                    pytest suite (unit + integration), tests/conftest.py +
 │                              tests/media/conftest.py + tests/datasets/conftest.py +
 │                              tests/models/conftest.py generate all fixtures at
