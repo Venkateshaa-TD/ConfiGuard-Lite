@@ -73,6 +73,14 @@ resolution and duration. The Phase 5d audit found the F2F/NT width
 change to be a centred crop with no residual geometric cue. Fakes are
 somewhat blurrier than their matched reals (a genuine artifact).
 
+## Phase 7 temporal head (development data only)
+
+- **Tested:** a 157k-parameter GRU over frozen frame embeddings.
+- **Outcome:** no meaningful gain (val video AUROC +0.0014, CI
+  includes 0), with more false positives at 0.5. Not used.
+- **Production video score:** still the mean of frame logits over the
+  4/8/16 nested frames, with Phase 6c/6d calibration.
+
 ## Phase 6e robustness (development data only)
 
 - **Production default:** `student_distilled_p80` (unchanged).

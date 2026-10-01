@@ -816,6 +816,27 @@ On this machine the store root is `D:\ConfiGuard-Data\cache\ffpp_face_crops\stor
   `evaluate` (per-condition metrics, decision rule, calibration
   invalidation check).
 
+## Temporal head experiment (Phase 7, `src/configuard/temporal/`; not in the production path)
+
+- **`embeddings.py`**: `extract` gives frozen-student features + frame
+  logits in row order and refuses test rows.
+  - `EmbeddingCache` (`<cache>\temporal_embeddings\<ckpt sha12>\<set>.npz`
+    + JSON sidecar of checkpoint SHA-256, row-SHA list hash and feature
+    dim) raises `StaleEmbeddingCacheError` on mismatch.
+  - `to_videos` builds a `VideoSet` (V, 16, D) in slot order and checks
+    `nested_levels`.
+  - `VideoSet.stage(k)` returns the nested 4/8/16 views.
+- **`gru.py`**: `ResidualGRUHead` (Linear D→64 → GELU → 1-layer GRU
+  128 → zero-init Linear, added to the mean frame logit),
+  `GRUTrainConfig`, `train_gru` (nested-k batches, class-weighted BCE,
+  early stopping) and `predict`.
+- **`configuard.memory_guard.process_rss_mb`**: process working set
+  for RAM reporting.
+- **`scripts/temporal_gru.py`**: `extract` / `train` / `evaluate`,
+  with the pre-registered selection rule in `RULE`.
+- **Decision:** rejected. Production video scoring stays as the mean
+  frame logit (Phase 4/6d).
+
 ## Repository layout
 
 ```
@@ -859,6 +880,8 @@ ConfiGuard-Lite/
 │   │   ├── policy.py, analyzer.py
 │   ├── robust/                  Robust augmentation, stress suite, safe scoring (Phase 6e)
 │   │   ├── degrade.py, stress.py, scoring.py
+│   ├── temporal/                Frame-embedding cache + GRU head experiment (Phase 7; rejected)
+│   │   ├── embeddings.py, gru.py
 │   ├── memory_guard.py          available-RAM floor (Phase 6e)
 │   └── training/                Reproducible training pipeline (Phase 5)
 │       ├── config.py, paths.py, splits.py, datasets.py, sampling.py,
@@ -872,7 +895,8 @@ ConfiGuard-Lite/
 │                              GenD teacher download + teacher-logit caching,
 │                              student training/pilot + student comparison,
 │                              calibration split/fit, adaptive video evaluation,
-│                              robust stress suite + evaluation)
+│                              robust stress suite + evaluation,
+│                              temporal GRU experiment)
 ├── tests/                    pytest suite (unit + integration), tests/conftest.py +
 │                              tests/media/conftest.py + tests/datasets/conftest.py +
 │                              tests/models/conftest.py generate all fixtures at

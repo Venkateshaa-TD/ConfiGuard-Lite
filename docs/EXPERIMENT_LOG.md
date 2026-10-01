@@ -1714,3 +1714,99 @@ recalibrated before use.
 .venv/Scripts/python.exe -m pytest tests/robust tests/distill tests/calibration tests/adaptive -q -p no:cacheprovider   # 40 passed
 .venv/Scripts/python.exe -m pytest -q -p no:cacheprovider -rs     # 553 passed, 0 skipped, 271.94 s
 ```
+
+---
+
+## 2026-10-01 — Phase 7 GRU temporal head (frozen student_distilled_p80)
+
+```
+.venv/Scripts/python.exe scripts/temporal_gru.py extract     # 4 workers, 4 GB RAM floor, resumable per set
+.venv/Scripts/python.exe scripts/temporal_gru.py train
+.venv/Scripts/python.exe scripts/temporal_gru.py evaluate
+```
+
+**Embeddings:**
+- The frozen p80 student (`best.pt` `03f648b1…`) produced 1280-d
+  pooled features plus frame logits, in manifest order. They are cached
+  at `D:\ConfiGuard-Data\cache\temporal_embeddings\03f648b16613\`
+  (385 MB, float16 features).
+- Sets: train (all 57,040 crops, every partition), val (11,120) and 8
+  val stress conditions (blur σ1/σ2, resize 0.5/0.33, noise σ4/σ10,
+  x264 CRF 30/37).
+- Each set took 80–300 s; minimum available RAM was 5.7 GB.
+- The cached val logits equal the Phase 6c val logits exactly (max
+  |Δ| 0.0), so the baseline uses identical frame scores.
+- Test split: never read (`extract` refuses test rows).
+
+**Head:**
+- Residual: `mean(frame logits) + Linear(128→1)(GRU(Linear 1280→64 →
+  GELU))`, with one GRU layer, hidden 128 and 156,609 parameters
+  (0.60 MB fp32).
+- The output layer is zero-initialised, so the untrained head equals
+  the current aggregation.
+- Training: `final_train` videos only (2,850; the student's own
+  training partition; calibration partitions untouched) with nested
+  k ∈ {4, 8, 16} drawn per batch.
+- Class-weighted BCE; AdamW lr 1e-3, wd 1e-2; bs 64; dropout 0.2;
+  seed 42. Early stopping on val video AUROC (k16), patience 5.
+- 6 epochs in 0.39 min. Best epoch 0. Train loss went 0.052 → 0.012,
+  because the student's features on its own training videos are
+  near-separable.
+- Head: `D:\ConfiGuard-Data\checkpoints\temporal\gru_p80\best.pt`
+  (`51b299e7…`); report `gru_eval_20261001-205208.json`.
+
+**Clean val (695 videos, same videos for both):**
+
+| aggregation | AUROC | AUPRC | FPR@0.5 | TPR@0.5 | balanced acc@0.5 | FPR@TPR 0.90 | AUROC DF / F2F / FS / NT |
+|---|---|---|---|---|---|---|---|
+| mean logit k4 | 0.9721 | 0.9934 | 0.144 | 0.944 | 0.9002 | 0.050 | 0.989 / 0.984 / 0.995 / 0.921 |
+| GRU k4 | 0.9736 | 0.9937 | 0.288 | 0.969 | 0.8408 | 0.050 | 0.988 / 0.985 / 0.993 / 0.929 |
+| mean logit k8 | 0.9730 | 0.9936 | 0.158 | 0.950 | 0.8957 | 0.036 | 0.988 / 0.986 / 0.994 / 0.925 |
+| GRU k8 | 0.9738 | 0.9937 | 0.266 | 0.969 | 0.8516 | 0.050 | 0.987 / 0.986 / 0.990 / 0.932 |
+| **mean logit k16 (current)** | 0.9735 | 0.9937 | **0.165** | 0.953 | **0.8939** | 0.029 | 0.988 / 0.985 / 0.994 / 0.927 |
+| GRU k16 | 0.9749 | 0.9939 | 0.273 | 0.971 | 0.8489 | 0.029 | 0.988 / 0.987 / 0.993 / 0.931 |
+
+- Paired video bootstrap, k16 (GRU − mean): ΔAUROC +0.0014, 95% CI
+  [−0.0015, +0.0051].
+- At the fixed 0.5 threshold, the GRU shifts scores towards "fake":
+  more detections, but FPR 0.165 → 0.273. Both models are uncalibrated
+  here.
+
+**Stress subset (video AUROC at k16; FPR@0.5 mean → GRU):**
+
+| condition | mean | GRU | FPR@0.5 | NT AUROC mean → GRU |
+|---|---|---|---|---|
+| blur σ1.0 | 0.9560 | 0.9565 | 0.237 → 0.417 | 0.896 → 0.900 |
+| blur σ2.0 | 0.8212 | 0.8211 | 1.000 → 1.000 | 0.696 → 0.696 |
+| resize 0.5 | 0.9560 | 0.9561 | 0.345 → 0.540 | 0.890 → 0.891 |
+| resize 0.33 | 0.8883 | 0.8883 | 0.849 → 0.921 | 0.824 → 0.826 |
+| noise σ4 | 0.8945 | 0.8902 | 0.007 → 0.036 | 0.787 → 0.775 |
+| noise σ10 | 0.6922 | 0.6811 | 0.000 → 0.050 | 0.578 → 0.571 |
+| x264 CRF30 | 0.9037 | 0.9032 | 0.122 → 0.281 | 0.752 → 0.751 |
+| x264 CRF37 | 0.8548 | 0.8511 | 0.144 → 0.266 | 0.672 → 0.669 |
+
+Mean stress ΔAUROC: −0.0024.
+
+**Cost (head only, k16, one video, 8 CPU threads):**
+- Parameters: 156,609 (0.60 MB).
+- CPU: GRU 1.98 / 2.24 ms (P50/P95) vs mean 0.02 ms. The CPU backbone
+  for 16 frames takes 106 / 134 ms, so the overhead is 1.9%.
+- GPU: GRU 1.24 / 1.68 ms vs fp16 backbone 22.8 / 27.1 ms, an
+  overhead of 5.5%. Peak GPU memory for the head is 17 MB.
+- RAM: CPU process RSS rose 2 MB during GRU inference.
+
+**Pre-registered rule** (in `scripts/temporal_gru.py`, fixed before
+results): select the GRU iff the improvement is meaningful AND clean
+AUROC loss ≤ 10% AND head latency ≤ 10% of the backbone.
+- "Meaningful" means clean Δ ≥ +0.005 with a CI lower bound > 0, or
+  mean stress Δ ≥ +0.02 with clean loss ≤ 0.005.
+- Result: clean +0.0014 (CI includes 0) and stress −0.0024, so it is
+  not meaningful. The clean-loss and latency checks pass.
+- **Rejected; the mean-frame-logit aggregation stays.**
+
+## 2026-10-01 — Phase 7 tests
+
+```
+.venv/Scripts/python.exe -m pytest tests/temporal tests/robust -q -p no:cacheprovider    # 12 passed
+.venv/Scripts/python.exe -m pytest -q -p no:cacheprovider -rs                         # 558 passed, 0 skipped, 300.56 s
+```

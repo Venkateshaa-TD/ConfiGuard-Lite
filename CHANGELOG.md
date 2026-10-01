@@ -385,3 +385,19 @@ All notable changes to this project are documented here.
 - Found a blur/downscale → "fake" shortcut in the current model.
   Calibration artifacts refuse the robust checkpoint.
 - 7 new tests; full suite 553/553. Test split sealed; no recalibration.
+
+### Phase 7 — Efficient temporal video head (2026-10-01)
+
+- Added `configuard.temporal`:
+  - `embeddings`: ordered, hash-checked frame-embedding cache and
+    nested-k `VideoSet`; refuses test rows;
+  - `gru`: residual 1-layer GRU head (hidden 128), training and
+    prediction.
+- Added `memory_guard.process_rss_mb` and `scripts/temporal_gru.py`
+  (extract / train / evaluate).
+- Cached embeddings for train, val and 8 stress conditions (385 MB on
+  D:).
+- GRU vs mean aggregation (val, k16): AUROC 0.9749 vs 0.9735 (CI
+  includes 0), stress −0.0024, FPR@0.5 0.273 vs 0.165. **Rejected**;
+  the mean aggregation stays.
+- 5 new tests; full suite 558/558. No recalibration, test access or ONNX export.

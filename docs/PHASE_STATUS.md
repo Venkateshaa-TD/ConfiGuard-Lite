@@ -16,6 +16,7 @@
 | 6c | Calibration and the "uncertain" output | PASS | 2026-10-01 |
 | 6d | Adaptive 4/8/16-frame video inference | PASS | 2026-10-01 |
 | 6e | Compression-robust student training (experiment; not selected) | PASS | 2026-10-01 |
+| 7 | Efficient temporal video head (GRU evaluated; rejected) | PASS | 2026-10-01 |
 
 Full per-phase results are recorded below as they complete.
 
@@ -816,3 +817,50 @@ inference, test-split access, Phase 6f/7.
 **Open items:** the blur/downscale shortcut; early stopping
 confounded by the curriculum; calibration artifacts apply only to the
 current model (`docs/KNOWN_ISSUES.md`).
+
+---
+
+## Phase 7 — Efficient temporal video head
+
+**Status:** PASS. The phase is complete. The GRU was evaluated and
+**rejected**, and the current mean-frame-logit aggregation is kept.
+
+**Summary:**
+- Ordered 1280-d frame embeddings from the frozen p80 student are
+  cached on D: (train/val + 8 stress conditions; 385 MB; RAM-floored
+  and resumable).
+- A residual 1-layer GRU (hidden 128, 157k params) was trained on
+  `final_train` with nested k = 4/8/16.
+- Clean val video AUROC is 0.9749 vs 0.9735 (Δ +0.0014, CI
+  [−0.0015, 0.0051]); stress mean Δ −0.0024.
+- FPR@0.5 is worse (0.165 → 0.273), and balanced accuracy drops 0.894
+  → 0.849.
+- NeuralTextures is 0.931 vs 0.927. Latency overhead is 2–5% of the
+  backbone.
+
+**Requirements:**
+1. Ordered embeddings cached on D: for train (all partitions,
+   including calibration), val and the stress subset; never test.
+   **Met.**
+2. 1-layer GRU, hidden ≤ 128 (enforced in code). **Met.**
+3. GRU trained with MobileNetV4 frozen (cached embeddings), no
+   hyperparameter search. **Met.**
+4. Slot order preserved and checked; nested 4/8/16 views from one
+   cache; GRU trained on `final_train` only with its partition hash
+   checked. **Met.**
+5. GRU vs current aggregation on the same 695 videos, at k = 4, 8 and
+   16. **Met.**
+6. Clean AUROC, FPR, balanced accuracy, NeuralTextures, params, RAM,
+   CPU/GPU latency. **Met.**
+7. Stress subset (blur, downscale, noise, H.264 × 2 severities).
+   **Met.**
+8. Pre-registered selection rule applied; the GRU was not selected.
+   **Met.**
+9. Current aggregation kept and the reason documented. **Met.**
+10. No recalibration, test access, ONNX export or Phase 8. **Met.**
+11. Targeted tests (12), then one full suite: 558/558 (301 s). **Met.**
+12. Docs updated and committed. **Met.**
+
+**Open items:** the GRU had to be trained on in-sample student
+features (stacking limitation). A fair temporal test needs out-of-fold
+features or end-to-end fine-tuning (`docs/KNOWN_ISSUES.md`).

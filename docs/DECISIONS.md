@@ -4,6 +4,34 @@ Format: one entry per decision, newest first.
 
 ---
 
+## 2026-10-01 — Phase 7: residual GRU head rejected; mean-frame-logit aggregation kept
+
+- **Design tested:** a residual GRU over frozen embeddings (zero-init
+  output, so it starts as the current aggregation) with nested
+  4/8/16 sequences from one cache. 157k params and 1–2 ms per video.
+- **Training data choice:** the GRU trains on `final_train` only, the
+  same families the student saw. temp_cal and conformal_cal stay
+  untouched for a future recalibration, and val stays the dev set.
+  - Cost: the student's features on its own training videos are
+    near-separable (train loss 0.05 → 0.01), so the GRU has almost
+    nothing to learn and generalises as a small bias shift.
+- **Result vs the pre-registered rule:**
+  - clean ΔAUROC +0.0014 (CI includes 0) and stress Δ −0.0024, so
+    there is no meaningful improvement;
+  - FPR@0.5 0.165 → 0.273 (the scores move toward "fake").
+  - Rejected. The Phase 4/6 mean-frame-logit aggregation and the
+    Phase 6c/6d calibration artifacts remain the production path.
+- **Kept:** the embedding cache and the GRU code/checkpoint as
+  experiment artifacts.
+- **Possible later options, not started:**
+  - out-of-fold student features (k-fold students) for a fair
+    temporal head;
+  - short end-to-end fine-tuning with temporal augmentation;
+  - temporal features that frame averaging cannot see (e.g.
+    landmark/flicker statistics).
+
+---
+
 ## 2026-10-01 — Phase 6e: robust augmentation recorded as an experiment; current p80 model stays the default
 
 - **Rule:** prefer the robust model only if worst-case and mean

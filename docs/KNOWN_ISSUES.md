@@ -4,6 +4,18 @@ Format: one entry per issue. Mark resolved issues rather than deleting them.
 
 ---
 
+## OPEN — Temporal head trained on in-sample features (Phase 7)
+
+The GRU learned from embeddings of the student's own training videos,
+on which the student is nearly perfect. That masks temporal structure
+the frozen features might carry on unseen videos. The rejection is
+therefore a result about this training setup, not proof that temporal
+modelling cannot help.
+
+Using the held-out calibration partitions instead would remove the
+bias but consume data reserved for recalibration. Out-of-fold
+features or end-to-end training would be needed, at extra cost.
+
 ## OPEN — Current model treats blur/downscaling as evidence of manipulation (Phase 6e)
 
 On the stress suite, the production-default student
