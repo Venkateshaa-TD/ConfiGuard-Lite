@@ -50,16 +50,20 @@ def _checkpoint_meta(checkpoint: str | Path) -> dict[str, Any]:
 
 
 def build_artifact(checkpoint: str | Path, levels: dict[str, dict[str, Any]], default_alpha: float,
-                   calibration_provenance: dict[str, Any]) -> dict[str, Any]:
-    if set(levels) != set(LEVELS):
-        raise ValueError(f"levels must be exactly {LEVELS}")
+                   calibration_provenance: dict[str, Any], required_levels: tuple[str, ...] = LEVELS,
+                   extra: dict[str, Any] | None = None) -> dict[str, Any]:
+    """`required_levels`: ("frame", "video") for Phase 6c; ("video_k4", "video_k8",
+    "video_k16") for the Phase 6d adaptive stages. `extra` (e.g. the stopping
+    policy) is covered by the content hash like everything else."""
+    if set(levels) != set(required_levels):
+        raise ValueError(f"levels must be exactly {required_levels}")
     meta = _checkpoint_meta(checkpoint)
     body = {
         "schema": SCHEMA, "checkpoint_sha256": file_sha256(checkpoint),
         "model_config": meta["config"], "model_config_sha256": hashlib.sha256(canonical_json(meta["config"])).hexdigest(),
         "model_provenance": meta["provenance"], "calibration_provenance": calibration_provenance,
         "default_alpha": default_alpha, "levels": levels,
-    }
+    } | (extra or {})
     return body | {"content_sha256": hashlib.sha256(canonical_json(body)).hexdigest()}
 
 
@@ -105,8 +109,8 @@ class Calibrator:
         raise KeyError(f"no {mode} conformal thresholds for level={level} alpha={alpha}")
 
     def calibrate(self, logits: np.ndarray, level: str) -> np.ndarray:
-        if level not in LEVELS:
-            raise ValueError(f"level must be one of {LEVELS}")
+        if level not in self.artifact["levels"]:
+            raise ValueError(f"level must be one of {sorted(self.artifact['levels'])}")
         return sigmoid(np.asarray(logits, np.float64) / self.temperature(level))
 
     def predict(self, logits: np.ndarray, level: str, alpha: float | None = None,

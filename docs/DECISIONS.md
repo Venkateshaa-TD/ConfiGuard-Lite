@@ -4,6 +4,50 @@ Format: one entry per decision, newest first.
 
 ---
 
+## 2026-10-01 — Phase 6d: adaptive 4 → 8 → 16 with per-stage calibration and α spending 0.015/0.015/0.02
+
+**Stages:**
+- The Phase 5d nested sampling contract is reused: 4 ⊂ 8 ⊂ 16 slots.
+- Stage k scores only the slots not already scored, and its video
+  score is the mean logit over the k-set. This is the same aggregation
+  as Phase 4/6c, so no GRU is involved.
+- Per-frame logits are cached per video, so a frame is never re-scored.
+
+**Calibration:**
+- Each stage has its own temperature (on temp_cal) and mondrian
+  thresholds (on conformal_cal). A 4-frame mean is noisier than a
+  16-frame mean: T is 0.72 / 0.68 / 0.62 for 4 / 8 / 16 frames.
+- Everything is stored in `adaptive_calibration.json` (`kind:
+  adaptive-4-8-16`) with the policy inside the content hash, bound to
+  `best.pt` like the 6c artifact.
+- `build_artifact` takes `required_levels` and `extra`; Phase 6c
+  artifacts are byte-compatible.
+
+**Stopping rule:**
+- Stop at 4 or 8 frames only on a singleton set at that stage's α_k;
+  otherwise escalate.
+- At 16 frames, a singleton gives a verdict; an empty or two-label set
+  gives "uncertain".
+
+**α spending:**
+- 0.015 + 0.015 + 0.02 = 0.05. Under exchangeability, the union bound
+  keeps the probability that the committed label is wrong at most 0.05,
+  regardless of which stage stopped.
+- Each α_k must be at least 1/(n_min + 1) = 1/72 with 71 real
+  calibration videos, which is why the split is not
+  0.01/0.01/0.03 (the script refuses unsupported α).
+- Equal 0.05 at every stage (no spending) cut frames further (4.4) but
+  doubled the dev FPR (4.3%), so it was rejected.
+- **Coverage under domain shift is empirical, not guaranteed:**
+  - dev coverage 0.964 exceeded nominal here;
+  - the single-stage 6c version fell short (0.927) on the same split.
+
+**Measured trade-off:** 61% fewer frames and lower FPR than fixed-16,
+paid for with more "uncertain" (13% vs 6%), concentrated on originals
+and NeuralTextures.
+
+---
+
 ## 2026-10-01 — Phase 6c: family-component partitions, per-level temperature, label-conditional (mondrian) conformal at α 0.05 as default
 
 **Partitions:**

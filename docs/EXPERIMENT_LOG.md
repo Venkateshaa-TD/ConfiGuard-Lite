@@ -1441,3 +1441,103 @@ abstention at the same abstention rate.
 ```
 - New tests: `tests/calibration/test_calibration.py` (9 tests) and 1
   trainer-partition test in `tests/distill` (16 there now).
+
+---
+
+## 2026-10-01 — Phase 6d adaptive 4/8/16-frame video inference
+
+```
+.venv/Scripts/python.exe scripts/adaptive_video_eval.py --run student_distilled_p80
+```
+- **Model:** `student_distilled_p80` (`best.pt` `03f648b1…8957`).
+- **Frame logits:** the per-frame logits cached in Phase 6c were reused
+  for temp_cal, conformal_cal and val. Nothing was re-scored.
+- **Stage score:** stage k uses the mean logit over the nested k-set
+  (4 = slots 0/4/8/12, 8 = even slots, 16 = all), checked against
+  every row's `nested_levels`.
+- **Artifact:** `adaptive_calibration.json`.
+  - File SHA-256 `790c12166e583aaeef9fba7d96b60fbd7d9fc9802c9da8c76fb7571341c7f2a2`.
+  - Content SHA-256 `1bae6e40…74ab`.
+  - Bound to `best.pt`. Loading it against the 6b checkpoint raised
+    `CalibrationMismatchError`, and the 6c `calibration.json` still
+    loads.
+- **Report:** `...\student_distilled_p80\adaptive_report.json`.
+
+**Per-stage calibration.** Temperature is fitted on temp_cal (360
+videos) and mondrian thresholds on conformal_cal (355 videos: 71 real,
+284 fake).
+
+| stage | T | temp_cal ECE raw → scaled | q_real / q_fake at spent α | q_real / q_fake at α 0.05 |
+|---|---|---|---|---|
+| 4 frames | 0.723 | 0.053 → 0.034 | 0.970 / 0.783 (α 0.015) | 0.915 / 0.241 |
+| 8 frames | 0.675 | 0.052 → 0.034 | 0.977 / 0.850 (α 0.015) | 0.950 / 0.147 |
+| 16 frames | 0.623 | 0.061 → 0.037 | 0.974 / 0.674 (α 0.02) | 0.963 / 0.123 |
+
+**Policy:**
+- Stop at 4 or 8 frames only on a singleton set; otherwise escalate.
+- At 16 frames, return the singleton verdict or "uncertain".
+- α spending is 0.015 + 0.015 + 0.02 = 0.05 (union bound). The minimum
+  supported α is 1/72 ≈ 0.0139, set by 71 real calibration videos.
+
+**Development results (official val, 695 videos).** FPR is the share
+of real videos called "likely manipulated"; miss is the share of fakes
+called "likely real"; coverage means the true label is in the final
+set.
+
+| inference | AUROC | avg frames | uncertain | decided acc | FPR | miss | detection | coverage |
+|---|---|---|---|---|---|---|---|---|
+| fixed 4 (α 0.05) | 0.9721 | 4.00 | 0.047 | 0.9335 | 0.0360 | 0.0701 | 0.8831 | 0.9367 |
+| fixed 8 (α 0.05) | 0.9730 | 8.00 | 0.060 | 0.9296 | 0.0288 | 0.0755 | 0.8597 | 0.9338 |
+| fixed 16 (α 0.05) | **0.9735** | 16.00 | 0.058 | 0.9221 | 0.0216 | 0.0863 | 0.8489 | 0.9266 |
+| **adaptive (spent)** | 0.9731 | **6.19** | 0.132 | **0.9585** | **0.0144** | **0.0414** | 0.8363 | **0.9640** |
+| adaptive, unspent ablation (α 0.05 every stage) | 0.9717 | 4.44 | 0.022 | 0.9206 | 0.0432 | 0.0863 | 0.8903 | 0.9223 |
+
+- **Targets:**
+  - Frame reduction is 61.3% vs fixed-16 (target ≥ 40%).
+  - FPR is 1.44% vs 2.16% for fixed-16 (target: no more than +1 pp).
+    **Both met.**
+- **Stopping:**
+  - 556 videos stopped at 4 frames and 18 at 8 (confident singleton).
+  - 29 reached 16 frames and got a singleton.
+  - 92 reached 16 frames and ended uncertain (both labels in the set).
+- **Unspent ablation:** without α spending, early stopping doubles the
+  FPR (4.3%). The spending is what keeps false accusations down.
+- **Cost:** adaptive abstains more (13.2% vs 5.8%) and detects slightly
+  fewer fakes outright (83.6% vs 84.9%). It halves outright misses
+  (4.1% vs 8.6%), and the extra uncertain verdicts absorb the hard
+  cases.
+- **On conformal_cal (in-sample sanity check):** fixed-k coverage is
+  0.958 by construction. Adaptive coverage is 0.986 with FPR 0, which
+  shows how conservative the union bound is.
+
+**Per manipulation (dev videos, 139 each):**
+
+| class | fixed-16: uncertain / decided acc / detection (FPR for originals) / AUROC | adaptive: frames / uncertain / decided acc / detection (FPR) / AUROC |
+|---|---|---|
+| original | 0.029 / 0.978 / FPR 0.022 / – | 6.99 / 0.173 / 0.983 / FPR 0.014 / – |
+| Deepfakes | 0.065 / 0.946 / 0.885 / 0.988 | 5.41 / 0.086 / 0.976 / 0.892 / 0.989 |
+| Face2Face | 0.014 / 0.949 / 0.935 / 0.985 | 5.12 / 0.065 / 0.977 / 0.914 / 0.983 |
+| FaceSwap | 0.014 / 0.964 / 0.950 / 0.994 | 4.75 / 0.043 / 0.993 / 0.950 / 0.995 |
+| NeuralTextures | 0.165 / 0.750 / 0.626 / 0.927 | 8.69 / 0.295 / 0.837 / 0.590 / 0.926 |
+
+**Latency (live, all 695 dev videos).** Scope: read + PNG decode of the
+needed crops, student forward, and the decision. Face detection and
+alignment are excluded. Live verdicts and frame counts match the
+simulation: 100% on GPU and 99.86% on CPU (1 borderline video;
+fp32 vs fp16 logits).
+
+| device | adaptive P50 / P95 / mean | fixed-16 P50 / P95 / mean |
+|---|---|---|
+| RTX 4050 (fp16, batch = new frames per stage) | 32.7 / 111.3 / 47.0 ms | 81.2 / 84.8 / 80.3 ms |
+| CPU (8 threads, fp32) | 50.2 / 183.2 / 74.6 ms | 139.6 / 177.1 / 146.3 ms |
+
+- Median and mean latency drop by about 40–60%.
+- P95 is slightly worse than fixed-16: an escalated video makes three
+  sequential calls (4 + 4 + 8 frames) instead of one batch of 16.
+
+## 2026-10-01 — Phase 6d tests
+
+```
+.venv/Scripts/python.exe -m pytest tests/adaptive tests/calibration -q -p no:cacheprovider   # 17 passed
+.venv/Scripts/python.exe -m pytest -q -p no:cacheprovider -rs                               # 546 passed, 0 skipped, 212.52 s
+```

@@ -4,6 +4,32 @@ Format: one entry per issue. Mark resolved issues rather than deleting them.
 
 ---
 
+## OPEN — Adaptive inference abstains more, especially on originals and NeuralTextures (Phase 6d)
+
+On dev, adaptive inference returns "uncertain" for 13.2% of videos
+(fixed-16: 5.8%): 17.3% of originals and 29.5% of NeuralTextures.
+
+The stricter stage α values make two-label sets at 16 frames common
+for borderline videos. That is the intended price for the lower FPR
+(1.44%) and miss rate (4.1%). A product surface needs to present
+"uncertain" well. Any later change to α spending must be re-validated
+on dev, and the FPR result must not be carried over without that.
+
+## OPEN — Adaptive P95 latency is not lower than fixed-16 (Phase 6d)
+
+Escalated videos run three sequential student calls (4 + 4 + 8 frames)
+instead of one 16-frame batch. GPU P95 is 111 ms vs 85 ms; CPU P95 is
+183 vs 177 ms. P50 and mean improve by about 40–60%. Timings exclude
+face detection and alignment, which also scale with frames decoded.
+
+## OPEN — Adaptive coverage is empirical under shift (Phase 6d)
+
+The union-bound guarantee needs dev or deployment videos to be
+exchangeable with conformal_cal, and Phase 6c showed they are not even
+inside FF++. Dev coverage (0.964) happened to exceed nominal, but this
+is not guaranteed on other datasets, compressions or
+manipulation types.
+
 ## OPEN — Conformal coverage falls short on official val (calibration/dev shift) (Phase 6c)
 
 The student does better on held-out TRAIN families than on official val

@@ -762,6 +762,34 @@ On this machine the store root is `D:\ConfiGuard-Data\cache\ffpp_face_crops\stor
   level, writes `calibration.json` and `calibration_report.json`, and
   refuses models not trained on `final_train`.
 
+## Adaptive 4/8/16-frame video inference (Phase 6d, `src/configuard/adaptive/`)
+
+- **`policy.py`**:
+  - `StagePolicy`: stages (4, 8, 16), per-stage α spending (default
+    0.015/0.015/0.02), mondrian mode.
+  - `stage_slots(k)`: the nested slot sets.
+  - `decide_stage`: temperature + conformal set for one stage.
+  - `min_supported_alpha(n) = 1/(n+1)`.
+- **`analyzer.py`**:
+  - `AdaptiveVideoAnalyzer.analyze(scorer, available=None)` escalates
+    4 → 8 → 16 and asks the scorer only for slots not yet scored.
+  - It returns an `AdaptiveResult`: verdict, `stopping_reason`
+    (`confident_singleton_k4|k8`, `final_k16_singleton`,
+    `final_k16_uncertain_both|empty`, `insufficient_frames_for_kN`),
+    `frames_used`, `p_fake`, `confidence`, per-stage decisions, the
+    evidence `timeline` (slot, position, logit, raw P(fake), stage
+    added) and latency.
+  - `fixed(scorer, k, alpha)` is the non-adaptive baseline.
+  - Scorers: `ArrayScorer` (precomputed logits) and `StudentCropScorer`
+    (reads and decodes crops, then runs the student per stage batch).
+- **Calibration:** `adaptive_calibration.json` (levels
+  `video_k4/k8/k16`, policy in the content hash), loaded with
+  `load_calibration` and the same checkpoint/config/hash checks as
+  Phase 6c.
+- **`scripts/adaptive_video_eval.py`**: fits the per-stage calibration,
+  simulates fixed vs adaptive on dev, runs the live GPU/CPU latency and
+  agreement checks, and writes `adaptive_report.json`.
+
 ## Repository layout
 
 ```
@@ -801,6 +829,8 @@ ConfiGuard-Lite/
 │   │   ├── data.py, augment.py, losses.py, evaluate.py, train.py, infer.py
 │   ├── calibration/             Partitions, temperature, conformal, artifacts (Phase 6c)
 │   │   ├── partitions.py, core.py, artifact.py
+│   ├── adaptive/                Adaptive 4/8/16-frame video inference (Phase 6d)
+│   │   ├── policy.py, analyzer.py
 │   └── training/                Reproducible training pipeline (Phase 5)
 │       ├── config.py, paths.py, splits.py, datasets.py, sampling.py,
 │       │   dataloader.py, optim.py, metrics.py, checkpoint.py,
@@ -812,7 +842,7 @@ ConfiGuard-Lite/
 │                              matched face-crop extraction + shortcut audit,
 │                              GenD teacher download + teacher-logit caching,
 │                              student training/pilot + student comparison,
-│                              calibration split/fit)
+│                              calibration split/fit, adaptive video evaluation)
 ├── tests/                    pytest suite (unit + integration), tests/conftest.py +
 │                              tests/media/conftest.py + tests/datasets/conftest.py +
 │                              tests/models/conftest.py generate all fixtures at

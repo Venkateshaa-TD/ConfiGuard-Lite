@@ -10,7 +10,7 @@ operating rules this project is developed under.
 
 ## Status
 
-Phase 6c (calibrated distilled student with likely real / likely manipulated / uncertain verdicts; development data only, test sealed). Phase 6b trained the MobileNetV4 students (BCE baseline vs GenD-distilled). Phase 6a cached frozen GenD CLIP-L/14 teacher logits for train/val. Before that, Phase 5d (matched face-crop extraction and shortcut audit) — see
+Phase 6d (adaptive 4/8/16-frame video inference with calibrated likely real / likely manipulated / uncertain verdicts; development data only, test sealed). Phase 6c added calibration and the uncertain output. Phase 6b trained the MobileNetV4 students (BCE baseline vs GenD-distilled). Phase 6a cached frozen GenD CLIP-L/14 teacher logits for train/val. Before that, Phase 5d (matched face-crop extraction and shortcut audit) — see
 `docs/PHASE_STATUS.md` for current status. FF++ c23 (5000 videos,
 8.4 GiB) is downloaded to `D:`, validated, and split with the authors'
 official train/val/test files (720/140/140 originals, leakage-checked).
@@ -308,6 +308,21 @@ In code:
 from configuard.calibration.artifact import load_calibration
 cal = load_calibration(run_dir / "calibration.json", run_dir / "best.pt")  # refuses mismatches
 out = cal.predict(video_mean_logits, level="video")   # out.p_fake, out.verdicts
+```
+
+## Adaptive 4/8/16-frame video inference (Phase 6d)
+
+```powershell
+.venv\Scripts\python.exe scripts\adaptive_video_eval.py --run student_distilled_p80   # per-stage calibration + dev comparison + latency
+```
+
+```python
+from configuard.adaptive.analyzer import AdaptiveVideoAnalyzer, StudentCropScorer
+from configuard.adaptive.policy import StagePolicy
+from configuard.calibration.artifact import load_calibration
+cal = load_calibration(run_dir / "adaptive_calibration.json", run_dir / "best.pt")
+result = AdaptiveVideoAnalyzer(cal, StagePolicy()).analyze(StudentCropScorer(model, norm, crop_paths_by_slot))
+result.verdict, result.stopping_reason, result.frames_used, result.timeline
 ```
 
 ## Project layout

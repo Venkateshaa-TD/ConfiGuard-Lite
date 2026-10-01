@@ -73,6 +73,21 @@ resolution and duration. The Phase 5d audit found the F2F/NT width
 change to be a centred crop with no residual geometric cue. Fakes are
 somewhat blurrier than their matched reals (a genuine artifact).
 
+## Phase 6d adaptive video inference (FF++ c23, development data only)
+
+- **How it works:** videos are scored on 4 → 8 → 16 nested frames, and
+  the analysis stops early only on a confident conformal singleton.
+  Artifact: `adaptive_calibration.json`.
+- **Dev (official val, 695 videos):**
+  - 6.19 frames on average (−61%);
+  - FPR 1.44% (real flagged as manipulated), miss 4.1%;
+  - 13.2% uncertain; decided accuracy 95.9%;
+  - AUROC 0.973.
+- **Weakest class:** NeuralTextures, with 29.5% uncertain and 59%
+  detected outright.
+- **Coverage is empirical:** not guaranteed under shift.
+- No test-split or cross-dataset results. Do not deploy.
+
 ## Phase 6c calibrated student (FF++ c23, development data only)
 
 - **Model:** `student_distilled_p80` (`best.pt` SHA-256 `03f648b1…8957`),

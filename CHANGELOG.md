@@ -347,3 +347,22 @@ All notable changes to this project are documented here.
   documented).
 - 10 new tests; full suite 538/538. Test split sealed; no adaptive
   inference, robustness training or GRU.
+
+### Phase 6d — Adaptive 4/8/16-frame video inference (2026-10-01)
+
+- Added `configuard.adaptive`:
+  - `policy`: nested stage slots, `StagePolicy` with α spending, stage
+    decisions;
+  - `analyzer`: `AdaptiveVideoAnalyzer` with no re-scoring, stopping
+    reasons and evidence timeline; `ArrayScorer` / `StudentCropScorer`.
+- `build_artifact` gains `required_levels` / `extra`; 6c artifacts
+  unchanged.
+- Added `scripts/adaptive_video_eval.py` and `adaptive_calibration.json`
+  (per-stage T and mondrian thresholds).
+- Dev vs fixed-16:
+  - 61% fewer frames;
+  - FPR 1.44% vs 2.16%, coverage 0.964 vs 0.927;
+  - 13.2% vs 5.8% uncertain;
+  - P50 33 vs 81 ms on GPU.
+- 8 new tests; full suite 546/546. Test split sealed; no GRU, robustness training or test
+  evaluation.

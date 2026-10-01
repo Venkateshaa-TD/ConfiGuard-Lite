@@ -14,6 +14,7 @@
 | 6a | Frozen GenD teacher setup and logit caching | PASS | 2026-10-01 |
 | 6b | MobileNetV4 student distillation (baseline vs distilled) | PASS | 2026-10-01 |
 | 6c | Calibration and the "uncertain" output | PASS | 2026-10-01 |
+| 6d | Adaptive 4/8/16-frame video inference | PASS | 2026-10-01 |
 
 Full per-phase results are recorded below as they complete.
 
@@ -705,3 +706,54 @@ training, test evaluation.
 coverage falls short on dev; mondrian costs selective accuracy;
 video α 0.01 is unsupported at n = 71 reals; frames within a video are
 not exchangeable (`docs/KNOWN_ISSUES.md`).
+
+---
+
+## Phase 6d — Adaptive 4/8/16-frame video inference
+
+**Status:** PASS
+
+**Summary:** the calibrated distilled student now scores 4 → 8 → 16
+nested frames, scoring each frame once.
+- Each stage has its own temperature and mondrian conformal thresholds
+  (from the 6c partitions), with α spent 0.015/0.015/0.02.
+- It stops early only on a singleton set. At 16 frames it returns
+  likely real, likely manipulated or uncertain.
+- Every result records the stopping reason, frames used, confidence,
+  per-stage decisions and a per-frame evidence timeline.
+- Dev (val, 695 videos) vs fixed-16:
+  - 61% fewer frames (6.19 vs 16);
+  - FPR 1.44% vs 2.16%; coverage 0.964 vs 0.927; decided accuracy
+    0.959 vs 0.922;
+  - in exchange, 13.2% vs 5.8% uncertain;
+  - P50 latency 33 vs 81 ms (GPU) and 50 vs 140 ms (CPU); P95 is about
+    level.
+- Test split sealed.
+
+**Requirements:**
+1. Nested sets reused; 4 → 8 → 16 without re-scoring (tested: 16
+   distinct slots over 3 calls; the simulator asserts frames scored ==
+   frames used). **Met.**
+2. Separate temperature + conformal per 4/8/16 stage on the 6c
+   partitions. **Met.**
+3. Conservative α spending (sum 0.05, each ≥ 1/72). The empirical,
+   not guaranteed, nature of coverage under shift is documented in the
+   policy docstring, DECISIONS and KNOWN_ISSUES. **Met.**
+4. Early stop only on a confident singleton; otherwise escalate.
+   **Met.**
+5. Three verdicts at 16 frames. **Met.**
+6. Stopping reason, frames used, confidence and evidence timeline
+   recorded. **Met.**
+7. Fixed 4/8/16 vs adaptive (plus an unspent ablation) on dev. **Met.**
+8. AUROC, decided accuracy, FPR, coverage, abstention, average frames,
+   P50/P95 latency (GPU + CPU) and per-manipulation results. **Met.**
+9. ≥ 40% fewer frames (61%) without worse FPR (1.44% ≤ 2.16% + 1 pp).
+   **Met.**
+10. Targeted tests (17), full suite 546/546 (213 s), docs, commit. **Met.**
+
+**Not done (by instruction):** GRU, robustness training, test
+evaluation.
+
+**Open items:** higher abstention (originals 17%, NeuralTextures 30%);
+P95 latency is not reduced; coverage is still empirical under shift
+(`docs/KNOWN_ISSUES.md`).
