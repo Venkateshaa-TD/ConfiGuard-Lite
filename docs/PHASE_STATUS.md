@@ -11,6 +11,7 @@
 | 5b | Official FaceForensics++ c23 acquisition and validation | PASS | 2026-09-30 |
 | 5c | Official FaceForensics++ split integration | PASS | 2026-09-30 |
 | 5d | Matched face-crop extraction and shortcut audit | PASS | 2026-10-01 |
+| 6a | Frozen GenD teacher setup and logit caching | PASS | 2026-10-01 |
 
 Full per-phase results are recorded below as they complete.
 
@@ -556,3 +557,53 @@ atomic, stale-refusing store on D:.
 - Residual DF landmark-geometry signal (AUC 0.62).
 - `check_storage.py` doesn't load `.env`.
 
+---
+
+## Phase 6a — Frozen GenD teacher setup and logit caching
+
+**Status:** PASS
+
+**Summary:**
+- Only `yermandy/GenD_CLIP_L_14` was downloaded, at a pinned revision,
+  to D:. Its license (MIT), version and hashes are recorded.
+- The training-data check passed: official FF++ train only.
+- The teacher is rebuilt locally and strict-loaded from the pinned
+  weights.
+- It is fully frozen: 0 trainable parameters, eval mode, and parameter
+  grads stay None after backward.
+- Logits are cached for the train and val crops (68,160) with fp16
+  autocast at bs 64.
+- The cache resumes and rejects stale or mismatched entries.
+- The test split was never opened.
+- The previous session was interrupted during the 2-shard trial. The
+  trial resumed cleanly and the phase was completed in this session.
+
+**Requirements:**
+1. Only the official model + code was downloaded to the configured D:
+   HF cache (`openai/clip-vit-large-patch14` deliberately not
+   fetched). **Met.**
+2. Version, license and hashes are in `docs/DATASETS.md`. **Met.**
+3. Not trained on FF++ val/test: confirmed from the paper and code
+   (`docs/DECISIONS.md`). The per-frame lists are gated and could not
+   be diffed (`docs/KNOWN_ISSUES.md`). **Met (with a documented
+   residual).**
+4. Frozen: `load_gend_teacher` runs `requires_grad_(False)` + `eval()`.
+   `assert_frozen` runs at load and after every batch. Test with the
+   real weights passed. **Met.**
+5. Batch-size benchmark: fp16 bs 64 gives 90 img/s at 1.84 GiB peak.
+   **Met.**
+6. Cached train (57,040) and val (11,120) logits, consolidated
+   `teacher_logits.jsonl` per split. **Met.**
+7. Test untouched: `ProtectedSplitError` is raised up front and
+   per-row; the report has `test_split_touched: false`. **Met.**
+8. Resumable (rerun resumed 67/67, byte-identical) and stale-rejecting
+   (tag, crop-manifest SHA-256, per-shard crop SHA-256 lists and crop
+   bytes; tested). **Met.**
+9. Targeted tests (`tests/teacher`, 10) and the full suite (513/513).
+   **Met.**
+10. Docs updated; commit contains code, tests and docs only. **Met.**
+
+**Not done (by instruction):** no student training.
+
+**Open items:** gated GenD frame lists; crop-distribution mismatch
+with GenD's own detector; caching is I/O-bound (`docs/KNOWN_ISSUES.md`).

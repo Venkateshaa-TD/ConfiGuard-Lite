@@ -662,6 +662,38 @@ Contracts:
 
 On this machine the store root is `D:\ConfiGuard-Data\cache\ffpp_face_crops\store`.
 
+## Frozen GenD teacher and logit cache (Phase 6a, `src/configuard/teacher/`)
+
+- **`gend.py`** rebuilds GenD CLIP-L/14 (`CLIPVisionTransformer`, ViT-L/14,
+  224 px, `sdpa`) plus the unused `visual_projection` and a
+  `Linear(1024, 2)` head. It strict-loads the hash-pinned
+  `model.safetensors` from the HF cache on D:. `load_gend_teacher`
+  verifies the SHA-256, sets `requires_grad_(False)` and `eval()`, and
+  calls `assert_frozen`. Forward: CLIP mean/std normalisation →
+  `pooler_output` → L2 normalise → linear. Logits are `[real, fake]`.
+- **`cache.py`** (`TeacherLogitCache`):
+  `<cache>/teacher_logits/gend_clip_l14/<tag>/<split>/`.
+  - `meta.json` holds the teacher config, the crop-manifest SHA-256 and
+    the shard size.
+  - `shard_NNNNN.npz` covers fixed manifest rows and stores the tag,
+    the crop SHA-256s and float32 (n, 2) logits.
+  - `teacher_logits.jsonl` is consolidated in manifest order and keyed
+    by `crop_sha256`.
+  - The tag is a SHA-256 over the repo, revision, weights hash, head,
+    preprocessing, attention implementation, autocast dtype, batch
+    size, torch/transformers versions, shard size and schema.
+  - Allowed splits are `train` and `val`. `test` raises
+    `ProtectedSplitError`, and so does any row whose split differs from
+    the requested one.
+- **`scripts/cache_teacher_logits.py`** reads the Phase 5d store as-is.
+  It checks each crop manifest's SHA-256 against
+  `extraction_summary.json`, re-hashes crop bytes as they are decoded,
+  runs fp16 autocast at bs 64, logs progress/ETA/free space, and writes
+  a JSON report with teacher AUC/accuracy per split.
+  `--limit-shards N` writes to a separate `_trial` root.
+- The teacher is only a frozen, offline distillation target. It is
+  never trained, exported or used for serving.
+
 ## Repository layout
 
 ```
@@ -695,6 +727,8 @@ ConfiGuard-Lite/
 │   ├── crops/                   Matched FF++ face-crop extraction (Phase 5d)
 │   │   ├── families.py, matching.py, alignment.py, store.py, extract.py,
 │   │   │   manifests.py, audit_stats.py
+│   ├── teacher/                 Frozen GenD CLIP-L/14 teacher + logit cache (Phase 6a)
+│   │   ├── gend.py, cache.py
 │   └── training/                Reproducible training pipeline (Phase 5)
 │       ├── config.py, paths.py, splits.py, datasets.py, sampling.py,
 │       │   dataloader.py, optim.py, metrics.py, checkpoint.py,
@@ -703,7 +737,8 @@ ConfiGuard-Lite/
 │                              benchmark, storage check, baseline model download,
 │                              model benchmark, ONNX export, train, evaluate,
 │                              FF++ c23 download wrapper + validation, official split,
-│                              matched face-crop extraction + shortcut audit)
+│                              matched face-crop extraction + shortcut audit,
+│                              GenD teacher download + teacher-logit caching)
 ├── tests/                    pytest suite (unit + integration), tests/conftest.py +
 │                              tests/media/conftest.py + tests/datasets/conftest.py +
 │                              tests/models/conftest.py generate all fixtures at

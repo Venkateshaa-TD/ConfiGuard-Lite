@@ -73,6 +73,21 @@ resolution and duration. The Phase 5d audit found the F2F/NT width
 change to be a centred crop with no residual geometric cue. Fakes are
 somewhat blurrier than their matched reals (a genuine artifact).
 
+## Frozen teacher: GenD CLIP-L/14 (Phase 6a, distillation only)
+
+- **What it is:** `yermandy/GenD_CLIP_L_14` @ `891ce014…` (MIT),
+  303.97M params, trained by its authors on the official FF++ c23 train
+  split.
+- **How we use it:** it is loaded frozen and only provides offline soft
+  targets. It is not part of the shipped model and is never fine-tuned
+  here.
+- **Teacher quality on our crops:**
+  - val frame AUC 0.960 (DF 0.985, F2F 0.965, FS 0.983, NT 0.906);
+  - val video AUC 0.979;
+  - train frame AUC 0.978.
+- Test-split numbers do not exist by design. Provenance is in
+  `docs/DATASETS.md`.
+
 ## Phase 5 training pipeline: engineering verification only
 
 > ⚠️ **No accuracy claim.** Every Phase 5 training run used synthetic

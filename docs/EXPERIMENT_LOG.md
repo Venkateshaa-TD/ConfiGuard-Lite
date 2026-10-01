@@ -1112,3 +1112,71 @@ construction.
 .venv/Scripts/python.exe -m pytest tests/crops -q        # 44 passed
 .venv/Scripts/python.exe -m pytest -q -p no:cacheprovider -rs   # 503 passed, 0 skipped, 408.87 s (ran concurrently with the audit)
 ```
+
+---
+
+## 2026-10-01 — Phase 6a teacher download and provenance
+
+```
+.venv/Scripts/python.exe scripts/download_gend_teacher.py
+```
+- Downloaded `yermandy/GenD_CLIP_L_14` @ `891ce014a0308386c4d7d25b3dcf436a22db5504`
+  (6 files, 1.216 GB) into `D:\ConfiGuard-Data\cache\huggingface\hub`.
+- Recorded the hashes in `docs/DATASETS.md`. `problems: []`.
+- `model.safetensors` SHA-256 is `d76f0bdf…6833`.
+- Training-data review: paper arXiv 2508.06248 plus code @ `387a422`.
+  Result: FF++ c23 official train only; FF++ val unused; FF++ test used
+  for evaluation only (`docs/DECISIONS.md`).
+- The gated HF dataset `yermandy/GenD` returned 401, so the per-frame
+  lists were not diffed.
+
+## 2026-10-01 — Phase 6a freezing and batch-size benchmark (RTX 4050 Laptop, 6 GB)
+
+Benchmark on 256 seeded train crops (scratch script; numbers only).
+- Load + SHA-256 check: 15.6 s. Params: 303,968,258, of which 0 are
+  trainable.
+- Outside `inference_mode` the output has `requires_grad=False`.
+- Accuracy at 0.5: 0.910.
+- fp16 vs fp32: max |Δlogit| 0.0116, max |Δprob| 0.0057.
+
+| mode | bs 16 | 32 | 64 | 128 | 256 |
+|---|---|---|---|---|---|
+| fp32 img/s (peak GiB) | 29 (1.41) | 29 (1.68) | 28 (2.22) | 27 (3.29) | 8 (5.45) |
+| fp16 autocast img/s (peak GiB) | 87 (1.32) | 90 (1.49) | **90 (1.84)** | 89 (2.54) | 86 (3.94) |
+
+Chosen setting: **fp16 autocast, batch size 64**. It is at peak
+throughput with more than 4 GiB of headroom.
+
+## 2026-10-01 — Phase 6a teacher-logit caching (train + val only)
+
+```
+.venv/Scripts/python.exe scripts/cache_teacher_logits.py --limit-shards 2 --splits train   # trial: interrupted at 1/2, resumed to 2/2
+.venv/Scripts/python.exe scripts/cache_teacher_logits.py                                   # full
+.venv/Scripts/python.exe scripts/cache_teacher_logits.py                                   # rerun: 67/67 shards resumed
+.venv/Scripts/python.exe scripts/cache_teacher_logits.py --splits test                     # ProtectedSplitError
+```
+- Tag `t6a-f87ebb7553a64e99`; crop tag `p5d-b451b5ca770c8923`; shard size 1024.
+- Cache root: `D:\ConfiGuard-Data\cache\teacher_logits\gend_clip_l14`
+  (43 MB). The reports are `teacher_cache_full_20261001-133330.json`
+  and `teacher_cache_full_20261001-140456.json` (rerun).
+- The trial logged a metrics crash: its first 2048 rows are all fake,
+  so AUC is undefined. Logging now prints `n/a` instead.
+
+| split | frames / videos | time | frame AUC | video AUC | acc@0.5 | mean P(fake) real / fake | AUC DF / F2F / FS / NT | consolidated SHA-256 |
+|---|---|---|---|---|---|---|---|---|
+| train | 57,040 / 3,565 | 1540 s | 0.9781 | 0.9933 | 0.9395 | 0.165 / 0.906 | 0.995 / 0.983 / 0.990 / 0.945 | `eab3dfbe35897af37b473f36d1348c093b04a55bd031eef00c76ec7c56bb8f69` |
+| val | 11,120 / 695 | 301 s | 0.9598 | 0.9792 | 0.9174 | 0.197 / 0.891 | 0.985 / 0.965 / 0.983 / 0.906 | `97ff4ddba7ae1b1740ca8ef3d8fc688ef917f1187269d66fae940266e7637355` |
+
+- Crop manifests were verified against the Phase 5d summary: train
+  `38635dd3…`, val `5faf4a3d…`.
+- The rerun was byte-identical. `test_split_touched: false`.
+- Teacher fits train better than val (expected, since it was trained on
+  FF++ train frames). Its weakest method is NeuralTextures. These are
+  distillation targets, not results for our model.
+
+## 2026-10-01 — Phase 6a tests
+
+```
+.venv/Scripts/python.exe -m pytest tests/teacher -q                 # 10 passed (real-teacher test ran, not skipped)
+.venv/Scripts/python.exe -m pytest -q -p no:cacheprovider -rs       # 513 passed, 0 skipped, 214.35 s
+```

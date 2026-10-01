@@ -10,7 +10,7 @@ operating rules this project is developed under.
 
 ## Status
 
-Phase 5d (matched face-crop extraction and shortcut audit) — see
+Phase 6a (frozen GenD CLIP-L/14 teacher; train/val logits cached on `D:`; no student trained yet). Before that, Phase 5d (matched face-crop extraction and shortcut audit) — see
 `docs/PHASE_STATUS.md` for current status. FF++ c23 (5000 videos,
 8.4 GiB) is downloaded to `D:`, validated, and split with the authors'
 official train/val/test files (720/140/140 originals, leakage-checked).
@@ -260,6 +260,23 @@ is written under `%CONFIGUARD_CACHE_DIR%fpp_face_crops\store` (D:).
 A store root accepts exactly one config. Changing any detector,
 sampling or alignment parameter is refused as stale: use a new
 `--store-root`.
+
+## Download the frozen GenD teacher and cache its logits (Phase 6a)
+
+Needs the Phase 5d crop store and `HF_HOME`/`HF_HUB_CACHE` on D: (see
+`.env.example`). It downloads only `yermandy/GenD_CLIP_L_14` at the
+pinned revision (~1.2 GB) and verifies its hashes. Logits are cached
+for **train and val only**; `test` is refused.
+
+```powershell
+.venv\Scripts\python.exe scripts\download_gend_teacher.py                  # pinned snapshot + SHA-256 record
+.venv\Scripts\python.exe scripts\cache_teacher_logits.py --limit-shards 2  # trial (separate _trial root)
+.venv\Scripts\python.exe scripts\cache_teacher_logits.py                   # full train+val; resumable
+```
+
+Rerunning resumes from the completed shards. A cache built with a
+different teacher config, crop manifest or shard size is refused as
+stale.
 
 ## Project layout
 

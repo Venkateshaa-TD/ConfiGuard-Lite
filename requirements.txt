@@ -26,3 +26,10 @@ opencv-python-headless>=4.9,<6.0
 timm>=1.0
 onnx>=1.16
 onnxruntime>=1.18
+
+# Phase 6a: frozen GenD CLIP-L/14 teacher (rebuilt with transformers'
+# CLIPVisionTransformer; weights read from hash-pinned safetensors).
+# Verified with transformers 4.56.2, safetensors 0.8.0, huggingface_hub 0.36.2.
+transformers>=4.56,<5
+safetensors>=0.4
+huggingface_hub>=0.34,<1.0

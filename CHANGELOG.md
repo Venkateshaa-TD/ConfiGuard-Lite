@@ -288,3 +288,20 @@ All notable changes to this project are documented here.
   squeeze.
 - 44 new tests; full suite 503/503. No training, no GenD, no raw
   videos deleted, official splits unchanged.
+
+### Phase 6a — Frozen GenD teacher setup and logit caching (2026-10-01)
+
+- Added `configuard.teacher`:
+  - `gend`: GenD CLIP-L/14 rebuilt locally and strict-loaded from
+    hash-pinned safetensors; `assert_frozen`; BGR→RGB tensor helper;
+  - `cache`: resumable, stale-rejecting shard cache; test split
+    refused.
+- Added `scripts/download_gend_teacher.py` (pinned snapshot + SHA-256
+  record) and `scripts/cache_teacher_logits.py` (fp16 bs 64,
+  progress/ETA, free-space floor, trial root, per-split teacher
+  metrics).
+- Added `transformers`, `safetensors` and `huggingface_hub` to
+  `requirements.txt`.
+- Cached teacher logits for 57,040 train and 11,120 val crops. Val
+  frame AUC is 0.960 and video AUC 0.979. Test was never opened.
+- 10 new tests; full suite 513/513. No student training.

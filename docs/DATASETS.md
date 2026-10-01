@@ -125,6 +125,32 @@ full download/verification transcript.
 No other checkpoint (GenD, DINOv2, or anything else) and no dataset was
 downloaded in this phase.
 
+### GenD CLIP-L/14 teacher (Phase 6a — frozen, offline distillation target only)
+
+| Field | Value |
+|---|---|
+| Purpose | Frozen teacher whose logits on FF++ train/val crops are the distillation signal. Never trained, exported, or served |
+| Source | Hugging Face `yermandy/GenD_CLIP_L_14`, model card: "the GenD (CLIP) model from Tab. 2" of Yermakov et al., *Deepfake Detection that Generalizes Across Benchmarks*, WACV 2026 (arXiv 2508.06248) |
+| Revision | `891ce014a0308386c4d7d25b3dcf436a22db5504` (pinned as `GEND_REVISION`) |
+| Training code reviewed | github.com/yermandy/GenD @ `387a42266dd385fbe8f7626c5d3aa03eea3bfaab` |
+| License | MIT (model card `license: mit`; the GitHub repo includes an MIT `LICENSE`) |
+| Local path | `D:\ConfiGuard-Data\cache\huggingface\hub\models--yermandy--GenD_CLIP_L_14\snapshots\891ce014…` |
+| Training data | FF++ c23 **official train split only** (720 real + 4×720 fake = 3600 videos, ~115k frames). Model selection used DeepSpeak v1.1/v2, CDFv3 and FFIW; FF++ val was not used and FF++ test only for evaluation. See `docs/DECISIONS.md`. |
+| Not downloaded | `openai/clip-vit-large-patch14` (the official loader would fetch it; we rebuild the architecture instead) |
+
+| File | Bytes | SHA-256 |
+|---|---|---|
+| `model.safetensors` | 1,215,928,160 | `d76f0bdfd74a29fe1b1c1b84a80ac92486993e426878e8c7a3944281fbb96833` |
+| `modeling_gend.py` | 5,738 | `d2bdc7d57ea208def628f16064c7d22317ec92878b982ac6ac5ab4bcda4991ac` |
+| `config.json` | 193 | `7f2761e13678191774a152121f1630d19baa33a74216dd264d54445d96b16229` |
+| `model_index.json` | 107 | `c0baa48ac78a64c2806fab0164e810ef931e9a03be184649b04c8b8b5ebe639e` |
+| `README.md` | 1,205 | `19e3a142ac3fc32e531ba5eeff132c5de7e8134d268572e62fc69152804a69f9` |
+| `requirements.txt` | 71 | `1724d833db5403c1a36341ff2898ce9500767a48a8ce3135e233c9519da39e55` |
+
+Teacher logits (train/val only, never test) are cached under
+`D:\ConfiGuard-Data\cache	eacher_logits\gend_clip_l14\<tag>\` — see
+`docs/EXPERIMENT_LOG.md` (Phase 6a) for the tag and file hashes.
+
 ## Phase 5 — synthetic training fixtures (generated, not downloaded)
 
 Phase 5 downloaded **nothing** (no dataset, no GenD, no DINOv2, no

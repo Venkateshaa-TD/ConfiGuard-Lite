@@ -4,6 +4,34 @@ Format: one entry per issue. Mark resolved issues rather than deleting them.
 
 ---
 
+## OPEN — GenD per-frame training lists are not independently verifiable (Phase 6a)
+
+The claim that the teacher was trained on the FF++ train split rests on
+three sources: the paper (3600 = 720 + 4×720 videos), the training code
+(`trn_files = FF.train`) and the HF model card ("the model from
+Tab. 2"). The actual path lists are in the gated HF dataset
+`yermandy/GenD`, which returned 401 without authentication. If FF++
+val/test frames had leaked into that training, teacher logits on our
+val crops would look optimistic. Our test split is unaffected because it
+is never passed to the teacher. To close this, download the lists with
+approved HF access and diff them against the Phase 5c split.
+
+## OPEN — Teacher crops differ from GenD's own preprocessing (Phase 6a)
+
+GenD was trained on its own detector crops (scale 1.3, `detector.py`).
+Our Phase 5d crops are 5-point aligned with margin 0.25 and are already
+224×224, so CLIP resizing does nothing. The teacher is used on a
+slightly different crop distribution. This is acceptable for
+distillation targets, but teacher AUCs here are not comparable to the
+paper's numbers.
+
+## Informational — Teacher caching is I/O/decode-bound (Phase 6a)
+
+The GPU sustains about 90 img/s (fp16, bs 64), but end-to-end caching
+runs at about 30–60 img/s. It reads, re-hashes and decodes each PNG on
+D:. The first trial shard ran at about 6 img/s (cold start); the resumed
+trial ran at about 60 img/s.
+
 ## OPEN — Reflect-101 borders mirror the head when a face is near the frame edge (Phase 5d)
 
 About 28% of accepted crops include some out-of-frame area. 6.6% have

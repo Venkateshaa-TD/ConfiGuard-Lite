@@ -4,6 +4,61 @@ Format: one entry per decision, newest first.
 
 ---
 
+## 2026-10-01 — GenD CLIP-L/14 teacher: rebuilt locally, strict-loaded from hash-pinned weights, frozen, fp16 bs 64; logits cached for train/val only
+
+**Source:** Hugging Face `yermandy/GenD_CLIP_L_14` @
+`891ce014a0308386c4d7d25b3dcf436a22db5504` (MIT, "the GenD (CLIP)
+model from Tab. 2" of Yermakov et al., WACV 2026, arXiv 2508.06248).
+Training code reviewed at github.com/yermandy/GenD @ `387a422`.
+`model.safetensors` SHA-256 `d76f0bdf…6833` is pinned in
+`configuard.teacher.gend` and re-checked on every load.
+
+**Not running the official `modeling_gend.py`:** its constructor calls
+`CLIPModel.from_pretrained("openai/clip-vit-large-patch14")`, which
+would download a second, unrequested 1.7 GB model just to overwrite
+its weights. We rebuild the same `CLIPVisionTransformer` from a fixed
+ViT-L/14 config and **strict-load** all GenD tensors (names and shapes
+must all match, 303,968,258 params). The forward is the official one:
+`pooler_output → L2 normalise → Linear(1024, 2)`, with index 0 = real
+and 1 = fake.
+
+**FF++ train-data check (task requirement):**
+- The paper says it trains on FF++ c23 "3600 videos, of which 720 are
+  real and 4×720 fake", which is exactly the official train split
+  (720 real + 4×720 fake). The 115k frames match 3600 × 32.
+- The training code (`src/exp/wacv_rebuttal.py`) sets
+  `trn_files = files.FF.train`.
+- Model selection used a custom validation set (DeepSpeak v1.1/v2,
+  CDFv3, FFIW) because "the FF++ validation set is very similar to the
+  training set".
+- FF++ test appears only in `tst_files`, for evaluation.
+- Conclusion: the checkpoint did **not** use FF++ val or test for
+  training or model selection.
+- Residual uncertainty: the per-frame path lists live in a gated HF
+  dataset (`yermandy/GenD`, 401 without auth), so we did not verify
+  them file by file. The HF model card states the checkpoint is the
+  paper model, not a re-train.
+
+**Inference settings:**
+- Batch size 64 with fp16 autocast under `torch.inference_mode`.
+  Benchmark: 90 img/s at 1.84 GiB peak; throughput is flat from bs 32
+  to 256, and fp32 at bs 256 needs 5.45 GiB.
+- fp16 vs fp32 on 256 crops: max |Δlogit| 0.012, max |Δprob| 0.006.
+- Both the batch size and the autocast dtype are part of the cache tag.
+
+**Cache design:**
+- Fixed-index shards of 1024 rows. Each shard stores the teacher tag
+  and its crop SHA-256 list. `meta.json` pins the tag, the crop-manifest
+  SHA-256 and the shard size.
+- A mismatch raises `StaleTeacherCacheError`; it is never silently
+  mixed.
+- Crop bytes are re-hashed as they are read. The crop manifests are
+  checked against the Phase 5d summary, so no videos are re-hashed and
+  no crops are re-extracted.
+- `test` raises `ProtectedSplitError` before any file is opened.
+
+---
+
 ## 2026-10-01 — F2F/NT width change is a centred crop: no correction; geometry/blur jitter recommended class-independently
 
 **Evidence (Phase 5d audit, `shortcut_audit_20261001-114343`):**
