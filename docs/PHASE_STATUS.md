@@ -17,6 +17,7 @@
 | 6d | Adaptive 4/8/16-frame video inference | PASS | 2026-10-01 |
 | 6e | Compression-robust student training (experiment; not selected) | PASS | 2026-10-01 |
 | 7 | Efficient temporal video head (GRU evaluated; rejected) | PASS | 2026-10-01 |
+| 8 | Production ONNX export and optimization | PASS | 2026-10-01 |
 
 Full per-phase results are recorded below as they complete.
 
@@ -864,3 +865,53 @@ current model (`docs/KNOWN_ISSUES.md`).
 **Open items:** the GRU had to be trained on in-sample student
 features (stacking limitation). A fair temporal test needs out-of-fold
 features or end-to-end fine-tuning (`docs/KNOWN_ISSUES.md`).
+
+---
+
+## Phase 8 — Production ONNX export and optimization
+
+**Status:** PASS
+
+**Summary:** `student_distilled_p80` was exported to ONNX FP32 / FP16
+plus two static INT8 recipes (train-only calibration), with
+normalisation inside the graph.
+- FP32 and FP16 match the PyTorch path on the full val split: video
+  AUROC 0.9735, verdict agreement 99.9–100%, same false-accusation
+  counts.
+- Both INT8 recipes fail the agreement bar (76% / 88–90%) and are not
+  selected.
+- Defaults: **CPU = ONNX FP32** (adaptive P50 8.8 ms vs PyTorch 38 ms)
+  and **GPU = ONNX FP32**, which is faster than FP16 here. GPU uses one
+  ORT session per batch size, because shape changes cost about 330 ms
+  on the CUDA provider.
+- A hash-checked package binds the ONNX files to the checkpoint and
+  the 6c/6d calibration. The PyTorch checkpoint remains the reference.
+
+**Requirements:**
+1. ONNX FP32 + FP16. **Met.**
+2. Static INT8 calibrated on `final_train` crops only (val/test
+   refused, tested). **Met.**
+3. PyTorch↔ONNX parity on clean + 4 degraded conditions. **Met.**
+4. FP32 / FP16 / INT8 on the full official val. **Met.**
+5. Frame/video AUROC, per-method results, calibrated / adaptive
+   verdict agreement, numerical error. **Met.**
+6. CPU batch 1 and 4; GPU batch 1/4/16 via the ORT CUDA provider
+   (enabled by `onnxruntime-gpu` 1.23.2). **Met.**
+7. Model size, model RAM, GPU memory, adaptive 4/8/16 and fixed-16
+   per-video model latency. **Met.**
+8. Separate CPU and GPU defaults; FP16 on CPU measured and not chosen.
+   **Met.**
+9. INT8 only if AUROC loss ≤ 0.01 and agreement is acceptable:
+   rejected. **Met.**
+10. Package with checkpoint / config / calibration hashes; mismatches
+    refused (tested; robust checkpoint refused live). **Met.**
+11. PyTorch path untouched and kept as reference. **Met.**
+12. Targeted tests (22), then the full suite: 563/563 (re-run once to
+    capture the summary); docs; commit. **Met.**
+13. No API/UI, no test data, no Phase 9. **Met.**
+
+**Open items:**
+- INT8 needs its own recalibration to be usable.
+- The CUDA provider needs one session per shape.
+- The GPU-provider runtime pins `onnxruntime-gpu` 1.23.2 because of
+  CUDA 12 (`docs/KNOWN_ISSUES.md`).

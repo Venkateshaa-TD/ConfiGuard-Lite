@@ -401,3 +401,21 @@ All notable changes to this project are documented here.
   includes 0), stress −0.0024, FPR@0.5 0.273 vs 0.165. **Rejected**;
   the mean aggregation stays.
 - 5 new tests; full suite 558/558. No recalibration, test access or ONNX export.
+
+### Phase 8 — Production ONNX export and optimization (2026-10-01)
+
+- Added `configuard.export`:
+  - `onnx_student`: in-graph normalisation; FP32 / FP16 export;
+    train-only static INT8 (MinMax / Percentile); ORT sessions;
+    `ShapePinnedRunner`;
+  - `package`: hash-checked `export_manifest.json`,
+    `ExportMismatchError`.
+- Added `memory_guard.process_rss_mb(peak=)` and
+  `scripts/export_student_onnx.py` (build / parity / evaluate / bench /
+  package).
+- Dependency: `onnxruntime` 1.30.0 → `onnxruntime-gpu` 1.23.2 (CUDA 12
+  provider; torch unchanged, environment re-verified).
+- Results: FP32 / FP16 match PyTorch on val (video AUROC 0.9735,
+  verdict agreement ≥ 99.86%). INT8 rejected (agreement 76% / 88–90%).
+  CPU and GPU default: ONNX FP32.
+- 5 new tests; full suite 563/563. No API/UI, no test data, no recalibration.

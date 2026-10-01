@@ -25,7 +25,9 @@ opencv-python-headless>=4.9,<6.0
 # and reinstall the pinned GPU build (see README "Setup") if it regressed.
 timm>=1.0
 onnx>=1.16
-onnxruntime>=1.18
+onnxruntime>=1.18  # CPU-only servers. Dev/GPU venv instead uses onnxruntime-gpu==1.23.2 (Phase 8: CUDA 12
+                   # build that runs on torch 2.5.1+cu121's bundled CUDA/cuDNN DLLs; ORT GPU >=1.24 needs CUDA 13).
+                   # Do not install both packages into one environment.
 
 # Phase 6a: frozen GenD CLIP-L/14 teacher (rebuilt with transformers'
 # CLIPVisionTransformer; weights read from hash-pinned safetensors).

@@ -4,6 +4,31 @@ Format: one entry per issue. Mark resolved issues rather than deleting them.
 
 ---
 
+## OPEN — INT8 exports are not calibrated (Phase 8)
+
+Both static INT8 recipes shift logits relative to the FP32 model that
+the 6c/6d calibration was fitted on:
+- verdict agreement is 76% (MinMax) and 88–90% (Percentile);
+- video AUROC loss is 0.012 and 0.006.
+
+The INT8 files stay in the package for reference but are not
+production-eligible until they are recalibrated on their own logits.
+
+## OPEN — ORT CUDA provider re-plans on every batch-size change (Phase 8)
+
+With a single session, alternating batch sizes cost about 330 ms per
+switch. `ShapePinnedRunner` (one session per batch size) is required
+for adaptive inference on GPU and adds GPU memory per shape. CPU is
+not affected.
+
+## OPEN — GPU runtime pinned to onnxruntime-gpu 1.23.2 (Phase 8)
+
+Newer ORT GPU builds (1.30) need CUDA 13. This venv relies on the CUDA
+12 / cuDNN 9 DLLs bundled with torch 2.5.1+cu121, which must be
+imported before onnxruntime. Upgrading ORT, torch or the driver
+requires re-running `scripts/export_student_onnx.py parity` and
+`bench`.
+
 ## OPEN — Temporal head trained on in-sample features (Phase 7)
 
 The GRU learned from embeddings of the student's own training videos,

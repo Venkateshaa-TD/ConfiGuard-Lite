@@ -1810,3 +1810,131 @@ AUROC loss ≤ 10% AND head latency ≤ 10% of the backbone.
 .venv/Scripts/python.exe -m pytest tests/temporal tests/robust -q -p no:cacheprovider    # 12 passed
 .venv/Scripts/python.exe -m pytest -q -p no:cacheprovider -rs                         # 558 passed, 0 skipped, 300.56 s
 ```
+
+---
+
+## 2026-10-01 — Phase 8 ONNX export of student_distilled_p80
+
+**Runtime change:**
+- `onnxruntime` 1.30.0 (CPU) was replaced by `onnxruntime-gpu`
+  1.23.2, which includes the CPU provider.
+- ORT 1.30's CUDA provider needs CUDA 13 and failed here. 1.23.2 is
+  built for CUDA 12 + cuDNN 9 and uses the DLLs bundled with torch
+  2.5.1+cu121, provided torch is imported first. No system install.
+- Checks: `verify_environment.py` gives Dependency safety OK (torch
+  2.5.1+cu121, CUDA available), and `tests/models` passes 90/90.
+
+```
+.venv/Scripts/python.exe scripts/export_student_onnx.py build      # FP32, FP16, INT8 (MinMax) + INT8 (Percentile 99.999)
+.venv/Scripts/python.exe scripts/export_student_onnx.py parity
+.venv/Scripts/python.exe scripts/export_student_onnx.py evaluate
+.venv/Scripts/python.exe scripts/export_student_onnx.py bench --videos 200
+.venv/Scripts/python.exe scripts/export_student_onnx.py package
+```
+
+**Graph:**
+- Input `pixels` float32 (B, 3, 224, 224), RGB 0..255; output `logit`
+  (B,). ImageNet normalisation is inside the graph. Opset 17, dynamic
+  batch.
+- FP16 keeps fp32 I/O and fp32 normalisation, then casts to half.
+- Package: `D:\ConfiGuard-Data\checkpoints\export\student_p80\`.
+
+| file | size | SHA-256 |
+|---|---|---|
+| student_fp32.onnx | 9.49 MiB | `4e365f0d…0279` |
+| student_fp16.onnx | 4.76 MiB | `244d317c…fb38` |
+| student_int8.onnx (MinMax) | 2.67 MiB | `45f1f1c7…0a3f` |
+| student_int8_percentile.onnx | 2.67 MiB | `6dc78740…d212` |
+
+**INT8 calibration:**
+- 510 official TRAIN crops from `final_train` (102 per class/method,
+  seed 42; list hash `3650f206…`); no val or test.
+- Static QDQ, per-channel int8 weights, uint8 activations, equal
+  batches of 30.
+- ORT 1.23's percentile collector fails on a short final batch, so
+  the batch size divides the sample.
+
+**Parity vs PyTorch FP32 eager (CPU), 256 val crops × {clean, blur σ1,
+resize 0.5, noise σ4, x264 CRF30}** (max |Δlogit| / sign agreement,
+range over conditions):
+
+| variant | max \|Δlogit\| | sign agreement |
+|---|---|---|
+| ONNX FP32 CPU | 0.0000 | 100% |
+| ONNX FP32 CUDA | 0.021–0.024 | 100% |
+| ONNX FP16 CPU | 0.044–0.080 | 99.6–100% |
+| ONNX FP16 CUDA | 0.068–0.090 | 99.2–100% |
+| INT8 MinMax CPU | 4.6–6.1 | 86.3–91.4% |
+| INT8 Percentile CPU / CUDA | 3.6–5.2 / 2.3–5.2 | 90.6–96.9% / 92.2–97.3% |
+
+**Full official val (11,120 frames / 695 videos).**
+- Reference: the PyTorch path whose logits the 6c/6d calibration was
+  fitted on (video AUROC 0.9735, adaptive average 6.19 frames).
+- Verdicts: 6c calibrated video and frame verdicts at mondrian α 0.05,
+  and 6d adaptive verdicts.
+- FA = real videos called "likely manipulated" (reference: 3 video /
+  2 adaptive).
+
+| variant | frame AUROC | video AUROC | video DF / F2F / FS / NT | NT frame | \|Δlogit\| mean / p99 / max | verdict agree video / frame / adaptive | FA video / adaptive | adaptive frames |
+|---|---|---|---|---|---|---|---|---|
+| PyTorch FP32 CPU | 0.9488 | 0.9735 | 0.988 / 0.985 / 0.994 / 0.927 | 0.886 | 0.004 / 0.036 / 0.095 | 99.86 / 99.89 / 100 % | 3 / 2 | 6.18 |
+| **ONNX FP32 CPU** | 0.9488 | 0.9735 | 0.988 / 0.985 / 0.994 / 0.927 | 0.886 | 0.004 / 0.036 / 0.095 | 99.86 / 99.89 / 100 % | 3 / 2 | 6.18 |
+| ONNX FP16 CUDA | 0.9488 | 0.9735 | 0.988 / 0.985 / 0.994 / 0.927 | 0.886 | 0.007 / 0.049 / 0.122 | 100 / 99.87 / 99.86 % | 3 / 2 | 6.19 |
+| ONNX FP16 CPU | 0.9488 | 0.9735 | same | 0.886 | 0.007 / 0.047 / 0.132 | 99.86 / 99.84 / 99.86 % | 3 / 2 | 6.19 |
+| INT8 MinMax CPU | 0.9326 | 0.9615 | 0.987 / 0.976 / 0.994 / 0.889 | 0.841 | 1.107 / 5.02 / 6.48 | 75.8 / 69.2 / 72.5 % | 0 / 0 | 7.71 |
+| INT8 Percentile CPU | 0.9413 | 0.9678 | 0.983 / 0.983 / 0.995 / 0.910 | 0.868 | 0.514 / 3.67 / 6.29 | 88.4 / 87.5 / 89.6 % | 0 / 0 | 6.57 |
+
+The PyTorch reference here is CUDA fp16 autocast, so the PyTorch FP32
+CPU row differs from it by the same 0.004 mean as ONNX FP32.
+
+**Benchmark** (isolated process per row; 8 CPU threads; crops
+pre-decoded, so this is model + decision latency; 200 val videos; model
+RAM = process RSS growth after creating and warming the runtime,
+before test data):
+
+| runtime | bs1 P50/P95 | bs4 P50/P95 | adaptive video P50/P95 (avg frames) | fixed-16 video P50/P95 | model RAM | GPU memory |
+|---|---|---|---|---|---|---|
+| PyTorch CPU | 21.6 / 44.0 | 35.6 / 49.7 | 38.1 / 133.1 (5.32) | 96.7 / 133.8 | 234 MB | – |
+| **ONNX FP32 CPU** | 2.28 / 2.86 | 7.13 / 9.49 | 8.8 / 35.7 (5.32) | 33.7 / 40.1 | 91 MB | – |
+| ONNX FP16 CPU | 2.39 / 4.40 | 7.17 / 8.65 | 9.1 / 33.6 (5.32) | 34.2 / 42.1 | 94 MB | – |
+| INT8 MinMax CPU | 2.21 / 2.87 | 6.01 / 8.63 | 8.0 / 30.3 (8.36) | 24.8 / 28.5 | 59 MB | – |
+| INT8 Percentile CPU | 2.27 / 2.95 | 5.82 / 7.21 | 7.4 / 29.4 (5.60) | 24.4 / 28.5 | 60 MB | – |
+| PyTorch CUDA (fp16 autocast) | 20.2 / 23.9 | 20.7 / 23.9 | 22.5 / 69.1 (5.32) | 26.6 / 28.5 | 698 MB | +196 MB |
+| **ONNX FP32 CUDA** (per-shape sessions) | 4.99 / 8.98 | 5.08 / 5.83 | 7.1 / 22.1 (5.32) | 10.6 / 11.5 | 627 MB | +418 MB |
+| ONNX FP16 CUDA (per-shape sessions) | 6.13 / 7.08 | 6.50 / 8.39 | 8.0 / 25.1 (5.32) | 12.4 / 13.5 | 793 MB | +348 MB |
+
+Times are in ms. GPU memory is the device-wide `nvidia-smi` delta
+(per-process numbers are N/A under Windows WDDM).
+
+- **CUDA shape finding:** with one ORT CUDA session, alternating batch
+  sizes (4, 4, 8, 16) cost about 333 ms per cycle; a fixed shape costs
+  6.5 ms. HEURISTIC conv search and the arena setting did not help.
+- A session per batch size cuts the 4 + 4 + 8 escalation to 16 ms,
+  against 35 ms when padding everything to 16. A first benchmark
+  without this showed 110–150 ms per video on CUDA and was discarded.
+
+**Selection (pre-registered rule in the script):**
+- INT8 needs video AUROC loss ≤ 0.01 vs ONNX FP32, verdict agreement
+  ≥ 98% (video and adaptive), and at most 1 extra false accusation.
+  - MinMax fails all three (loss 0.012, agreement 76%).
+  - Percentile passes AUROC (loss 0.0057) but fails agreement (88–90%).
+  - Both shift scores towards "real" relative to the calibration (fewer
+    false accusations, more misses), so INT8 would need its own
+    recalibration (out of scope).
+- **CPU default: ONNX FP32.** FP16 on CPU is no faster (bs4 7.17 vs
+  7.13 ms) and is not chosen.
+- **GPU default: ONNX FP32.** FP16 passes parity but is slower on this
+  GPU (bs4 6.50 vs 5.08 ms; adaptive 8.0 vs 7.1 ms), so the rule
+  (eligible and faster) keeps FP32.
+- `export_manifest.json` (content `819f5866…`) verifies against the p80
+  checkpoint and refuses the robust checkpoint.
+
+## 2026-10-01 — Phase 8 tests
+
+```
+.venv/Scripts/python.exe -m pytest tests/export tests/calibration tests/adaptive -q -p no:cacheprovider   # 22 passed
+.venv/Scripts/python.exe -m pytest -q -p no:cacheprovider -rs                                            # 563 passed, 0 skipped, 223.36 s
+```
+- The full suite was run twice. The first run's summary line was not
+  captured (the output tail showed only ffmpeg stderr from an existing
+  corrupt-video test), so it was re-run to record the result.

@@ -49,8 +49,9 @@ class RamGuard:
         return gb
 
 
-def process_rss_mb() -> float:
-    """Resident set size (working set) of this process in MiB."""
+def process_rss_mb(peak: bool = False) -> float:
+    """Resident set size (working set) of this process in MiB; `peak=True` gives the
+    process's peak working set so far (Windows) / VmHWM (Linux)."""
     if sys.platform == "win32":
         class PMC(ctypes.Structure):
             _fields_ = [("cb", ctypes.c_ulong), ("PageFaultCount", ctypes.c_ulong),
@@ -66,8 +67,9 @@ def process_rss_mb() -> float:
         psapi.GetProcessMemoryInfo.argtypes = [ctypes.c_void_p, ctypes.POINTER(PMC), ctypes.c_ulong]
         if not psapi.GetProcessMemoryInfo(k32.GetCurrentProcess(), ctypes.byref(pmc), pmc.cb):
             raise OSError("GetProcessMemoryInfo failed")
-        return pmc.WorkingSetSize / 2**20
+        return (pmc.PeakWorkingSetSize if peak else pmc.WorkingSetSize) / 2**20
+    key = "VmHWM:" if peak else "VmRSS:"
     for line in Path("/proc/self/status").read_text().splitlines():
-        if line.startswith("VmRSS:"):
+        if line.startswith(key):
             return int(line.split()[1]) / 1024
     raise OSError("cannot determine process RSS")

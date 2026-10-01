@@ -73,6 +73,18 @@ resolution and duration. The Phase 5d audit found the F2F/NT width
 change to be a centred crop with no residual geometric cue. Fakes are
 somewhat blurrier than their matched reals (a genuine artifact).
 
+## Phase 8 deployment formats (development data only)
+
+- **ONNX FP32** (9.5 MiB) is the default on CPU and GPU. It reproduces
+  the PyTorch path on the full val split: video AUROC 0.9735, verdict
+  agreement 99.9–100%.
+- **Speed (model only):** CPU batch 1 takes 2.3 ms, and an adaptive
+  video takes 8.8 ms at P50 (35.7 ms at P95).
+- **FP16** (4.8 MiB) is equivalent in accuracy but not faster here.
+- **INT8** (2.7 MiB) is not calibrated, has lower agreement, and is not
+  for use.
+- Package and hashes: `docs/EXPERIMENT_LOG.md` (Phase 8).
+
 ## Phase 7 temporal head (development data only)
 
 - **Tested:** a 157k-parameter GRU over frozen frame embeddings.

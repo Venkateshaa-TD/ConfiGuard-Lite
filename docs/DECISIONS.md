@@ -4,6 +4,47 @@ Format: one entry per decision, newest first.
 
 ---
 
+## 2026-10-01 — Phase 8: ONNX FP32 is the CPU and GPU default; INT8 rejected; onnxruntime-gpu 1.23.2
+
+- **Graph contract:** RGB 0..255 float32 crops in, one logit out, with
+  normalisation inside the graph. Every runtime gets identical
+  preprocessing, and a deployment cannot apply the wrong mean/std.
+- **FP16** normalises in fp32 and casts to half, keeping fp32 I/O.
+- **INT8:** static QDQ calibrated only on `final_train` crops. Two
+  recipes were tried, decided in advance (MinMax; one alternative,
+  Percentile 99.999). Neither meets ≥ 98% verdict agreement with the
+  calibrated PyTorch path.
+  - INT8 shifts logits by about 0.5–1.1 on average, so the 6c/6d
+    temperature and conformal thresholds no longer apply.
+  - A future INT8 path must be recalibrated on its own logits
+    (temp_cal / conformal_cal) and re-validated. It is not
+    production-eligible now.
+- **Defaults:**
+  - CPU: ONNX FP32 (≈ 4× faster than PyTorch eager per adaptive video
+    at P50; FP16 gives no CPU gain).
+  - GPU: ONNX FP32 (FP16 is eligible but slower on this RTX 4050 with
+    this mostly-depthwise network).
+  - Each choice follows the pre-registered rule "eligible and faster".
+- **CUDA shape pinning:** `ShapePinnedRunner` keeps one session per
+  batch size on the CUDA provider. Re-planning on every shape change
+  (about 330 ms) would erase the adaptive 4/8/16 savings. CPU uses a
+  single session.
+- **Runtime version:** `onnxruntime-gpu==1.23.2` replaces
+  `onnxruntime` 1.30.0 in the dev venv.
+  - The 1.30 CUDA provider needs CUDA 13. 1.23.2 matches the CUDA 12 /
+    cuDNN 9 DLLs shipped with torch 2.5.1+cu121, with no system
+    install. Its CPU provider serves CPU inference.
+  - CPU-only servers can use the plain `onnxruntime` package, since the
+    graphs are opset 17.
+- **Package:** `export_manifest.json` holds per-file SHA-256s, the
+  checkpoint SHA-256, the model config SHA-256, the calibration
+  artifacts' checkpoint and content hashes, runtime versions, the INT8
+  calibration-sample hash and the selection, plus a content SHA-256.
+  `load_package` refuses any mismatch. The PyTorch checkpoint stays the
+  reference implementation.
+
+---
+
 ## 2026-10-01 — Phase 7: residual GRU head rejected; mean-frame-logit aggregation kept
 
 - **Design tested:** a residual GRU over frozen embeddings (zero-init

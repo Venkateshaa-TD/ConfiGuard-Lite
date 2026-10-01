@@ -10,7 +10,7 @@ operating rules this project is developed under.
 
 ## Status
 
-Phase 7 (GRU temporal head evaluated over frozen frame embeddings and rejected; the mean-frame-logit aggregation and calibrated `student_distilled_p80` remain the default; development data only, test sealed). Phase 6e ran the compression-robust training experiment (not selected). Phase 6d added adaptive 4/8/16-frame video inference. Phase 6c added calibration and the uncertain output. Phase 6b trained the MobileNetV4 students (BCE baseline vs GenD-distilled). Phase 6a cached frozen GenD CLIP-L/14 teacher logits for train/val. Before that, Phase 5d (matched face-crop extraction and shortcut audit) — see
+Phase 8 (production ONNX export of the calibrated `student_distilled_p80`: FP32 default on CPU and GPU, INT8 rejected; hash-checked package; development data only, test sealed). Phase 7 evaluated and rejected a GRU temporal head. Phase 6e ran the compression-robust training experiment (not selected). Phase 6d added adaptive 4/8/16-frame video inference. Phase 6c added calibration and the uncertain output. Phase 6b trained the MobileNetV4 students (BCE baseline vs GenD-distilled). Phase 6a cached frozen GenD CLIP-L/14 teacher logits for train/val. Before that, Phase 5d (matched face-crop extraction and shortcut audit) — see
 `docs/PHASE_STATUS.md` for current status. FF++ c23 (5000 videos,
 8.4 GiB) is downloaded to `D:`, validated, and split with the authors'
 official train/val/test files (720/140/140 originals, leakage-checked).
@@ -340,6 +340,20 @@ result.verdict, result.stopping_reason, result.frames_used, result.timeline
 .venv\Scripts\python.exe scripts\temporal_gru.py train
 .venv\Scripts\python.exe scripts\temporal_gru.py evaluate   # GRU vs mean-logit aggregation + decision
 ```
+
+## Export to ONNX (Phase 8)
+
+```powershell
+.venv\Scripts\python.exe scripts\export_student_onnx.py build      # FP32 / FP16 / INT8 (train-only calibration)
+.venv\Scripts\python.exe scripts\export_student_onnx.py parity     # PyTorch vs ONNX on clean + degraded val crops
+.venv\Scripts\python.exe scripts\export_student_onnx.py evaluate   # full val: AUROC, verdict agreement
+.venv\Scripts\python.exe scripts\export_student_onnx.py bench      # CPU/GPU latency, RAM/VRAM, adaptive 4/8/16
+.venv\Scripts\python.exe scripts\export_student_onnx.py package    # hash-checked export_manifest.json + defaults
+```
+
+GPU inference with ONNX Runtime uses `onnxruntime-gpu==1.23.2`, which
+works with the CUDA 12 / cuDNN 9 DLLs bundled with torch. Import torch
+first. CPU-only deployments can use plain `onnxruntime`.
 
 ## Project layout
 

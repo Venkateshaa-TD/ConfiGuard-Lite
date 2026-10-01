@@ -837,6 +837,29 @@ On this machine the store root is `D:\ConfiGuard-Data\cache\ffpp_face_crops\stor
 - **Decision:** rejected. Production video scoring stays as the mean
   frame logit (Phase 4/6d).
 
+## ONNX export and deployment package (Phase 8, `src/configuard/export/`)
+
+- **`onnx_student.py`**:
+  - `StudentGraph` (normalisation inside the graph) and `export`
+    (FP32; FP16 traced on CUDA with fp32 I/O).
+  - `CropReader` (train-only INT8 calibration data) and
+    `quantize_int8` (static QDQ; MinMax or Percentile).
+  - `session` (CPU or CUDA provider), `run`, and `ShapePinnedRunner`
+    (one CUDA session per batch size).
+- **`package.py`**: `build_package` / `load_package` / `variant_path`,
+  using `export_manifest.json` with per-file SHA-256s, the checkpoint,
+  config and calibration hashes, and the CPU/GPU default selection.
+  Mismatches raise `ExportMismatchError`.
+- **`scripts/export_student_onnx.py`**: `build`, `parity`, `evaluate`,
+  `bench` (isolated subprocess per runtime) and `package`.
+- **Package directory:** `CONFIGUARD_CHECKPOINT_DIR\export\student_p80\`
+  holds the ONNX files, copies of `calibration.json` /
+  `adaptive_calibration.json`, the reports and the manifest.
+- **Production inference contract:** frame logit from ONNX (CPU and
+  GPU default: FP32), then the 6c/6d calibration on the mean frame
+  logit over the nested 4/8/16 slots. `configuard.distill` +
+  `best.pt` stay the PyTorch reference.
+
 ## Repository layout
 
 ```
@@ -882,6 +905,8 @@ ConfiGuard-Lite/
 │   │   ├── degrade.py, stress.py, scoring.py
 │   ├── temporal/                Frame-embedding cache + GRU head experiment (Phase 7; rejected)
 │   │   ├── embeddings.py, gru.py
+│   ├── export/                  Production ONNX export + hash-checked package (Phase 8)
+│   │   ├── onnx_student.py, package.py
 │   ├── memory_guard.py          available-RAM floor (Phase 6e)
 │   └── training/                Reproducible training pipeline (Phase 5)
 │       ├── config.py, paths.py, splits.py, datasets.py, sampling.py,
@@ -896,7 +921,7 @@ ConfiGuard-Lite/
 │                              student training/pilot + student comparison,
 │                              calibration split/fit, adaptive video evaluation,
 │                              robust stress suite + evaluation,
-│                              temporal GRU experiment)
+│                              temporal GRU experiment, production ONNX export)
 ├── tests/                    pytest suite (unit + integration), tests/conftest.py +
 │                              tests/media/conftest.py + tests/datasets/conftest.py +
 │                              tests/models/conftest.py generate all fixtures at
