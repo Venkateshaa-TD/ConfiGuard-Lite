@@ -63,11 +63,15 @@ than trusting that attribute (see docs/DECISIONS.md, Phase 4).
 
 FaceForensics++ c23 was acquired and validated in Phase 5b, and the
 authors' official split (720/140/140 originals) was applied in Phase 5c
-(`docs/DATASETS.md`). **No model has been trained on it**, and no face
-crops have been extracted yet. Known shortcut cues in FF++ (clip length,
+(`docs/DATASETS.md`). In Phase 5d, 79,280 matched 224×224 face crops
+were extracted (4955 videos, 16 each; 9/1000 families quarantined).
+**No model has been trained on them.** Known shortcut cues in FF++ (clip length,
 native resolution) and the binding mitigations are in
 `docs/KNOWN_ISSUES.md` / `docs/DECISIONS.md`. Any future FF++ result
-must be reported per manipulation method.
+must be reported per manipulation method, and stratified by native
+resolution and duration. The Phase 5d audit found the F2F/NT width
+change to be a centred crop with no residual geometric cue. Fakes are
+somewhat blurrier than their matched reals (a genuine artifact).
 
 ## Phase 5 training pipeline: engineering verification only
 

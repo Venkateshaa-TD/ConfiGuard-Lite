@@ -10,11 +10,13 @@ operating rules this project is developed under.
 
 ## Status
 
-Phase 5c (official FaceForensics++ split integration) — see
+Phase 5d (matched face-crop extraction and shortcut audit) — see
 `docs/PHASE_STATUS.md` for current status. FF++ c23 (5000 videos,
 8.4 GiB) is downloaded to `D:`, validated, and split with the authors'
 official train/val/test files (720/140/140 originals, leakage-checked).
-No face crops have been extracted and nothing has been trained on it yet. Earlier, Phase 5 built the reproducible
+79,280 aligned 224×224 face crops (16 per video, real/fake matched by
+frame index, 9/1000 families quarantined) are on `D:`, and the shortcut
+audit is documented. Nothing has been trained on them yet. Earlier, Phase 5 built the reproducible
 training pipeline. The training pipeline
 (`configuard.training`) is real and verified on CPU and the RTX 4050,
 but **has only ever trained on synthetic engineering data** — no
@@ -241,6 +243,23 @@ files in `...\FaceForensics++\_official_splits\<revision>\`; see
 ```powershell
 .venv\Scripts\python.exe scripts\apply_faceforensics_splits.py   # refuses on any leakage; writes train/val/test manifests
 ```
+
+## Extract matched face crops and audit shortcuts (Phase 5d)
+
+Needs the Phase 5c manifests and the hash-pinned YuNet model. Everything
+is written under `%CONFIGUARD_CACHE_DIR%fpp_face_crops\store` (D:).
+
+```powershell
+.venv\Scripts\python.exe scripts\extract_ffpp_face_crops.py --preflight-only   # pins, membership, leakage, video hashes, storage
+.venv\Scripts\python.exe scripts\extract_ffpp_face_crops.py --trial 10         # seeded trial (stratified by split)
+.venv\Scripts\python.exe scripts\extract_ffpp_face_crops.py                    # full; resumable; stops at 40+2 GB free
+.venv\Scripts\python.exe scripts\extract_ffpp_face_crops.py --verify-crop-hashes   # rerun: verify every crop, rebuild manifests
+.venv\Scripts\python.exe scriptsudit_ffpp_crop_shortcuts.py                  # crop-or-squeeze, geometry, correlations, crop QA
+```
+
+A store root accepts exactly one config. Changing any detector,
+sampling or alignment parameter is refused as stale: use a new
+`--store-root`.
 
 ## Project layout
 

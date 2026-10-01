@@ -4,6 +4,69 @@ Format: one entry per issue. Mark resolved issues rather than deleting them.
 
 ---
 
+## OPEN — Reflect-101 borders mirror the head when a face is near the frame edge (Phase 5d)
+
+About 28% of accepted crops include some out-of-frame area. 6.6% have
+more than 10% of the crop out of frame, and 0.8% have more than 25%.
+Reflect-101 fills that area with mirrored content (a doubled hairline,
+and occasionally an upside-down partial face above a face at the top
+edge). The share is **the same in every class** (any: 26.2–28.4%;
+>10%: 6.1–6.8%; >25%: 0.74–0.83%), and real/fake pairs share content,
+so it is not a label cue. It is visible noise, however. Phase 6+ may
+want to evaluate a different fill or a tighter margin for edge faces,
+under a new config tag. Black padding stays excluded.
+
+---
+
+## OPEN — Fakes are slightly blurrier in aligned crops (genuine artifact, resolution-correlated)
+
+Paired Δ Laplacian variance (fake − matched real) is −22.6 for DF, −5.7
+for F2F, −0.6 for FS and −51.0 for NT. The AUC vs original is
+0.456 / 0.491 / 0.506 / 0.415. Sharpness also correlates with source
+height (ρ 0.38). It is a real property of the manipulations, but a
+model could over-rely on it, and it is fragile under recompression.
+**Mitigation:** class-independent blur, resize and JPEG/H.264 jitter in
+the augmentation phase (`docs/DECISIONS.md`), plus resolution-stratified
+evaluation.
+
+---
+
+## OPEN — Quarantine removes a few of the most broken fakes; quarantine rate is higher at 1080p
+
+9/1000 families are quarantined (45 videos, exactly 9 per class).
+Five of them are fake-only failures on visibly broken manipulation
+output, a mild selection toward harder fakes. The quarantine rate by
+native resolution is 1920×1080: 25/615 videos (4.1%) vs 1280×720:
+10/1625 and 640×480: 5/1467. The rate by duration bucket is ≤1.1%.
+Real and fake are always removed together, so this cannot become a
+label shortcut. It does make the training data slightly
+under-represent 1080p. Recorded in `quarantine.jsonl`; not restored
+manually.
+
+---
+
+## OPEN — Residual aligned-geometry signal for Deepfakes (AUC 0.62)
+
+A train→test probe on aligned landmark geometry alone separates
+Deepfakes from originals at AUC 0.617. The other methods score
+0.52–0.53, and real-vs-fake overall scores 0.537. This is consistent
+with Deepfakes rendering the *source* identity's facial proportions,
+i.e. the manipulation itself, rather than preprocessing. Mild
+class-independent geometric jitter is recommended so that the
+detector's evidence is not dominated by landmark geometry.
+
+---
+
+## OPEN — `scripts/check_storage.py` does not load `.env`
+
+Run directly, it reports every `CONFIGUARD_*` path as "not set". The
+other entry points call `configuard.env_loader.load_dotenv` first. The
+Phase 5d scripts resolve and check the D: paths themselves (store root
+must be on D:, outside the repo, above the free-space floor). This is a
+one-line fix for a later phase; not changed here to keep Phase 5d scoped.
+
+---
+
 ## RESOLVED — FFmpeg not installed
 
 **Detected:** Phase 0 environment scan (2026-09-29).
@@ -398,11 +461,16 @@ Consistent across train/val/test (full tables in the split report):
   720→704 ×27, 654→640 ×20, ...; 22 distinct changes). Deepfakes and
   FaceSwap keep the exact native resolution. No aspect-ratio metadata
   is set.
-- **Unverified:** whether that width change is a crop or an anisotropic
-  squeeze (≤ ~3.3% horizontal). A squeeze would survive aligned
-  cropping as a subtle facial-geometry cue for about 28% of F2F/NT fakes.
-  **Must be checked in the face-crop phase** by comparing aligned frames
-  of an affected original/fake pair (e.g. an 854×480 target).
+- ~~**Unverified:** whether that width change is a crop or an anisotropic
+  squeeze.~~ **RESOLVED in Phase 5d: centred crop.** All 562/562
+  width-changed accepted fakes register as a centred crop: ECC sx
+  1.0000 vs 0.973 for a squeeze, and the landmark interocular ratio is
+  0.9985/1.0008 vs 0.973. No geometric cue survives alignment
+  (`docs/DECISIONS.md`).
+- **Phase 5d crops:** sampling uses a per-family shared range, so the
+  sampled span is identical for real and fake (`shared_frame_count`
+  AUC 0.500). Source height/width/duration reach neither the crops nor
+  the model-facing manifest.
 
 Mitigations (binding, `docs/DECISIONS.md`): fixed per-video frame budgets
 sampled by position; aligned 224×224 crops only; no metadata as input.

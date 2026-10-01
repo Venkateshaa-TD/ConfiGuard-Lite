@@ -982,3 +982,133 @@ Tests:
 .venv/Scripts/python.exe -m pytest tests/datasets/test_faceforensics_splits.py -v -p no:cacheprovider -rs   # 24 passed (incl. real pinned-file integration)
 .venv/Scripts/python.exe -m pytest -q -p no:cacheprovider -rs                                               # 459 passed, 0 skipped, 175.98s
 ```
+
+## 2026-10-01 — Phase 5d preflight and official-convention verification
+
+```
+git status --short                                         # clean at c17049c
+sha256sum <D:>/FaceForensics++/_manifests/*.jsonl          # all 5 == pins in docs/DATASETS.md
+.venv/Scripts/python.exe scripts/extract_ffpp_face_crops.py --preflight-only
+```
+Preflight OK:
+- the 5 manifest pins match;
+- the official split files are pinned, and the recomputed membership is
+  unchanged (3600/700/700, 360/70/70 pairs);
+- 0 leakage problems;
+- 5000/5000 videos present and re-hashed against the manifest
+  (0 mismatches);
+- YuNet SHA-256 `ebafce4e…` matches its pin;
+- D: free 83.8 GB.
+
+Official sources read for the naming convention: `dataset/README.md`
+@ `b952e41c` and arXiv:1901.08971v3 (appendix), quoted in
+`docs/DATASETS.md`.
+
+Exploration (outputs on D: `_exploration/` only):
+- **ffprobe packet counts for all 5000 videos (62 s):**
+  - DF = target length (1000/1000);
+  - F2F = source length (992/1000);
+  - FS = min(target, source) (1000/1000); NT the same (999/1000);
+  - 16 fakes per method have an fps header different from the target;
+  - per-family shared range: 287–1038 frames (median 375).
+- **Index correspondence:** registration of 54 seeded fakes against
+  target frames i−4…i+4 at 3 positions gave offset 0 in 47/54. The
+  remaining ±1–2 cases are near-static scenes. The fps-mismatched fakes
+  still align by index.
+- **Crop vs squeeze:** 12 width-changed pairs, then the full audit below.
+
+## 2026-10-01 — Phase 5d trials
+
+| Run | Config tag | Families | Result |
+|---|---|---|---|
+| trial 10 (seed 0) | `p5d-2ce67d23…` | 10 | 9 accepted; family 682 quarantined (IoU-only sparse linking split a drifting face); validator reported 612 false "leakage" problems: scope bug, parents of unselected families looked up in the subset |
+| rerun ×2 after the validator fix | same | 10 (all resumed) | 0 leakage; JSONL byte-identical across 3 runs |
+| config change (size-normalised linking) | `p5d-c02fd00a…` | — | old store **refused as stale**, moved to `superseded_trial1_*` |
+| trial 10 | `p5d-c02fd00a…` | 10 | 10/10 accepted, 640/640 exact, 0 leakage; ~62 KB/crop; 38 s/family |
+| full run 1 | `p5d-c02fd00a…` | stopped at ~200/990 | family 158 quarantined although the face was detected everywhere: tracking ignored recovery frames. Stopped (`taskkill /T`), store moved to `superseded_run2_*` |
+| families 158,682 (targeted) | `p5d-b451b5ca…` | 2 | 2/2 accepted, 128/128 exact |
+| trial 10 | `p5d-b451b5ca…` | 10 | 10/10 accepted, 640/640 exact, 0 leakage |
+
+## 2026-10-01 — Phase 5d full extraction
+
+```
+.venv/Scripts/python.exe scripts/extract_ffpp_face_crops.py            # 12 workers, floor 40+2 GB
+```
+- Preflight OK (all 5000 videos re-hashed).
+- Estimate: 65.2 KB/crop → +4.92 GB, ~77.5 GB free after.
+- Elapsed 3414.5 s (57 min) for 989 families (11 resumed from the
+  trials). 39.9 s/family mean, 921 s max. ~18 families/min.
+- **Result:**
+  - 1000 families: 991 accepted, 9 quarantined (45 videos, 9 per class);
+  - 79,280 crops; every accepted video has exactly 16 ordered slots;
+  - matched slots 63,424/63,424 exact;
+  - leakage re-validation: 0 problems;
+  - 4.91 GB; D: free 77.17 GB at end.
+
+Detection / recovery (planned-slot detection rate; recovered-slot rate; failed slots; quarantined videos):
+
+| Group | Videos | Quarantined | Detection | Recovered | Failed slots |
+|---|---|---|---|---|---|
+| overall | 5000 | 45 | 99.853% | 0.094% | 95 |
+| train / val / test | 3600 / 700 / 700 | 35 / 5 / 5 | 99.846 / 99.759 / 99.982% | 0.104 / 0.089 / 0.045% | 69 / 25 / 1 |
+| real / fake | 1000 / 4000 | 9 / 36 | 99.869 / 99.848% | 0.094 / 0.094% | 17 / 78 |
+| original / DF / F2F / FS / NT | 1000 each | 9 each | 99.869 / 99.781 / 99.881 / 99.863 / 99.869% | 0.094% each (joint) | 17 / 26 / 17 / 18 / 17 |
+| 1280×720 / 1920×1080 / 640×480 / 854×480 / other-480p | 1625 / 615 / 1467 / 294 / 919 | 10 / 25 / 5 / 3 / 2 | 99.92 / 99.56 / 99.91 / 99.62 / 99.89% | 0.115 / 0.356 / 0.021 / 0.000 / 0.034% | — |
+| <10 s / 10–20 / 20–30 / 30–45 / ≥45 s | 145 / 3589 / 995 / 220 / 51 | 3 / 38 / 2 / 2 / 0 | 99.91 / 99.82 / 99.97 / 99.77 / 100% | 0.431 / 0.092 / 0.069 / 0.028 / 0% | — |
+
+Individual (approximate) recovery was never needed: 0 slots. Every
+recovery was joint, so recovery counts are identical across classes by
+construction.
+
+## 2026-10-01 — Phase 5d rerun / idempotency verification
+
+```
+.venv/Scripts/python.exe scripts/extract_ffpp_face_crops.py --verify-crop-hashes
+```
+- 1000/1000 families resumed, 0 re-extracted.
+- All 80,000 crop SHA-256s verified against their records.
+- The 6 JSONL manifests and `extraction_summary.json` are
+  **byte-identical** to the first build (sha256 diff empty).
+- Contact sheets now cover all 9 quarantined families. All were
+  reviewed: 4 content-wide (cutaway or clip end), 5 fake-only
+  (broken manipulation output).
+
+## 2026-10-01 — Phase 5d shortcut audit
+
+```
+.venv/Scripts/python.exe scripts/audit_ffpp_crop_shortcuts.py   # 252 s for A+B; report shortcut_audit_20261001-114343.{json,md}
+```
+- **A. Crop or squeeze:**
+  - 562 width-changed fakes + 200 controls registered;
+  - verdict 562/562 centred crop;
+  - ECC sx 1.0000 ± 0.0001 (squeeze would be 0.9730);
+  - squeeze/crop residual ratio median 9.57 (min 2.03);
+  - landmark interocular ratio F2F 0.9985 [0.9968, 1.0003], NT 1.0008
+    [0.9992, 1.0025].
+- **B. Geometry probe** (train→test, 14 features):
+  - 5-class acc 0.237 vs 0.200;
+  - real-vs-fake AUC 0.537;
+  - DF/F2F/FS/NT vs original AUC 0.617 / 0.526 / 0.534 / 0.524;
+  - width/height ratio alone 0.513 overall.
+- **C. Factor AUC fake-vs-real:**
+  - face width 0.498; detection confidence 0.501; recovered slots
+    0.500; out-of-frame 0.494; alignment scale 0.503;
+    `shared_frame_count` 0.500;
+  - source duration in the raw files 0.423 (FS/NT 0.346), but it does
+    not reach sampling;
+  - crop sharpness 0.467 (NT 0.415);
+  - nuisance-factor probe real-vs-fake AUC 0.503.
+- **D. Crop quality:**
+  - confidence p0.1% 0.70, median 0.94; residual p99 6.9 px;
+  - confidence < 0.7: 82 crops (orig 10, DF 32, F2F 4, FS 24, NT 12);
+  - review sheets of the 64 lowest-confidence and 64 highest-residual
+    crops show only faces (profiles, hand occlusion, broken DF
+    renders);
+  - out-of-frame share equal across classes (any 26–28%, >25% 0.7–0.8%).
+
+## 2026-10-01 — Phase 5d tests
+
+```
+.venv/Scripts/python.exe -m pytest tests/crops -q        # 44 passed
+.venv/Scripts/python.exe -m pytest -q -p no:cacheprovider -rs   # 503 passed, 0 skipped, 408.87 s (ran concurrently with the audit)
+```

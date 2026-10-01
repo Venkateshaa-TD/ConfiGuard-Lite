@@ -10,6 +10,7 @@
 | 5 | Reproducible training pipeline | PASS | 2026-09-30 |
 | 5b | Official FaceForensics++ c23 acquisition and validation | PASS | 2026-09-30 |
 | 5c | Official FaceForensics++ split integration | PASS | 2026-09-30 |
+| 5d | Matched face-crop extraction and shortcut audit | PASS | 2026-10-01 |
 
 Full per-phase results are recorded below as they complete.
 
@@ -469,3 +470,89 @@ were written and audited.
   phase.
 - Future evaluation must report per-method results and
   duration/resolution-stratified breakdowns.
+
+---
+
+## Phase 5d — Matched face-crop extraction and shortcut audit
+
+**Status:** PASS
+
+**Summary:** All 5000 official-split FF++ c23 videos were processed as
+1000 content families (target original + its 4 fakes). Each family
+shares one set of 16 nested frame indices, chosen over its shared
+frame range and matched by frame index. Faces were detected with the
+hash-pinned YuNet, tracked, recovered jointly when missing, aligned with
+5 landmarks, and written as 224×224 RGB PNGs into a config-keyed,
+atomic, stale-refusing store on D:.
+- 991 families accepted (4955 videos, **79,280 crops**, 63,424/63,424
+  matched slots exact); 9 quarantined (45 videos, exactly 9 per class).
+- 0 leakage, and a byte-identical rerun.
+- The F2F/NT width change is a **centred crop, not a squeeze**
+  (562/562). No geometry or nuisance factor is meaningfully
+  class-predictive after alignment.
+
+**Requirements:**
+- *Preflight 1–5:* tree clean at `c17049c`; 5 manifest pins, split
+  pins, membership and leakage re-validated; all 5000 videos re-hashed
+  (0 mismatches); D: 83.8 GB free → 77.2 GB at end (floor 40 GB, stop at
+  42); estimate +4.92 GB / ~55 min measured on trials; everything
+  written to D:. **Met.**
+- *Sampling 1–8:* exactly 16 ordered frames via the existing nested
+  contract (8-set = even slots, 4-set = slots % 4 == 0, tested). No
+  clip facts reach the model: the shared range equalises the span, and
+  the model manifest is whitelisted. Content and donor originals and
+  both leakage parents are recorded for every fake. The convention was
+  verified from the official README and paper. Matching is by equal
+  frame index inside the family's shared range, which excludes F2F's
+  rewound tail. The rule is the same for all classes. **Met.**
+- *Face processing 1–8:* pinned YuNet (`verify_yunet_model`);
+  primary-face temporal linking; 5-point Umeyama similarity; margin 0.25
+  (configurable); identical 224×224 RGB PNG (level 3, no metadata
+  chunks) for every class. PNG was kept after measuring 62–65 KB/crop.
+  Paths are keyed by input SHA-256 and frame index only. **Met.**
+- *Failure handling 1–7:* deterministic ±1…±6 recovery, joint across
+  the family first; no placeholders, never short. Rates are reported by
+  split, label, method, resolution and duration. Whole-family quarantine
+  keeps pairs intact (9 per class). Shortcut risk was assessed: recovery
+  is identical across classes; quarantine is higher at 1080p but
+  label-neutral. **Met.**
+- *Shortcut audit 1–7:* crop-or-squeeze answered with registration and
+  landmarks, uncertainty stated. The post-alignment geometry probe is
+  weak (DF AUC 0.62, others ≈ 0.52). No method-specific correction.
+  Class-independent geometric and blur jitter is recommended for the
+  augmentation phase. Correlations with resolution, duration, method,
+  face size, confidence and recovery are all reported (AUC 0.49–0.51
+  except sharpness). **Met.**
+- *Engineering 1–17:* resumable and idempotent (rerun byte-identical,
+  80,000 crop hashes verified); atomic writes; config-tag keys; stale
+  refusal (tested, and demonstrated live twice); 12-worker bounded pool;
+  sequential decode; progress, ETA, quarantine and storage-floor
+  logging; frame-level JSONL linked to the video manifest SHA-256;
+  lineage only as metadata; leakage re-run on the crop manifests;
+  seeded contact sheets on D:; 44 new tests; trial before full; full
+  suite run; docs updated; staging audited; commit of code, tests and
+  docs only. **Met.**
+
+**Real problems found and fixed during the phase:**
+- **Trial validator scope bug.** It reported 612 false leakage problems
+  because donors outside the trial subset were looked up in the
+  subset. Parents are now always checked against the full official
+  manifest.
+- **IoU-only sparse linking** split a drifting face (family 682). Linking
+  now also accepts a ≤ 1 face-width centre shift at ≤ 1.5× size.
+- **Planned-only tracking** ignored recovery frames (family 158, a
+  walking presenter). Tracks are now rebuilt over all decoded frames,
+  with up to 2 recovery rounds. The full run was stopped at ~20% and
+  restarted under the new tag.
+- **Missed progress log lines** (the `% 25` check) and a cp1252 console
+  crash in the audit printout were both fixed.
+
+**Open items (see `docs/KNOWN_ISSUES.md`):**
+- Reflect-101 mirroring at frame edges (equal across classes).
+- Fakes are blurrier (NT AUC 0.415): a genuine artifact, but it needs
+  class-independent blur/resize augmentation.
+- Quarantine slightly under-represents 1080p and removes 5 visibly
+  broken fakes.
+- Residual DF landmark-geometry signal (AUC 0.62).
+- `check_storage.py` doesn't load `.env`.
+

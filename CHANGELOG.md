@@ -256,3 +256,35 @@ All notable changes to this project are documented here.
   only, and no metadata as model input.
 - 24 new deterministic tests; full suite 459/459. No crops, no training,
   no distillation, no additional downloads.
+
+### Phase 5d — Matched face-crop extraction and shortcut audit (2026-10-01)
+
+- Verified the official FF++ convention from the authors' README
+  (`<target sequence>_<source sequence>`) and the paper appendix
+  (target = frames; source = face/expressions; per-method clip lengths).
+- Added `configuard.crops`:
+  - `families`: content families with content and donor parents;
+  - `matching`: shared-range nested 16/8/4 sampling, half-gap-bounded
+    recovery, joint → individual → failed slot resolution;
+  - `alignment`: 5-point Umeyama similarity, margin 0.25,
+    reflect-101;
+  - `store`: config-tag keyed, atomic, `StaleCropError`;
+  - `extract`: sequential decode; sparse face linking re-tracked over
+    recovery frames; whole-family quarantine;
+  - `manifests`: whitelisted model rows, matched pairs, quarantine,
+    audit sidecar, leakage re-validation, detection stats;
+  - `audit_stats`.
+- Added `configuard.storage_guard.FreeSpaceGuard`, and a YuNet SHA-256
+  pin (`verify_yunet_model`).
+- Added `scripts/extract_ffpp_face_crops.py`: preflight, estimate,
+  trial or `--families`, bounded 12-worker pool, resume, progress/ETA,
+  storage floor, manifests, contact sheets.
+- Added `scripts/audit_ffpp_crop_shortcuts.py`: crop-or-squeeze
+  registration, geometry probes, correlation audit, crop QA sheets.
+- Full run: 991/1000 families accepted, 79,280 crops, 63,424/63,424
+  exact matched slots, 0 leakage, 4.91 GB on D:. The rerun was
+  byte-identical.
+- Finding: the F2F/NT width change is a centred crop (562/562), not a
+  squeeze.
+- 44 new tests; full suite 503/503. No training, no GenD, no raw
+  videos deleted, official splits unchanged.

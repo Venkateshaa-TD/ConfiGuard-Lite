@@ -234,3 +234,53 @@ Split manifests (on D:, never committed), in `...\FaceForensics++\_manifests\`:
 
 The Phase 5b base manifest (`faceforensics++_c23.jsonl`, `966a4b27…`,
 `official_split = null`) is kept unchanged.
+
+## FaceForensics++ c23 matched face crops (Phase 5d, 2026-10-01)
+
+Derived from the Phase 5c official-split manifest (`78225658…`). Nothing
+was downloaded in this phase, and nothing here is committed.
+
+**Official filename convention (verified from official sources, not
+guessed):** `dataset/README.md` @ `ondyari/FaceForensics` `b952e41c`:
+"All filenames are of the form `<target sequence>_<source sequence>`".
+Rössler et al. 2019 (arXiv:1901.08971v3, appendix) defines the roles:
+reenactment transfers "the expressions of the source video … to the
+target video while retaining the identity of the target person"; face
+swapping replaces "the face in the target video with the face in the
+source video". So for `TTT_SSS.mp4`:
+- content parent = original `TTT` (frames);
+- donor parent = original `SSS` (face/expressions);
+- both are leakage parents.
+
+The same appendix explains clip lengths, which the full probe of all
+5000 videos confirmed: DF = target length (1000/1000); F2F = source
+length, target rewound (992/1000; the other 8 have equal lengths);
+FS/NT = min(target, source) (1000 and 999/1000).
+
+| Item | Value |
+|---|---|
+| Store root | `D:\ConfiGuard-Data\cache\ffpp_face_crops\store` (`CONFIGUARD_CACHE_DIR`) |
+| Config tag | `p5d-b451b5ca770c8923` (YuNet `2026may` SHA-256 `ebafce4e…`, margin 0.25, 224×224 PNG level 3) |
+| Families | 1000 (target original + 4 fakes); **991 accepted, 9 quarantined** |
+| Accepted videos / crops | 4955 videos × 16 = **79,280 crops** (train 57,040 / val 11,120 / test 11,120) |
+| Per class (train/val/test) | 713 / 139 / 139 videos for each of original, DF, F2F, FS, NT |
+| Matched pairs | 3,964 fakes paired with their content original; 63,424/63,424 slots exactly matched by frame index |
+| Quarantined | 45 videos (9 per class): families 212, 370, 509, 738 (content-wide), 386, 569, 618, 894, 908 (fake-only) |
+| Storage | 4.91 GB crops; D: free 77.2 GB at end (floor 40 GB) |
+
+Manifests (`...\store\manifests\p5d-b451b5ca770c8923\full\`, byte-identical on rerun):
+
+| File | Purpose | SHA-256 |
+|---|---|---|
+| `crops_train.jsonl` | model-facing, whitelisted fields | `38635dd39670371ab3b97e295e6f4ddcdffb41ad4e7a69588c5aea54a7104c2e` |
+| `crops_val.jsonl` | model-facing | `5faf4a3dc2175e5f366a2f9a5a608a86432c5d4eb638de951f3c9e38978126fb` |
+| `crops_test.jsonl` | model-facing | `e0acefde2628b9d91aa229272688e60742586b299c8c3b7ecdbd8fc5b333a373` |
+| `matched_pairs.jsonl` | fake ↔ content original (+ donor), per-slot frame indices | `94cd6492039d90e94a0de4c1a106690aa4258a8e1d867a3988d54b912f890d85` |
+| `quarantine.jsonl` | quarantined videos + reasons | `be2cb6472e334f81b04a8b690d4ef6747d3e04d9c22984f603431dbf2cc31fd9` |
+| `crop_audit.jsonl` | audit only (resolution, duration, detection stats) — never a model input | `e63b41e6e888be25a7960d0b834a36363f3acf005f7bbf484fda0fd676a18409` |
+| `extraction_summary.json` | deterministic summary + leakage re-validation | `761f2aa40cfb92381b10b3cd58593cb4f6c2f05fc204f85ced993ed9b6700e5d` |
+
+Reports, logs, and contact sheets (human review only) are under
+`...\store\reports\` and `...\store\contact_sheets\`. Superseded trial
+and run stores are kept (refused as stale) in
+`...\ffpp_face_crops\superseded_*`.

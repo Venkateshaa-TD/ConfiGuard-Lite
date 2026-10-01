@@ -584,7 +584,7 @@ Pipeline:
    - It writes a JSON + Markdown acquisition report to
      `CONFIGUARD_OUTPUT_DIR/acquisition/faceforensics/`.
 
-No face crops are extracted and no model consumes this data yet.
+Face crops are extracted in Phase 5d (next section); no model consumes this data yet.
 
 **Official split (Phase 5c).** `scripts/apply_faceforensics_splits.py`
 does the following:
@@ -600,6 +600,67 @@ does the following:
   them with the Phase 5 trainer's own `find_cross_split_leakage`.
 - It audits counts, group balance, duration, and native resolution per
   split.
+
+## Matched face-crop extraction (Phase 5d, `src/configuard/crops/`)
+
+Turns the 5000 official-split FF++ c23 videos into exactly 16 aligned
+224×224 RGB PNG crops per accepted video, with real/fake temporal
+matching and leakage lineage preserved. Entry point:
+`scripts/extract_ffpp_face_crops.py`; shortcut audit:
+`scripts/audit_ffpp_crop_shortcuts.py`.
+
+```
+official-split manifest ──► families.build_content_families
+   (1000 families = target original TTT + {DF,F2F,FS,NT}/TTT_SSS; donor SSS = 2nd leakage parent)
+        │  one family per worker (bounded ProcessPool, cv2 single-threaded per worker)
+        ▼
+extract.extract_family
+   ffprobe frame counts ─► matching.shared_frame_count = min over the 5 videos
+   matching.planned_indices = nested 16/8/4 contract over [0, shared-1]   (same indices for all 5)
+   read_frames_sequential (grab() past unwanted frames; never loads a whole video)
+   YuNet (hash-pinned) ─► build_primary_track (IoU OR ≤1 face-width centre shift, ≤1.5× size)
+   missing face? ─► matching.recovery_offsets (+1,-1,+2,…,±6, half-gap bounded), ≤2 rounds;
+                    tracks rebuilt over planned+recovery frames after each round
+                    resolve_slot: joint (all 5 same index) ► individual (approximate) ► failed
+   any failed slot ─► whole family QUARANTINED (crops kept for review, never padded)
+   alignment.align_face: 5-point Umeyama similarity → template, margin 0.25, reflect-101
+        ▼
+store.CropStore  crops/<config_tag>/<sha[:2]>/<input_sha256>/f<frame>.png   (atomic)
+                 families/<config_tag>/<family_id>.json                     (written last)
+        ▼
+manifests.*  crops_{train,val,test}.jsonl (model-facing, whitelisted fields)
+             matched_pairs.jsonl · quarantine.jsonl · crop_audit.jsonl (audit only)
+             extraction_summary.json (deterministic; leakage re-validation; stats)
+```
+
+Contracts:
+- **Temporal matching is by frame index**, not timestamp: fake frame *i*
+  shows target frame *i* (verified by registration; 64 fakes have a
+  different fps header but still align by index).
+- **One rule for every class.** Real and fake members of a family use
+  the same planned indices and the same detector/linking/recovery/alignment
+  code; nothing branches on label or method.
+- **Model-facing manifest** rows contain only `crop_path`, `crop_sha256`,
+  `sample_id`, `label`, `slot`, `nested_levels` and a `metadata` block
+  (split, method, source/leakage group, content and donor parents,
+  family, config tag, link to the video manifest + its SHA-256). Source
+  resolution, duration, fps, frame count, codec, file size and frame
+  indices are excluded by construction (`MODEL_ROW_FIELDS`), and live
+  only in `crop_audit.jsonl` / family records.
+- **Nested selection:** slot *s* is in the 8-set iff *s* is even, and in
+  the 4-set iff *s* % 4 == 0 (`nested_levels`), mirroring
+  `configuard.media.sampling`.
+- **Staleness is refused** (`StaleCropError`): a store root accepts one
+  config (`store_config.json`); records must match the config tag, the
+  member input SHA-256s, and the crop sizes (full crop SHA-256 on demand).
+- **Resumable/idempotent:** completed families are verified and
+  skipped; manifests are rebuilt from records only, sorted, without
+  timestamps, so reruns are byte-identical.
+- **Storage floor:** `configuard.storage_guard.FreeSpaceGuard` stops
+  scheduling at floor + margin (40 + 2 GB) and the run refuses up front
+  if the projected size would cross it.
+
+On this machine the store root is `D:\ConfiGuard-Data\cache\ffpp_face_crops\store`.
 
 ## Repository layout
 
@@ -630,6 +691,10 @@ ConfiGuard-Lite/
 │   │   │   inference.py, real_pipeline.py, onnx_export.py, benchmark.py,
 │   │   │   device.py
 │   ├── dependency_safety.py     torch/torchvision/CUDA regression guard (Phase 5)
+│   ├── storage_guard.py         free-space floor guard (Phase 5d)
+│   ├── crops/                   Matched FF++ face-crop extraction (Phase 5d)
+│   │   ├── families.py, matching.py, alignment.py, store.py, extract.py,
+│   │   │   manifests.py, audit_stats.py
 │   └── training/                Reproducible training pipeline (Phase 5)
 │       ├── config.py, paths.py, splits.py, datasets.py, sampling.py,
 │       │   dataloader.py, optim.py, metrics.py, checkpoint.py,
@@ -637,7 +702,8 @@ ConfiGuard-Lite/
 ├── scripts/                 Operational scripts (env verification, preprocessing
 │                              benchmark, storage check, baseline model download,
 │                              model benchmark, ONNX export, train, evaluate,
-│                              FF++ c23 download wrapper + validation)
+│                              FF++ c23 download wrapper + validation, official split,
+│                              matched face-crop extraction + shortcut audit)
 ├── tests/                    pytest suite (unit + integration), tests/conftest.py +
 │                              tests/media/conftest.py + tests/datasets/conftest.py +
 │                              tests/models/conftest.py generate all fixtures at

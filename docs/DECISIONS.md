@@ -4,6 +4,206 @@ Format: one entry per decision, newest first.
 
 ---
 
+## 2026-10-01 — F2F/NT width change is a centred crop: no correction; geometry/blur jitter recommended class-independently
+
+**Evidence (Phase 5d audit, `shortcut_audit_20261001-114343`):**
+- **Raw-frame registration.** All 562 width-changed accepted fakes
+  (281 F2F + 281 NT) were registered on 3 matched frames each against
+  their target original, plus 200 seeded same-width controls.
+  - The ECC affine horizontal scale is 1.0000 (sd 0.0001). A squeeze
+    would give 0.9730.
+  - The best crop offset equals `(orig_w − fake_w)/2` in every case.
+  - The squeeze hypothesis leaves 2.0–9.6× (median) more border
+    residual than the crop.
+  - Verdict: 562/562 `centred_crop`; 0 squeeze, 0 inconclusive.
+- **Raw-landmark cross-check** over 4,496 exactly matched slots per
+  method:
+  - The fake/real interocular ratio is 0.9985 [0.9968, 1.0003] for F2F
+    and 1.0008 [0.9992, 1.0025] for NT. A squeeze predicts 0.9730.
+  - The eye-midpoint shift matches the centred-crop prediction to
+    0.09 ± 2.5 px (F2F) and 0.06 ± 2.4 px (NT).
+- **After alignment,** the paired Δ width/height ratio of width-changed
+  F2F (+0.0034) is indistinguishable from same-width F2F (+0.0029). Both
+  are about 0.05 sd of the real distribution (sd 0.058).
+
+**Uncertainty:** the crop removes 8–12 px of *background* at each frame
+edge. A sub-0.01% resampling would be below what ECC resolves. The
+crop does slightly change where the face sits in the raw frame, but
+5-point alignment removes that.
+
+**Decision:** No method-specific correction (none is needed, and none
+is allowed). Geometry is only weakly method-predictive after alignment:
+- A train→test probe on 14 aligned-geometry features reaches 5-class
+  accuracy 0.237 vs 0.200 chance and real-vs-fake AUC 0.537.
+- The only notable signal is Deepfakes vs original (AUC 0.617), which
+  is consistent with swapped-in identity geometry, i.e. the manipulation
+  itself.
+- The width/height ratio alone is at chance (AUC 0.51–0.53).
+
+**Recommendation for the augmentation phase (user-numbered Phase 8;
+roadmap "Compression-robust augmentation"):** apply class-independent
+geometric jitter (±3% anisotropic scale, small rotation and translation)
+and blur/resize/JPEG/H.264 jitter to every class. Crop sharpness is
+lower in fakes, especially NT: paired Δ Laplacian variance −51, AUC
+0.415. That is a genuine manipulation artifact, but it is also
+resolution-correlated (ρ 0.38), so the model should not be allowed to
+rely on sharpness alone.
+
+---
+
+## 2026-10-01 — Quarantine outcome accepted as-is; no manual restoration
+
+The full run quarantined 9 of 1000 families (45 videos):
+- **4 content-wide:** 212, 370, 509, 738. A cutaway or the clip ending
+  inside the shared range leaves no face in all 5 members.
+- **5 fake-only:** 386, 569 and 894 (Deepfakes), 618 (Face2Face) and
+  908 (FaceSwap). The manipulation output is broken in those frames
+  (colour-noise faces, blobs, collapsed geometry), so YuNet finds no face.
+
+All 9 contact sheets were reviewed. Because quarantine is whole-family,
+**every class loses exactly 9 videos**: per-class counts stay equal
+(713/139/139 per class in train/val/test) and every accepted fake keeps
+its matched real. The fake-only cases do remove a few of the *most
+visibly broken* fakes. That is a mild selection effect toward harder
+fakes, not a cue a model can exploit. These families are not restored by
+hand. A future detector or tracker change would re-run them under a
+new config tag.
+
+---
+
+## 2026-10-01 — FF++ crops are sampled per content family over a shared range, matched by frame index
+
+**Context:** Official sources fix the roles: filenames are
+`<target sequence>_<source sequence>` (`dataset/README.md` @ `b952e41c`).
+The target supplies the frames; the source supplies the swapped face
+(DF/FS) or the driving expressions (F2F/NT) (Rössler et al. 2019,
+appendix). The same appendix says Deepfakes manipulates every target
+frame, FaceSwap/NeuralTextures only `min(target, source)` frames, and
+Face2Face "maps all source expressions to the target sequence and
+rewinds the target video if necessary". The Phase 5d probe of all 5000
+videos agrees exactly: DF = target length (1000/1000), F2F = source
+length (992/1000), FS/NT = min(target, source) (1000 / 999).
+
+**Decision:**
+- A content family is one target original plus its 4 fakes (1000
+  families × 5 videos; each video belongs to exactly one).
+- Every member samples the **same 16 frame indices**, given by the
+  existing nested contract applied to `[0, min(frame counts) − 1]`.
+  This excludes F2F's rewound tail, and the real member's sampled span
+  equals its fakes'.
+- Equivalent temporal position = **equal frame index**, not timestamp.
+  Registration of a seeded sample showed index offset 0 (the
+  residual ±1–2 cases were near-static scenes). 64 fakes carry a
+  different fps header from their target but still align by index, so
+  timestamp matching would have been wrong.
+- The donor original is recorded as the second leakage parent
+  (`donor_parent_sample_id`) but is not a temporal partner.
+
+**Why:** This gives real/fake pairs the same content positions, and
+leaves clip length unable to change which part of a clip either class
+shows.
+
+---
+
+## 2026-10-01 — Missing faces: joint recovery, then individual, else quarantine the whole family
+
+Applied identically to every member:
+1. Planned index if every member has a valid face there.
+2. Else the first offset in +1, −1, +2, −2, …, ±6 at which **all**
+   members are valid (joint recovery; the match stays exact).
+3. Else per member: planned if valid, otherwise its own first valid
+   offset. This is recorded as `individual_recovery` / `exact_match: false`
+   in `matched_pairs.jsonl`.
+4. If any member still has no face, the **whole family** is quarantined.
+
+Offsets are bounded by half the gap to the neighbouring planned index,
+so recovered frames stay strictly ordered (property-tested).
+Quarantining a whole family, rather than one video, keeps paired sampling
+intact: an original without crops would orphan 4 fakes, and dropping only
+a fake would unbalance the family. Successful crops of quarantined
+families are kept for review. Nothing is ever padded, blanked, or
+returned short.
+
+---
+
+## 2026-10-01 — Sparse-sample face linking uses IoU OR a size-normalised centre shift
+
+**Context:** In the first trial, family 682 was quarantined even though
+YuNet found the face at 0.93 confidence. Samples are ~33 frames apart,
+the speaker drifted ~0.6 face widths, so the IoU fell to 0.19 (< 0.3).
+The Phase 2 IoU-only tracker then split the track and the shorter segment
+was rejected.
+
+**Decision:** Link two detections if IoU ≥ 0.3, **or** if the centre
+shift is ≤ 1.0 mean face width **and** the area ratio is ≤ 1.5². The
+primary face is the longest linked track (ties: higher mean confidence,
+then earliest). Both thresholds are part of the config tag. A different
+person 3 face widths away and a 4× zoom cut are not linked (tested).
+The Phase 2 `configuard.media.tracking` module is unchanged.
+
+**Follow-up (same day, full run 1, stopped at ~25%):** family 158 (a
+weather presenter walking across the frame, detected at 0.93–0.94 in
+every frame) was quarantined. One planned frame was faceless, so the
+planned-only track jumped 1.37 face widths and split. A recovery
+frame at 224 would have bridged the gap (shifts 1.0 and then 0.37),
+but tracking ignored recovery frames. **Fix:** each member's primary
+track is rebuilt over *all* decoded frames, planned plus recovery, and
+recovery runs for up to 2 rounds (`recovery_rounds`, `tracking_method`
+are in the config tag). Regression test:
+`test_recovery_frame_bridges_a_moving_face_instead_of_quarantining`.
+The partial run's store is refused as stale and was set aside
+(`superseded_run2_p5d-c02fd00a89fb7d96`). Run 2 used the fixed config
+`p5d-b451b5ca770c8923`.
+
+---
+
+## 2026-10-01 — Five-landmark similarity alignment; one PNG format for every class
+
+- Umeyama least-squares **similarity** (rotation + one uniform scale +
+  translation) maps YuNet's 5 landmarks onto the standard 112-px
+  five-point template, scaled into 224×224 with `margin_ratio = 0.25`.
+  The face outline, hairline and jaw stay in the crop, so blending
+  boundaries are not cropped away.
+- Uniform scale means aspect ratio is **never** changed: any anisotropic
+  distortion in a source would remain measurable (tested with a 3%
+  squeeze). No method-specific correction exists.
+- Borders: reflect-101 (no black padding). The share of output pixels
+  that fall outside the frame is recorded for the audit.
+- Downscales beyond 2× are pre-filtered with `INTER_AREA`, then the
+  image is warped bilinearly.
+- Output: 224×224 RGB PNG, compression 3, no text/time chunks
+  (byte-deterministic). Paths are keyed by input SHA-256 and frame
+  index only, with no label, method or split.
+- PNG was kept after measuring ~62 KB per crop. The trial projected
+  ~5 GB for 80,000 crops against ~44 GB of headroom above the floor.
+
+---
+
+## 2026-10-01 — The model-facing crop manifest is a field whitelist; source facts live in an audit sidecar
+
+`crops_<split>.jsonl` rows may contain only `MODEL_ROW_FIELDS`, with
+lineage under `metadata`. Source width/height, duration, fps, frame
+count, codec, file size and frame indices go to `crop_audit.jsonl` and
+the family records instead. `validate_crop_leakage` rejects any
+non-whitelisted field. This makes "resolution and duration never enter
+the model" a structural property rather than a convention.
+
+---
+
+## 2026-10-01 — Crop store accepts exactly one config and refuses stale outputs
+
+The config tag hashes the detector name, version and **model SHA-256**
+(YuNet now hash-pinned in code: `verify_yunet_model`), and every
+sampling, linking, recovery, alignment and PNG parameter. A store root
+records its config and refuses any other. Family records are checked
+against the tag, the member input SHA-256s, and the crop sizes (full
+SHA-256 on demand). Mismatch raises `StaleCropError`; nothing is silently
+reused. This was demonstrated live: after the linking change, the first
+trial store was refused and moved aside (not deleted) to
+`D:\ConfiGuard-Data\cache\ffpp_face_crops\superseded_trial1_p5d-2ce67d23e6a64f82`.
+
+---
+
 ## 2026-09-30 — FF++ split = the authors' official files, pinned to commit `b952e41cba01`
 
 **Decision:** Use `dataset/splits/{train,val,test}.json` from

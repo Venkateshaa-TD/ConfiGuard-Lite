@@ -18,10 +18,26 @@ from configuard.media.types import BoundingBox, DetectedFace, FaceLandmarks
 
 DEFAULT_YUNET_MODEL_FILENAME = "face_detection_yunet_2026may.onnx"
 DEFAULT_YUNET_VERSION = "2026may"
+# Pinned in docs/DATASETS.md (matches opencv_zoo's Git LFS pointer).
+YUNET_2026MAY_SHA256 = "ebafce4e3c118d6554634be5c27ab333b4c047a9a8c3faf1d7cf93101c22f0f0"
 
 
 class FaceDetectorError(Exception):
     """Raised when a detector backend fails to load or run."""
+
+
+def verify_yunet_model(path: str | Path | None = None, expected_sha256: str = YUNET_2026MAY_SHA256) -> str:
+    """SHA-256 of the YuNet model file; raises FaceDetectorError unless it
+    equals the pin. Used wherever crops are produced for training data."""
+    import hashlib
+
+    path = Path(path) if path is not None else default_yunet_model_path()
+    if not path.is_file():
+        raise FaceDetectorError(f"YuNet model file not found at {path}")
+    digest = hashlib.sha256(path.read_bytes()).hexdigest()
+    if digest != expected_sha256:
+        raise FaceDetectorError(f"YuNet model {path} has SHA-256 {digest}, expected pinned {expected_sha256}")
+    return digest
 
 
 @runtime_checkable
