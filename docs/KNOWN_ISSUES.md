@@ -4,6 +4,23 @@ Format: one entry per issue. Mark resolved issues rather than deleting them.
 
 ---
 
+## OPEN — Landing hero limits (12c)
+
+- **Phones.** The 3D hero waits for the first interaction; before
+  that, the static composition is shown (intentional, for performance
+  and battery).
+- **Integrated GPUs.** Not measured on real integrated-graphics
+  hardware. Slow GPUs are handled by a frame-time guard that freezes
+  the hero on a composed frame, and software rasterizers get the
+  static fallback.
+- **Hero frame cost.** The visible animated hero costs about 150 ms/s
+  of main-thread time on the RTX 4050 laptop (144 fps, uncapped). It
+  pauses offscreen and on hidden tabs.
+- **Abstract face.** The procedural head is intentionally abstract (a
+  sculpted sphere), not a realistic face model.
+
+---
+
 ## OPEN — React frontend limits
 
 - **Cancellation is client-side.** The server finishes an analysis

@@ -19,6 +19,11 @@ export default defineConfig({
   globalSetup: "./tests/e2e/global-setup.ts",
   globalTeardown: "./tests/e2e/global-teardown.ts",
   use: { baseURL: `http://127.0.0.1:${PORT}`, channel: "chrome", headless: true, trace: "off" },
+  projects: [
+    { name: "chrome", grepInvert: /@nowebgl/ },
+    // Same browser with WebGL disabled: the hero must fall back to its static composition.
+    { name: "chrome-no-webgl", grep: /@nowebgl/, use: { launchOptions: { args: ["--disable-webgl", "--disable-3d-apis"] } } },
+  ],
   webServer: {
     command: `"${python}" "${join(repo, "scripts", "serve.py")}" --env development --port ${PORT}`,
     url: `http://127.0.0.1:${PORT}/health/ready`,

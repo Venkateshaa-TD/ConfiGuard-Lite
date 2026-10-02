@@ -6,6 +6,7 @@ import { NOT_LEGAL_PROOF, REASONS, STOPPING, VERDICTS } from "../lib/labels";
 import { ProbabilityScale, TimelineChart } from "./Charts";
 import { CredentialsPanel } from "./CredentialsPanel";
 import { EvidenceGrid } from "./EvidenceGrid";
+import { Brackets } from "../brand/primitives";
 import { Metric, SectionTitle, toneBorder, toneSoft, toneText } from "./ui";
 
 const ICON = { real: CheckCircle, fake: WarningOctagon, unc: Question } as const;
@@ -38,7 +39,8 @@ export const ResultView = forwardRef<HTMLHeadingElement, { r: AnalyzeResult }>(f
     ["Content Credentials", t.provenance_ms], ["Total", t.total_ms],
   ];
   return (
-    <article aria-labelledby="result-h" className="flex flex-col gap-5 rounded-xl border border-line bg-surface p-4 md:p-6">
+    <article aria-labelledby="result-h" className="relative flex flex-col gap-5 border border-line bg-surface p-4 md:p-6">
+      <Brackets size={10} />
       <header className="flex flex-col gap-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 id="result-h" ref={ref} tabIndex={-1} className="text-sm font-medium text-muted">
@@ -46,10 +48,10 @@ export const ResultView = forwardRef<HTMLHeadingElement, { r: AnalyzeResult }>(f
           </h2>
           <p className="inline-flex items-center gap-1.5 text-xs font-medium text-ink-2"><Scales size={14} aria-hidden="true" />{NOT_LEGAL_PROOF}</p>
         </div>
-        <div className={`flex gap-3 rounded-lg border-l-4 p-4 ${toneBorder[v.tone]} ${toneSoft[v.tone]}`} data-verdict={r.verdict}>
+        <div className={`flex gap-3 border-l-4 p-4 ${toneBorder[v.tone]} ${toneSoft[v.tone]}`} data-verdict={r.verdict}>
           <Icon size={30} weight="regular" aria-hidden="true" className={`mt-0.5 shrink-0 ${toneText[v.tone]}`} />
           <div className="flex flex-col gap-1">
-            <p className={`text-2xl font-semibold tracking-tight md:text-[28px] ${toneText[v.tone]}`}>{v.label}</p>
+            <p className={`display text-4xl md:text-5xl ${toneText[v.tone]}`}>{v.label}</p>
             <p className="max-w-[65ch] text-sm leading-relaxed text-ink-2">{v.summary}</p>
             {r.gated ? (
               <p className="max-w-[65ch] text-sm leading-relaxed text-ink-2">
@@ -59,7 +61,7 @@ export const ResultView = forwardRef<HTMLHeadingElement, { r: AnalyzeResult }>(f
           </div>
         </div>
         {r.experimental ? (
-          <p className="flex gap-2 rounded-lg border border-unc bg-unc-soft px-3 py-2 text-sm text-ink">
+          <p className="flex gap-2 border border-unc bg-unc-soft px-3 py-2 text-sm text-ink">
             <Flask size={18} aria-hidden="true" className="mt-0.5 shrink-0 text-unc" />
             <span><strong className="font-semibold">Experimental:</strong> {r.experimental_reason ?? "still-image analysis."}</span>
           </p>

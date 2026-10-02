@@ -4,6 +4,53 @@ Format: one entry per decision, newest first.
 
 ---
 
+## 2026-10-02 — 12c: landing experience, routing and hero
+
+- **Identity:** original, not derived from the GetLayers/Kimi assets.
+  Paper / ink / dark / cyan / steel; condensed display (Big Shoulders
+  Display, OFL-1.1, self-hosted with its licence); chamfered panels,
+  bracket corners, thin grid and contour lines.
+  - Cyan and steel fail AA as small text on paper, so small
+    light-surface text uses `--cyan-ink` / `--muted`. Pure cyan is for
+    dark surfaces and strokes.
+- **Routing without a library:** about 90 lines over the History API.
+  The landing page is in the entry chunk for LCP; `/detect` and
+  `/about` are lazy.
+  - FastAPI serves `index.html` for client routes (200) and for unknown
+    non-API paths with a real 404 status. `/v1`, `/health`, `/assets`
+    and `/fonts` misses stay JSON 404s.
+- **Hero:** a procedural sculpted sphere, so no third-party or
+  unlicensed model.
+  - Two materials are split by world-space clipping planes; the scan
+    line is the boundary.
+  - Interactive (cursor) on fine pointers, automatic sweep on touch.
+  - Only one WebGL context: it is created on the hero canvas before
+    Three.js is downloaded, and handed to the renderer, so a failure
+    falls back without fetching 130 KB or logging errors.
+  - Software rasterizers (SwiftShader / llvmpipe) and slow GPUs (first
+    frame > 250 ms or average > 18 ms) keep a composed static frame.
+  - **Phones:** the poster first, then the simplified scene on first
+    interaction. This took Lighthouse mobile from 69 to 99 and keeps
+    battery and data costs opt-in.
+- **Rendering cost:** the landing page renders the hero first and the
+  remaining sections in a React transition (time-sliced, no long
+  task).
+  - Below-the-fold sections use `content-visibility: auto`.
+  - The sticky header dropped `backdrop-blur`.
+  - One shared rAF loop drives the hero and the scroll-linked dissolve,
+    active only while they are visible.
+- **Metrics policy:** the site shows only four documented values
+  (2.49M parameters, 9.49 MiB ONNX, 6.19 average frames, 0.9735 video
+  AUROC), each with dataset and split. They live in `src/facts.ts`;
+  the tests forbid "accuracy", "99." and "universal" in that section.
+- **Skill application:** `design-taste-frontend-v1` for visual
+  direction at the requested dials.
+  - Its Framer Motion / GSAP / perpetual-animation and external-image
+    advice was not used. The request forbids those frameworks, the CSP
+    forbids remote images, and the hero is the only continuous motion.
+
+---
+
 ## 2026-10-02 — React production frontend
 
 - **Stack:** React 19 + TypeScript + Vite + Tailwind v4 (build-time

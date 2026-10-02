@@ -2440,3 +2440,55 @@ Lighthouse: `D:\ConfiGuard-Data\outputs\frontend_lighthouse\lighthouse_2026-10-0
 cd frontend && npx vitest run && npx playwright test        # 49 passed; 8 passed
 .venv/Scripts/python.exe -m pytest -q -p no:cacheprovider -rs   # 658 passed, 0 skipped, 318.51 s
 ```
+
+## 2026-10-02 — 12c landing experience and detector redesign
+
+```
+.venv/Scripts/python.exe scripts/detection_parity.py baseline   # before any change: 15 val items via the real API
+cd frontend
+npm install three@0.186.1 @fontsource-variable/big-shoulders-display@5.3.0 && npm install -D @types/three@0.186.0
+npm run build && node scripts/size-report.mjs
+npx vitest run                      # 58 passed
+npx playwright test                 # 17 passed (16 Chrome + 1 Chrome with --disable-webgl)
+node scripts/lighthouse.mjs         # / and /detect, mobile + desktop
+cd .. && .venv/Scripts/python.exe scripts/detection_parity.py compare   # identical: true (15/15)
+```
+
+Bundle (gzip): landing initial JS **91.0 KB** (budget 180), CSS 7.7 KB; lazy: Three.js hero scene
+130.2 KB, detector 21.5 KB, about 2.8 KB. Fonts: Big Shoulders Display Latin 35.5 KB (preloaded).
+
+Lighthouse (performance / accessibility / best practices / SEO; LCP; CLS; TBT), localhost:
+
+| run | `/` mobile | `/` desktop | `/detect` mobile | `/detect` desktop |
+|---|---|---|---|---|
+| first build | 69 / 100 / 100 / 100; 2.08 s; 0; 3298 ms | 89 / 95; 0.44 s | 97 / 96 | 100 / 96 |
+| final | **99 / 100 / 100 / 100; 2.10 s; 0; 52 ms** | **99 / 100 / 100 / 100; 0.49 s; 0; 99 ms** | **98 / 100 / 100 / 100; 2.43 s; 0** | **100 ×4; 0.60 s; 0** |
+
+Mobile diagnosis (CDP CPU profile + `longtask` observer at 4× CPU, phone viewport):
+- An eager WebGL capability probe cost about 400 ms; it was removed,
+  and the one context is now created on the hero canvas.
+- Two 250–280 ms initial tasks came from rendering the whole page; the
+  sections below the hero now render in a transition.
+- A WebGL boot under mobile emulation took about 1.6 s of native time;
+  phones now boot the 3D scene on first interaction.
+
+Hero runtime (Chrome, RTX 4050 laptop, 1440 × 900, DPR 1):
+- **GPU geometry:** 797,224 bytes; 37,376 triangles.
+- **Frame rate:** about 144 fps while visible.
+- **Main-thread time:**
+  - 152–156 ms/s visible and animating;
+  - 3.1–3.5 ms/s with the hero offscreen (loop paused);
+  - **0.1 ms/s on `/detect`** (no canvas; WebGL disposed).
+
+Integrated-graphics behaviour is covered by the frame-time guard and the software-renderer fallback;
+it was not measured on such hardware here.
+
+Screenshots (390 / 820 / 1440 / 1920 px for `/`, `/about`, `/detect` with a result; plus no-WebGL):
+`D:\ConfiGuard-Data\outputs\frontend_12c\2026-10-02T08-49-36-892Z\` (not committed).
+
+## 2026-10-02 — 12c tests
+
+```
+cd frontend && npx vitest run && npx playwright test   # 58 passed; 17 passed
+.venv/Scripts/python.exe -m pytest -q -p no:cacheprovider -rs   # 659 passed, 0 skipped, 263.12 s
+```

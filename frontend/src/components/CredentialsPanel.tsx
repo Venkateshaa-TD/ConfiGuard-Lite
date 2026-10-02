@@ -20,7 +20,7 @@ export function CredentialsPanel({ p }: { p: Provenance }) {
   return (
     <section aria-labelledby="cred-h" className="flex flex-col gap-3 border-t border-line pt-5">
       <SectionTitle id="cred-h" aside="Separate from the detection result">Content Credentials (C2PA)</SectionTitle>
-      <div className={`flex gap-3 rounded-lg border-l-4 p-3 ${toneBorder[c.tone]} ${toneSoft[c.tone]}`}>
+      <div className={`flex gap-3 border-l-4 p-3 ${toneBorder[c.tone]} ${toneSoft[c.tone]}`}>
         <Icon size={22} weight="regular" aria-hidden="true" className={`mt-0.5 shrink-0 ${toneText[c.tone]}`} />
         <div className="flex flex-col gap-1">
           <p className={`text-sm font-semibold ${toneText[c.tone]}`}>{c.label}</p>

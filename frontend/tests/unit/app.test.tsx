@@ -1,7 +1,7 @@
 import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { App } from "../../src/App";
+import { DetectPage as App } from "../../src/pages/DetectPage";
 import { analyze, AnalysisFailure, isAnalyzeResult, jpegDataUri } from "../../src/api/client";
 import { checkFile } from "../../src/components/UploadPanel";
 import { image, JPEG_B64, limits, MockXHR, video } from "./fixtures";

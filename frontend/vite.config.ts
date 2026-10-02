@@ -17,6 +17,7 @@ export default defineConfig({
     manifest: true,
     modulePreload: { polyfill: false },
     assetsInlineLimit: 0, // never inline assets as data: URIs into JS/CSS
+    chunkSizeWarningLimit: 600, // the lazy Three.js hero chunk (~540 KB raw, ~130 KB gzip) is intentionally separate
   },
   server: { port: 5173, strictPort: true, proxy: { "/v1": api, "/health": api } },
   test: {

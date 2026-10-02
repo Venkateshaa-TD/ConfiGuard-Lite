@@ -20,6 +20,8 @@ def fake_dist(root: Path) -> Path:
                                   '</head><body><div id="root"></div></body></html>', encoding="utf-8")
     (d / "assets" / "app-abc123.js").write_text("export {};" + "/*pad*/" * 400, encoding="utf-8")
     (d / "favicon.svg").write_text("<svg xmlns='http://www.w3.org/2000/svg'/>", encoding="utf-8")
+    (d / "fonts").mkdir()
+    (d / "fonts" / "display.woff2").write_bytes(b"wOF2" + bytes(64))
     return d
 
 
@@ -61,3 +63,21 @@ def test_real_build_has_no_inline_code_or_external_references():
     for js in (REAL_DIST / "assets").glob("*.js"):
         text = js.read_text(encoding="utf-8")
         assert "localStorage" not in text and "sessionStorage" not in text
+
+
+def test_spa_fallback_serves_client_routes_and_keeps_api_errors_json(tmp_path, bundle):
+    cfg = make_config(tmp_path, *bundle, ui_dist_dir=fake_dist(tmp_path))
+    c, _ = client_for(cfg)
+    with c:
+        detect, about, deep = c.get("/detect"), c.get("/about"), c.get("/no/such/page")
+        api_missing, health_missing = c.get("/v1/nope"), c.get("/health/nope")
+        asset_missing, font = c.get("/assets/missing.js"), c.get("/fonts/display.woff2")
+        limits = c.get("/v1/limits")
+    for r in (detect, about):
+        assert r.status_code == 200 and 'id="root"' in r.text and r.headers["cache-control"] == "no-store"
+        assert "default-src 'none'" in r.headers["content-security-policy"]
+    assert deep.status_code == 404 and 'id="root"' in deep.text  # SPA renders its own 404 page
+    for r in (api_missing, health_missing, asset_missing):
+        assert r.status_code == 404 and r.json()["error"]["code"] == "not_found"
+    assert font.status_code == 200 and font.headers["cache-control"] == "public, max-age=604800"
+    assert limits.status_code == 200 and "max_image_size_mb" in limits.json()

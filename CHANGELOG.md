@@ -544,3 +544,26 @@ All notable changes to this project are documented here.
   100×4.
 - Full backend suite 658/658 (319 s). No model/calibration/gate/C2PA/verdict
   changes, no Docker, no FF++ test access.
+
+### 12c — Cinematic landing experience and detector redesign (2026-10-02)
+
+- **Routes:** `/` landing, `/detect` detector and `/about`, behind a
+  dependency-free history router; FastAPI SPA fallback (unknown paths
+  get 404 with the shell; API misses stay JSON); `/fonts` served.
+- **Identity:** an original identity (paper / ink / dark / cyan /
+  steel, Big Shoulders Display + Geist, chamfers, brackets, grid and
+  contour lines).
+- **Hero:** a procedural Three.js head (lazy chunk; one shared rAF
+  loop; DPR ≤ 1.5; paused offscreen; disposed on unmount; phone boot on
+  interaction; static and software-GL fallbacks; reduced-motion single
+  frame).
+- **Detector:** re-skinned with every feature preserved, plus "Back to
+  overview". About covers scope, evaluation boundaries and limitations.
+- **Verification:**
+  - Detection parity 15/15 identical.
+  - 58 unit tests; 17 real-browser E2E (incl. no-WebGL).
+  - Lighthouse 99–100 performance and 100 accessibility on `/` and
+    `/detect`.
+  - Landing initial JS 91 KB gzip.
+- Full backend suite 659/659 (263 s). No model, calibration, gate, C2PA or
+  verdict changes; no Docker, cloud, training or FF++ test access.

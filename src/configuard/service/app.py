@@ -142,6 +142,8 @@ def create_app(cfg: ServiceConfig, engine: InferenceEngine | None = None) -> Fas
             response.headers["Content-Security-Policy"] = CSP
         if request.url.path.startswith("/assets/") and response.status_code == 200:
             response.headers["Cache-Control"] = "public, max-age=31536000, immutable"  # content-hashed build files
+        elif request.url.path.startswith("/fonts/") and response.status_code == 200:
+            response.headers["Cache-Control"] = "public, max-age=604800"  # stable font file names (preloaded)
         elif not request.url.path.startswith("/static/"):
             response.headers["Cache-Control"] = "no-store"  # results, evidence frames and index.html are never cached
         log_event("request", method=request.method, route=request.url.path, status=response.status_code,
@@ -183,6 +185,8 @@ def create_app(cfg: ServiceConfig, engine: InferenceEngine | None = None) -> Fas
     app.state.ui = "react" if react else ("static" if cfg.ui_enabled else "off")
     if react:  # production React build (frontend/dist), same origin as the API
         app.mount("/assets", StaticFiles(directory=dist / "assets", html=False), name="assets")
+        if (dist / "fonts").is_dir():
+            app.mount("/fonts", StaticFiles(directory=dist / "fonts", html=False), name="fonts")
 
         @app.get("/", include_in_schema=False)
         async def ui_index():
@@ -294,5 +298,18 @@ def create_app(cfg: ServiceConfig, engine: InferenceEngine | None = None) -> Fas
             if not handed_off:
                 shutil.rmtree(workdir, ignore_errors=True)
                 admission.release()
+
+    if react:
+        spa_routes = {"", "detect", "about"}
+        reserved = ("v1/", "health/", "assets/", "fonts/", "static/", "docs", "redoc", "openapi.json")
+
+        # Registered last so every API route wins. Client routes (and refreshes of them) get the SPA
+        # shell; unknown non-API paths get the shell with a real 404 status so the app shows its 404 page.
+        @app.get("/{full_path:path}", include_in_schema=False)
+        async def spa_fallback(full_path: str):
+            path = full_path.strip("/")
+            if path.startswith(reserved) or "." in path.rsplit("/", 1)[-1]:
+                raise StarletteHTTPException(status_code=404)
+            return FileResponse(dist / "index.html", media_type="text/html", status_code=200 if path in spa_routes else 404)
 
     return app

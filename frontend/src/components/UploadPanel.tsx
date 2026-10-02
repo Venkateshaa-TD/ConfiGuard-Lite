@@ -2,6 +2,7 @@ import { FilmStrip, ImageSquare, UploadSimple, X } from "@phosphor-icons/react";
 import { useEffect, useId, useState, type DragEvent } from "react";
 import type { Limits } from "../api/types";
 import { extensionOf, mb } from "../lib/format";
+import { Brackets } from "../brand/primitives";
 import { Button } from "./ui";
 
 export interface Selection { file: File; kind: "image" | "video" }
@@ -43,7 +44,8 @@ export function UploadPanel(p: Props) {
     if (!p.selection) return setPreview(null);
     const url = URL.createObjectURL(p.selection.file);
     setPreview(url);
-    return () => URL.revokeObjectURL(url);
+    // Revoke shortly after the swap so a still-loading <video> never fetches a revoked URL.
+    return () => { window.setTimeout(() => URL.revokeObjectURL(url), 1500); };
   }, [p.selection]);
 
   const take = (file: File | undefined) => {
@@ -66,7 +68,8 @@ export function UploadPanel(p: Props) {
 
   const lim = p.limits;
   return (
-    <section aria-labelledby="upload-h" className="rounded-xl border border-line bg-surface p-4 md:p-5">
+    <section aria-labelledby="upload-h" className="relative border border-line bg-surface p-4 md:p-5">
+      <Brackets size={10} />
       <h2 id="upload-h" className="text-base font-semibold tracking-tight">Analyse media</h2>
       <p className="mt-1 text-sm text-muted">A face image or a video. Files are processed in memory and deleted after the request.</p>
 
@@ -75,7 +78,7 @@ export function UploadPanel(p: Props) {
         onDragOver={(e) => { e.preventDefault(); if (!p.busy) setOver(true); }}
         onDragLeave={() => setOver(false)}
         onDrop={onDrop}
-        className={`mt-4 flex cursor-pointer flex-col gap-2 rounded-lg border-2 border-dashed p-4 transition-colors has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-focus ${over ? "border-accent bg-accent-soft" : "border-line-strong hover:border-accent"} ${p.busy ? "pointer-events-none opacity-60" : ""}`}
+        className={`mt-4 flex cursor-pointer flex-col gap-2 border-2 border-dashed p-4 transition-colors has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-focus ${over ? "border-accent bg-accent-soft" : "border-line-strong hover:border-accent"} ${p.busy ? "pointer-events-none opacity-60" : ""}`}
       >
         <span className="flex items-center gap-2 text-sm font-medium text-ink">
           <UploadSimple size={18} weight="regular" aria-hidden="true" />
@@ -99,7 +102,7 @@ export function UploadPanel(p: Props) {
       <p id={`${inputId}-err`} role="alert" className="mt-2 min-h-5 text-sm text-fake">{error ?? ""}</p>
 
       {p.selection && preview ? (
-        <div className="mt-1 overflow-hidden rounded-lg border border-line bg-raised">
+        <div className="mt-1 overflow-hidden border border-line bg-raised">
           <div className="grid place-items-center bg-canvas">
             {p.selection.kind === "image" ? (
               <img src={preview} alt="Preview of the selected image" className="max-h-56 w-auto object-contain" />
@@ -130,7 +133,7 @@ export function UploadPanel(p: Props) {
             <label htmlFor={`${inputId}-key`} className="text-sm font-medium">API key</label>
             <input id={`${inputId}-key`} type="password" autoComplete="off" spellCheck={false} value={p.apiKey}
               onChange={(e) => p.onApiKey(e.target.value)} aria-describedby={`${inputId}-keyhint`}
-              className="min-h-11 rounded-lg border border-line-strong bg-canvas px-3 text-sm" />
+              className="min-h-11 border border-line-strong bg-canvas px-3 text-sm" />
             <p id={`${inputId}-keyhint`} className="text-xs text-muted">Held in this page's memory only; never saved.</p>
           </div>
         ) : null}

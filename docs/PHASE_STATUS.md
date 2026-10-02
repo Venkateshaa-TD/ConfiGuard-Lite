@@ -25,6 +25,7 @@
 | 11 | Explainability and lightweight web UI | PASS | 2026-10-02 |
 | 12 | C2PA provenance verification | PASS | 2026-10-02 |
 | 12b | React production frontend upgrade | PASS | 2026-10-02 |
+| 12c | Cinematic landing experience and detector redesign | PASS | 2026-10-02 |
 
 Full per-phase results are recorded below as they complete.
 
@@ -1298,3 +1299,76 @@ plain UI.
 - UNCERTAIN evidence copy implied a decision;
 - mobile CLS 0.162 from late limits text and a font swap → 0.009;
 - assets served uncompressed (mobile performance 82 → 99 after gzip).
+
+---
+
+## 12c — Cinematic landing experience and detector redesign
+
+**Status:** PASS
+
+**Summary:** an original ConfiGuard identity with three routes, all
+same-origin, with an SPA fallback on refresh:
+- **`/`:** cinematic landing page with a procedural Three.js head
+  (natural porcelain half vs. cyan wireframe/point-cloud synthetic
+  half, with a cursor- or auto-driven scan boundary).
+- **`/detect`:** the full existing detector in a focused workspace.
+- **`/about`:** technology, evaluation, privacy and limitations.
+
+Detection is untouched. A 15-item parity check through the real API on
+FF++ val media was identical before and after (verdicts, probabilities,
+per-frame logits, reasons, explanation and C2PA status).
+
+**Requirements:**
+- **Design:** skill read in full at variance 7 / motion 5 / density 6.
+  Original identity: paper `#F5F8F9`, ink `#07090D`, dark `#0D1015`,
+  cyan `#00D7E5`, steel `#8D9AA3`; Big Shoulders Display (OFL-1.1,
+  local) + Geist. No Kimi assets, code, wording or layout reused. **Met.**
+- **Routes:** history-API router without a dependency; FastAPI SPA
+  fallback (client routes 200, unknown non-API paths 404 with the
+  shell, API misses stay JSON); back/forward restore scroll; "Get
+  Started" → `/detect`. **Met.**
+- **Landing sections:** navigation with an accessible mobile menu
+  (focus trap, Escape, focus return); hero; problem with checker
+  dissolve; four sticky forensic stages; performance with only the
+  four verified, FF++-labelled values; trust (three separate
+  signals); privacy; final CTA; footer with academic / not-legal-proof
+  notice. **Met.**
+- **Detector:** every existing feature and result field kept; new
+  workspace layout, "Back to overview", verdicts distinct by text,
+  icon and colour; images marked experimental. **Met.**
+- **About:** architecture, scope, media, evaluation boundaries and
+  limitations, including that it is not proven on text-to-video
+  generators. **Met.**
+- **Motion and performance:**
+  - Three.js as a lazy chunk only; no GSAP/Lenis/Framer; one shared rAF
+    loop; DPR ≤ 1.5.
+  - Pauses offscreen or on a hidden tab; disposed on unmount.
+  - Simplified mesh on phones, booted on first interaction.
+  - Static fallback without WebGL or on software GL; frame-time guard.
+  - Reduced motion renders one composed frame.
+  - No scroll hijacking; `/detect` has no WebGL. **Met.**
+- **Budgets:** landing initial JS 91.0 KB gzip (< 180), hero chunk
+  130.2 KB lazy. LCP 2.10 s mobile / 0.49 s desktop. CLS 0. **Met.**
+- **Accessibility and security:** one H1 per page, Lighthouse
+  accessibility 100 on all four runs, decorative `aria-hidden` canvas,
+  strict CSP unchanged, text-only rendering, memory-only API key, no
+  remote assets. **Met.**
+- **Tests:**
+  - 58 unit tests (incl. axe).
+  - 17 real-browser E2E: landing nav, mobile menu, Get Started → detector,
+    real / fake / error uploads, heatmaps + C2PA, back/forward, deep links,
+    reduced motion, WebGL pause/dispose, no-WebGL fallback, phone
+    on-interaction boot, 4 widths.
+  - Full backend suite. **Met.**
+- **Lighthouse** on `/` and `/detect`, mobile + desktop: 99/100/100/100,
+  99/100/100/100, 98/100/100/100, 100×4. **Met.**
+
+**Found and fixed during verification:**
+- mobile menu not closing on a same-page link;
+- H1 focus landing on the outgoing page;
+- blob preview revoked mid-load;
+- wordmark contrast (2.7:1);
+- chamfered outline button clipping its border;
+- landing mobile performance 69 → 99 (an eager WebGL probe context, a
+  single-task full-page render, WebGL boot under mobile emulation);
+- Three.js console errors when WebGL is disabled.

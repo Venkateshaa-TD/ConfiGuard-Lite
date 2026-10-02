@@ -908,6 +908,21 @@ GET /health/ready  -> 200 only if verify_bundle passes (re-checked every ready_r
   `logs.py`:** extraction, streamed uploads, routes, response models and
   structured logs.
 
+### Website routes and hero (12c)
+
+```
+src/App.tsx         route switch: "/" LandingPage (entry chunk) | "/detect" DetectPage (lazy) | "/about" AboutPage (lazy) | 404
+src/router.tsx      History-API router: Link, navigate, useLocation, scroll restore, hash targets, H1 focus per [data-page]
+src/brand/          primitives (Brackets, TechLabel, Wordmark, CtaLink, Reveal, Contours, SectionHeading), SiteNav, SiteFooter
+src/landing/        Hero, Problem (scroll-linked checker dissolve), Stages (sticky panels), Sections (Performance, Trust,
+                    Privacy, FinalCta)
+src/hero/           HeroVisual (poster -> lazy scene; one WebGL context; IO pause; frame guard; fallbacks), heroScene.ts
+                    (procedural head, clipping-plane scan), HeroFallback (static SVG)
+src/lib/raf.ts      the single shared requestAnimationFrame loop (runs only with subscribers and a visible tab)
+src/facts.ts        the only model statistics shown on the site, with dataset/split labels
+backend             app.py: /assets (immutable), /fonts (1 week), SPA fallback registered after all API routes
+```
+
 ### React frontend (12b)
 
 ```

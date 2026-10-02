@@ -19,7 +19,7 @@ async function open(page: Page): Promise<Watch> {
     document.addEventListener("securitypolicyviolation", (e) =>
       (window as unknown as { __csp: string[] }).__csp.push(`${e.violatedDirective} ${e.blockedURI}`));
   });
-  await page.goto("/");
+  await page.goto("/detect");
   await expect(page.getByText(/up to 20 MB/)).toBeVisible();
   return w;
 }
@@ -105,7 +105,7 @@ test("reduced motion and keyboard order", async ({ page }) => {
   const duration = await page.locator("button.tactile").first().evaluate((b) => getComputedStyle(b).transitionDuration);
   expect(parseFloat(duration)).toBeLessThan(0.01);
   const order: string[] = [];
-  for (let i = 0; i < 4; i++) {
+  for (let i = 0; i < 8; i++) {
     await page.keyboard.press("Tab");
     order.push(await page.evaluate(() => {
       const el = document.activeElement as HTMLElement;
@@ -113,6 +113,7 @@ test("reduced motion and keyboard order", async ({ page }) => {
     }));
   }
   expect(order[0]).toBe("Skip to results");
+  // next stops: overview/about links, then the upload controls
   expect(order).toContain("file");
   expect(order).toContain("checkbox");
 });

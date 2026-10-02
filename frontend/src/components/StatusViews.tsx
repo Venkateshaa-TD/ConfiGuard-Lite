@@ -6,7 +6,7 @@ import { Button } from "./ui";
 
 export function EmptyState() {
   return (
-    <section aria-labelledby="empty-h" className="rounded-xl border border-dashed border-line-strong p-6 md:p-8">
+    <section aria-labelledby="empty-h" className="border border-dashed border-line-strong bg-surface/60 p-6 md:p-8">
       <h2 id="empty-h" className="text-base font-semibold tracking-tight">No analysis yet</h2>
       <ol className="mt-3 flex max-w-[62ch] list-decimal flex-col gap-1.5 pl-5 text-sm leading-relaxed text-ink-2">
         <li>Choose or drop a face image or video on the left.</li>
@@ -33,7 +33,7 @@ export function ProgressView({ phase, fraction, since, onCancel }: {
 }) {
   const pctNow = Math.round(fraction * 100);
   return (
-    <section aria-labelledby="prog-h" aria-busy="true" className="flex flex-col gap-5 rounded-xl border border-line bg-surface p-4 md:p-6">
+    <section aria-labelledby="prog-h" aria-busy="true" className="flex flex-col gap-5 border border-line bg-surface p-4 md:p-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 id="prog-h" className="text-sm font-medium text-muted">{phase === "uploading" ? "Uploading" : "Analysing on the server"}</h2>
         <Button variant="ghost" onClick={onCancel}>Cancel</Button>
@@ -53,7 +53,7 @@ export function ProgressView({ phase, fraction, since, onCancel }: {
         </p>
       )}
       <div aria-hidden="true" className="flex flex-col gap-4">
-        <div className="skeleton h-20 rounded-lg" />
+        <div className="skeleton h-20 " />
         <div className="grid gap-4 md:grid-cols-[1.4fr_1fr]">
           <div className="skeleton h-16 rounded-md" />
           <div className="skeleton h-16 rounded-md" />
@@ -69,7 +69,7 @@ export const ErrorView = forwardRef<HTMLDivElement, { failure: AnalysisFailure; 
   const cancelled = failure.kind === "cancelled";
   return (
     <div ref={ref} tabIndex={-1} role="alert"
-      className={`flex flex-col gap-3 rounded-xl border p-4 md:p-6 ${cancelled ? "border-line bg-surface" : "border-fake bg-fake-soft"}`}>
+      className={`flex flex-col gap-3 border p-4 md:p-6 ${cancelled ? "border-line bg-surface" : "border-fake bg-fake-soft"}`}>
       <p className={`flex items-center gap-2 text-base font-semibold ${cancelled ? "text-ink" : "text-fake"}`}>
         <WarningCircle size={20} aria-hidden="true" />{cancelled ? "Cancelled" : "Analysis failed"}
       </p>

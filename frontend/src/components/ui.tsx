@@ -33,7 +33,7 @@ export function Chip({ children, tone = "neutral" }: { children: ReactNode; tone
 
 export function Button({ children, variant = "secondary", ...rest }: React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: "primary" | "secondary" | "ghost" }) {
   const look = {
-    primary: "bg-accent text-accent-ink border-accent hover:brightness-110",
+    primary: "chamfer bg-ink text-paper border-ink hover:bg-dark-2 [--cut:9px]",
     secondary: "bg-surface text-ink border-line-strong hover:bg-raised",
     ghost: "bg-transparent text-ink-2 border-transparent hover:bg-raised",
   }[variant];
@@ -41,7 +41,7 @@ export function Button({ children, variant = "secondary", ...rest }: React.Butto
     <button
       type="button"
       {...rest}
-      className={`tactile inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border px-4 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50 ${look} ${rest.className ?? ""}`}
+      className={`tactile inline-flex min-h-11 items-center justify-center gap-2 rounded-none border px-4 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50 ${look} ${rest.className ?? ""}`}
     >
       {children}
     </button>

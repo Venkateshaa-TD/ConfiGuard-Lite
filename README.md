@@ -373,6 +373,15 @@ QUALITY_DEPENDENT_VERDICT).
 .venv\Scripts\python.exe scripts\quality_gate_v2.py quantiles   # then: cases, fit, bench, verify, confirm-val (once)
 ```
 
+## Website (12c)
+
+`/` is the landing page, `/detect` the detector and `/about` covers technology, evaluation and limitations. All are served by the same FastAPI process after `npm run build`, and refreshing any route works.
+
+The landing hero is a procedural Three.js scene, loaded lazily:
+- **Phones:** starts on first interaction.
+- **Without WebGL:** shows a static composition.
+- **Reduced motion:** shows a single frame.
+
 ## Web frontend (React)
 
 The production UI is a React + TypeScript app in `frontend/`. FastAPI serves its build at `/` (same origin as the API).

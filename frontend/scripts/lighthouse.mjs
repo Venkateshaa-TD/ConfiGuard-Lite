@@ -35,8 +35,9 @@ try {
   await ready();
   chrome = await chromeLauncher.launch({ chromePath, chromeFlags: ["--headless=new", "--no-first-run"] });
   const flags = { port: chrome.port, output: "json", logLevel: "error", onlyCategories: ["performance", "accessibility", "best-practices", "seo"] };
-  for (const [name, config] of [["mobile", undefined], ["desktop", desktopConfig]]) {
-    const r = await lighthouse(base, flags, config);
+  for (const route of ["", "detect"]) for (const [form, config] of [["mobile", undefined], ["desktop", desktopConfig]]) {
+    const name = `/${route} ${form}`;
+    const r = await lighthouse(base + route, flags, config);
     const lhr = r.lhr;
     out.runs[name] = {
       scores: Object.fromEntries(Object.entries(lhr.categories).map(([k, v]) => [k, Math.round(v.score * 100)])),
@@ -45,6 +46,9 @@ try {
       tbt_ms: Math.round(lhr.audits["total-blocking-time"].numericValue),
       cls: +lhr.audits["cumulative-layout-shift"].numericValue.toFixed(3),
       failed_a11y: lhr.categories.accessibility.auditRefs.map((a) => lhr.audits[a.id]).filter((a) => a.score !== null && a.score < 1).map((a) => a.id),
+      failed_a11y_nodes: lhr.categories.accessibility.auditRefs.map((a) => lhr.audits[a.id]).filter((a) => a.score !== null && a.score < 1)
+        .flatMap((a) => (a.details?.items ?? []).slice(0, 8).map((it) => `${a.id}: ${it.node?.snippet ?? ''} ${it.node?.explanation?.split('\n')[1] ?? ''}`)),
+      long_tasks: (lhr.audits['long-tasks']?.details?.items ?? []).slice(0, 6).map((t) => `${Math.round(t.duration)}ms ${String(t.url).split('/').pop()}`),
       failed_best_practices: lhr.categories["best-practices"].auditRefs.map((a) => lhr.audits[a.id]).filter((a) => a.score !== null && a.score < 1).map((a) => a.id),
     };
   }

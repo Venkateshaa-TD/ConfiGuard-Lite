@@ -1,7 +1,11 @@
 @import "tailwindcss";
 
-/* Self-hosted Geist (OFL-1.1), Latin subsets only. font-display: optional keeps the system font on a
-   slow first visit instead of reflowing the page when the web font arrives (no layout shift). */
+/* ---------- Local fonts (OFL-1.1). Display font is preloaded from /fonts (index.html). ---------- */
+@font-face {
+  font-family: "Big Shoulders Display"; font-style: normal; font-weight: 100 900; font-display: optional;
+  src: url("/fonts/big-shoulders-display-latin.woff2") format("woff2-variations");
+  unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;
+}
 @font-face {
   font-family: "Geist Variable"; font-style: normal; font-weight: 100 900; font-display: optional;
   src: url("../node_modules/@fontsource-variable/geist/files/geist-latin-wght-normal.woff2") format("woff2-variations");
@@ -10,68 +14,63 @@
 @font-face {
   font-family: "Geist Variable"; font-style: normal; font-weight: 100 900; font-display: optional;
   src: url("../node_modules/@fontsource-variable/geist/files/geist-latin-ext-wght-normal.woff2") format("woff2-variations");
-  unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF;
+  unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF;
 }
 @font-face {
   font-family: "Geist Mono Variable"; font-style: normal; font-weight: 100 900; font-display: optional;
   src: url("../node_modules/@fontsource-variable/geist-mono/files/geist-mono-latin-wght-normal.woff2") format("woff2-variations");
   unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;
 }
-@font-face {
-  font-family: "Geist Mono Variable"; font-style: normal; font-weight: 100 900; font-display: optional;
-  src: url("../node_modules/@fontsource-variable/geist-mono/files/geist-mono-latin-ext-wght-normal.woff2") format("woff2-variations");
-  unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF;
-}
 
-/* Neutral zinc canvas, ONE desaturated steel accent, and semantic verdict colours
-   (status colours, not decoration). Light by default, dark via prefers-color-scheme. */
+/* ---------- ConfiGuard identity tokens ----------
+   paper #F5F8F9 · ink #07090D · dark #0D1015 · cyan #00D7E5 · steel #8D9AA3.
+   Cyan and steel fail WCAG-AA as small text on paper, so small light-surface text uses
+   --cyan-ink / --muted; pure cyan is for dark surfaces, strokes and decoration. */
 :root {
-  --canvas: #f6f6f7;
-  --surface: #ffffff;
-  --raised: #fbfbfc;
-  --ink: #18181b;
-  --ink-2: #3f3f46;
-  --muted: #5d5d66;
-  --line: #e4e4e7;
-  --line-strong: #c9c9cf;
-  --accent: #3a6487;
-  --accent-ink: #ffffff;
-  --accent-soft: #e8eef4;
-  --real: #1d6b45;
-  --real-soft: #e7f2ec;
-  --fake: #a3302a;
-  --fake-soft: #f8e9e7;
-  --unc: #7d5a07;
-  --unc-soft: #f8f0dc;
-  --focus: #2f6db0;
-}
+  --paper: #f5f8f9;
+  --ink: #07090d;
+  --dark: #0d1015;
+  --dark-2: #151a21;
+  --dark-line: #262d36;
+  --cyan: #00d7e5;
+  --cyan-ink: #00727c;
+  --steel: #8d9aa3;
+  --on-dark: #e9eef1;
+  --on-dark-muted: #a7b3bb;
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --canvas: #121214;
-    --surface: #18181b;
-    --raised: #1d1d21;
-    --ink: #ececef;
-    --ink-2: #c9c9d0;
-    --muted: #a1a1aa;
-    --line: #2c2c31;
-    --line-strong: #3d3d44;
-    --accent: #8fb0cc;
-    --accent-ink: #101418;
-    --accent-soft: #1d2731;
-    --real: #79c99c;
-    --real-soft: #142a1e;
-    --fake: #f0948b;
-    --fake-soft: #2e1715;
-    --unc: #e6c26a;
-    --unc-soft: #2b2312;
-    --focus: #8fb0cc;
-  }
+  /* detector-workspace tokens (consumed by the existing detector components) */
+  --canvas: var(--paper);
+  --surface: #ffffff;
+  --raised: #eef3f5;
+  --ink-2: #27303a;
+  --muted: #526069;
+  --line: #dbe3e7;
+  --line-strong: #b4c1c8;
+  --accent: #0a7c86;
+  --accent-ink: #ffffff;
+  --accent-soft: #e2f6f8;
+  --real: #14744a;
+  --real-soft: #e6f3ec;
+  --fake: #b42318;
+  --fake-soft: #fbebe9;
+  --unc: #8a5a00;
+  --unc-soft: #fbf1db;
+  --focus: #07090d;
 }
 
 @theme inline {
   --font-sans: "Geist Variable", ui-sans-serif, system-ui, "Segoe UI", sans-serif;
   --font-mono: "Geist Mono Variable", ui-monospace, "Cascadia Mono", monospace;
+  --font-display: "Big Shoulders Display", "Arial Narrow", "Roboto Condensed", ui-sans-serif, sans-serif;
+  --color-paper: var(--paper);
+  --color-dark: var(--dark);
+  --color-dark-2: var(--dark-2);
+  --color-dark-line: var(--dark-line);
+  --color-cyan: var(--cyan);
+  --color-cyan-ink: var(--cyan-ink);
+  --color-steel: var(--steel);
+  --color-on-dark: var(--on-dark);
+  --color-on-dark-muted: var(--on-dark-muted);
   --color-canvas: var(--canvas);
   --color-surface: var(--surface);
   --color-raised: var(--raised);
@@ -93,24 +92,41 @@
 }
 
 @layer base {
-  html { -webkit-text-size-adjust: 100%; }
-  body {
-    @apply bg-canvas text-ink font-sans antialiased;
-    font-feature-settings: "ss01", "cv11";
-  }
-  :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
-  ::selection { background: var(--accent-soft); }
+  html { -webkit-text-size-adjust: 100%; scroll-padding-top: 5rem; }
+  body { @apply bg-paper text-ink font-sans antialiased; }
+  :focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; }
+  .on-dark :focus-visible, .on-dark:focus-visible { outline-color: var(--cyan); }
+  ::selection { background: #bdf3f7; color: var(--ink); }
 }
 
-/* Motion: hover/active feedback only (MOTION_INTENSITY 3); disabled for reduced motion. */
 @layer utilities {
-  .tactile { transition: transform 120ms ease-out, background-color 150ms ease-out, border-color 150ms ease-out; }
-  .tactile:active:not(:disabled) { transform: translateY(1px); }
+  /* chamfered corners (top-right + bottom-left), the signature panel shape */
+  .chamfer { clip-path: polygon(0 0, calc(100% - var(--cut, 14px)) 0, 100% var(--cut, 14px), 100% 100%, var(--cut, 14px) 100%, 0 calc(100% - var(--cut, 14px))); }
+  .display { font-family: var(--font-display); text-transform: uppercase; letter-spacing: -0.01em; line-height: 0.88; font-weight: 800; }
+  .eyebrow { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase; }
+  .tactile { transition: transform 140ms cubic-bezier(0.16, 1, 0.3, 1), background-color 160ms ease-out, border-color 160ms ease-out, color 160ms ease-out; }
+  .tactile:active:not(:disabled) { transform: translateY(1px) scale(0.99); }
   .skeleton { background: linear-gradient(90deg, var(--line) 0%, var(--raised) 50%, var(--line) 100%); background-size: 200% 100%; animation: shimmer 1.6s linear infinite; }
+  .grid-lines { background-image: linear-gradient(to right, var(--grid-c, rgba(7, 9, 13, 0.06)) 1px, transparent 1px), linear-gradient(to bottom, var(--grid-c, rgba(7, 9, 13, 0.06)) 1px, transparent 1px); background-size: var(--grid-s, 64px) var(--grid-s, 64px); }
+
+  /* below-the-fold sections: skip layout/paint until near the viewport (DOM stays complete) */
+  .cv-auto { content-visibility: auto; contain-intrinsic-size: auto 900px; }
+
+  /* scroll reveal (IntersectionObserver adds .is-in) */
+  .reveal { opacity: 0; transform: translateY(18px); transition: opacity 700ms cubic-bezier(0.16, 1, 0.3, 1), transform 700ms cubic-bezier(0.16, 1, 0.3, 1); transition-delay: calc(var(--i, 0) * 90ms); }
+  .reveal.is-in { opacity: 1; transform: none; }
+
+  /* checker dissolve: each cell darkens once scroll progress --p passes its own threshold --d */
+  .dissolve-cell { opacity: clamp(0, calc((var(--p, 0) - var(--d, 0)) * 6), 1); }
+
+  /* scan line used by the static hero fallback */
+  .scan-sweep { animation: sweep 6s cubic-bezier(0.45, 0, 0.55, 1) infinite alternate; }
 }
 @keyframes shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+@keyframes sweep { from { transform: translateX(-34%); } to { transform: translateX(34%); } }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; transition-duration: 0.001ms !important; scroll-behavior: auto !important; }
-  .skeleton { animation: none; }
+  .reveal { opacity: 1; transform: none; }
+  .skeleton, .scan-sweep { animation: none; }
 }
