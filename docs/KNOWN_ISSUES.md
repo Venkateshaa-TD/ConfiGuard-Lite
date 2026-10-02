@@ -4,6 +4,32 @@ Format: one entry per issue. Mark resolved issues rather than deleting them.
 
 ---
 
+## OPEN — Docker release candidate (Phase 13)
+
+- **Unfixed upstream CVEs.** Trivy (2026-10-02 DB): 0 fixable, but
+  11 CRITICAL / 245 HIGH with no Debian fix yet. Most HIGH come from the
+  ffmpeg 5.1 library tree pulled in for ffprobe (libav* ×16 each),
+  libxml2, glib, libssh, perl-base and mbedtls. ffprobe parses untrusted
+  uploads, so this is real exposure, mitigated only by the container
+  hardening (non-root, read-only, no capabilities, resource limits).
+  Follow-up: a minimal static ffprobe or newer base, then re-run parity.
+- **Throughput under a CPU quota.** At 4 CPUs the image serves 1.06
+  req/s (video P50 5.8 s) vs 2.07 req/s natively on all 16 threads. With
+  no CPU cap, a single video's extraction stage is still ~1.4–1.9× slower
+  in the Linux container than on Windows (decode + YuNet).
+- **Measured only under Docker Desktop (WSL2) on the dev laptop.** No
+  native Linux host, no cloud, no TLS proxy in front.
+- **Requests not yet parsed at SIGTERM are dropped.** In-flight analyses
+  complete; a connection whose request line has not arrived is closed
+  (uvicorn behaviour).
+- **One vitest run failed while the Docker build saturated the CPU;**
+  the rerun and all later runs passed (82/82). Likely a timing-sensitive
+  test; not investigated.
+- **Base image is Python 3.11.9 (2024).** OS packages are current to the
+  snapshot, but the interpreter itself is not upgraded.
+
+---
+
 ## OPEN — Production readiness (12e)
 
 - **No real-device test.** Phones were only emulated in Chrome. A

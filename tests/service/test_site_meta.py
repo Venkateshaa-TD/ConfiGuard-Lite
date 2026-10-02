@@ -180,3 +180,40 @@ def test_lazy_route_chunk_is_preloaded_only_on_its_route(tmp_path, bundle):
     assert "modulepreload" not in home and "modulepreload" not in about
     font = '<link rel="preload" href="/assets/geist-latin-wght-normal-2.woff2" as="font" type="font/woff2" crossorigin />'
     assert font in home and font in detect and "geist-mono" not in home
+
+
+def test_deployment_toggles_from_environment(monkeypatch):
+    from configuard.service.config import load_service_config
+
+    root = Path(__file__).resolve().parents[2]
+    monkeypatch.setenv("CONFIGUARD_CHECKPOINT_DIR", str(root))   # paths only; nothing is loaded here
+    base = load_service_config(root / "configs" / "production.yaml".replace("production", "testing"))
+    assert base.explain_occlusion_fallback is False   # the fallback is opt-in
+    monkeypatch.setenv("CONFIGUARD_UI_ENABLED", "false")
+    monkeypatch.setenv("CONFIGUARD_ALLOW_EXPLANATIONS", "true")
+    monkeypatch.setenv("CONFIGUARD_EXPLAIN_OCCLUSION_FALLBACK", "on")
+    cfg = load_service_config(root / "configs" / "testing.yaml")
+    assert (cfg.ui_enabled, cfg.allow_explanations, cfg.explain_occlusion_fallback) == (False, True, True)
+    assert load_service_config(root / "configs" / "testing.yaml", ui_enabled=True).ui_enabled is True   # explicit wins
+    monkeypatch.setenv("CONFIGUARD_CPU_THREADS_PER_SESSION", "2")
+    assert load_service_config(root / "configs" / "testing.yaml").cpu_threads_per_session == 2
+    monkeypatch.setenv("CONFIGUARD_CPU_THREADS_PER_SESSION", "-1")
+    with pytest.raises(ServiceConfigError):
+        load_service_config(root / "configs" / "testing.yaml")
+    monkeypatch.delenv("CONFIGUARD_CPU_THREADS_PER_SESSION")
+    monkeypatch.setenv("CONFIGUARD_UI_ENABLED", "maybe")
+    with pytest.raises(ServiceConfigError):
+        load_service_config(root / "configs" / "testing.yaml")
+
+
+def test_api_keys_from_secret_file(monkeypatch, tmp_path):
+    from configuard.service.config import _api_keys_from_env, hash_api_key
+
+    secret = tmp_path / "api_keys"
+    secret.write_text("first-key\nsha256:" + "ab" * 32 + "\n", encoding="utf-8")
+    monkeypatch.delenv("CONFIGUARD_API_KEYS", raising=False)
+    monkeypatch.setenv("CONFIGUARD_API_KEYS_FILE", str(secret))
+    assert _api_keys_from_env() == (hash_api_key("first-key"), "ab" * 32)
+    monkeypatch.setenv("CONFIGUARD_API_KEYS_FILE", str(tmp_path / "missing"))
+    with pytest.raises(ServiceConfigError):
+        _api_keys_from_env()

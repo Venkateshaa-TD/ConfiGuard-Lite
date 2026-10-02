@@ -2653,3 +2653,81 @@ Final screenshots: `%TEMP%\frontend_12e\2026-10-02T13-32-13-573Z\` — 40 full-p
 
 They are not committed. For these captures only, `content-visibility`
 is disabled so off-screen sections paint.
+
+## 2026-10-02 — 13 Docker release candidate (1.0.0-rc.1)
+
+Host: Docker Desktop 29.6.2 (WSL2, linux/amd64, 16 CPUs, 12 GB). Preflight
+`docker run --rm hello-world` OK. All media are official FF++ **val**
+(test sealed); the staged bundle records `test_split_touched: false`.
+
+```
+.venv/Scripts/python.exe scripts/stage_release.py           # 12 files, 20.8 MB, bundle/gate/YuNet/trust re-verified
+docker build -t configuard-lite:1.0.0-rc.1 --build-arg GIT_COMMIT=<sha> --build-arg GIT_DIRTY=<bool> .
+.venv/Scripts/python.exe scripts/container_check.py --image configuard-lite:1.0.0-rc.1
+.venv/Scripts/python.exe scripts/detection_parity.py compare --label _native
+.venv/Scripts/python.exe scripts/detection_parity.py compare --url http://127.0.0.1:8798 --label _docker_final
+E2E_BASE_URL=http://127.0.0.1:8799 npx playwright test       # container --env development, uploads bind-mounted
+syft (anchore/syft@sha256:0356562f…) -> spdx-json, cyclonedx-json, table
+trivy 0.75.0 (aquasec/trivy@sha256:af6acf9a…) image --scanners vuln --db-repository ghcr.io/aquasecurity/trivy-db:2
+```
+
+Outputs (outside Git): `D:/ConfiGuard-Data/outputs/container_check/`,
+`…/detection_parity/`, `…/release_rc1/{sbom.spdx.json,sbom.cdx.json,sbom.txt,trivy.json}`.
+
+Image: digest-pinned `python:3.11.9-slim-bookworm` + `node:24.19.0-bookworm-slim`;
+Debian snapshot `20261002T000000Z` (Debian 12.15 after upgrade); ffprobe
+5.1.9-0+deb12u1; 426 MB content size; release manifest 167 files
+(application 126, frontend 26, artifacts 13, locks 2).
+
+Iterations (same container_check unless noted):
+
+| build | change | result |
+|---|---|---|
+| 1 | as prepared | 23/25: SIGTERM exit 143, in-flight request aborted (probe sent SIGTERM before the request was parsed) |
+| 1 | — | Trivy: Debian 12.7 base, 17 CRITICAL / 295 HIGH, of which 6 / 50 fixable; setuptools/wheel HIGH in base Python |
+| 2 | serve.py absorbs re-raised SIGTERM; probe waits for the upload | 25/25; in-flight 200, exit 0 |
+| 3 | `apt-get upgrade` from snapshot; system pip/setuptools/wheel removed | 6 HIGH fixable left (libexpat deb12u4, amd64 published 2026-10-01T05:22Z, after the snapshot) |
+| 4 | snapshot → 20261002; ORT threads 2 | 0 fixable; 25/25 |
+
+Thread experiment (24 val items, concurrency 4, production profile):
+
+| container | req/s | video P50 | image P50 |
+|---|---|---|---|
+| `--cpus 4`, ORT default threads | 0.74 | 7206 ms | 1594 ms |
+| no CPU limit, default | 1.22 | 5126 ms | 466 ms |
+| `--cpus 4`, `cpu_threads_per_session: 2` | 1.11 | 4350 ms | 407 ms |
+
+Single-request stage timings (3 val videos, ×2, no CPU limit): container
+extraction 4.5 / 1.3 / 3.5 s vs native 3.3 / 0.70 / 2.4 s; inference
+25–219 ms vs 11–47 ms.
+
+Final image, 48 val items (24 videos + 24 frames, seed 88), concurrency 4:
+
+| | container (4 CPUs, 3 GiB, ORT 2 threads) | native Windows (no cap) |
+|---|---|---|
+| OK | 48/48 | 48/48 |
+| throughput | 1.057 req/s | 2.065 req/s |
+| video P50 / P95 | 5811 / 13347 ms | 3147 / 6942 ms |
+| image P50 / P95 | 402 / 945 ms | 227 / 534 ms |
+| cold start (`docker run` → ready) | 5.29 s | – |
+| idle / peak memory | 177 / 909 MiB (cgroup) | – |
+| SIGTERM during an analysis | request 200, exit 0, 7.4 s | – |
+
+container_check 25/25: readonly_rootfs, cap_drop_all, no_new_privileges,
+non_root_uid_10001, no_effective_capabilities, no_new_privs_flag,
+root_not_writable, tmp_writable, no_pip_in_runtime_venv,
+no_training_frameworks, health_open, analyze_requires_key,
+wrong_key_rejected, analyze_with_key, explanations_off_in_production,
+limits_report_no_explanations, website_served, security_headers,
+corrupt_rejected, occlusion_fallback_off_by_default,
+all_load_requests_ok, uploads_cleaned_up, in_flight_request_completed,
+clean_exit_on_sigterm, logs_have_no_filenames_or_keys.
+
+Parity (15 items: 8 videos, 4 frames, 2 explain, 1 C2PA-signed): native
+identical; container identical, no explanation differences.
+
+Trivy, final: OS 11 CRITICAL / 245 HIGH / 413 MEDIUM / 221 LOW / 36
+UNKNOWN, **0 with a fix**; Python packages 0. CRITICAL (none fixable):
+libaom3, glib, mbedtls ×3, sqlite, libxml2, perl-base ×3, zlib (minizip,
+will_not_fix). SBOM: 298 deb, 37 Python, 2 binary packages; no torch,
+timm, transformers, pip, setuptools or wheel.

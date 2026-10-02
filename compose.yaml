@@ -1,0 +1,52 @@
+# ConfiGuard-Lite release candidate — hardened single-host deployment (Phase 13).
+#
+#   1. python scripts/stage_release.py          # stage verified artifacts into build/release/
+#   2. create secrets/api_keys.txt               # one key (or sha256:<hex> digest) per line; git-ignored
+#   3. docker compose up -d --build
+#
+# The service listens on 127.0.0.1:8000 only; put a TLS-terminating reverse proxy in front of it.
+name: configuard-lite
+
+services:
+  configuard:
+    image: configuard-lite:1.0.0-rc.1
+    build:
+      context: .
+      args:
+        GIT_COMMIT: ${GIT_COMMIT:-unknown}
+        GIT_DIRTY: ${GIT_DIRTY:-unknown}
+    init: true                         # reaps the C2PA sandbox worker and ffprobe children
+    user: "10001:10001"
+    read_only: true                    # immutable root filesystem
+    tmpfs:
+      # The only writable path: in-flight uploads (deleted after every request) and library temp files.
+      - /tmp:rw,noexec,nosuid,nodev,size=1024m,mode=1777
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 256
+    mem_limit: 3g
+    memswap_limit: 3g
+    cpus: 4
+    ports:
+      - "127.0.0.1:8000:8000"
+    environment:
+      # Optional deployment toggles (see docs/DEPLOYMENT.md). Never put API keys here in plain text.
+      CONFIGUARD_ALLOW_EXPLANATIONS: "false"
+      CONFIGUARD_EXPLAIN_OCCLUSION_FALLBACK: "false"
+      CONFIGUARD_PUBLIC_BASE_URL: ${CONFIGUARD_PUBLIC_BASE_URL:-}
+      # ONNX Runtime threads per analysis: cpus (4) / max_concurrent_inference (2). The runtime default
+      # sizes to every host core and oversubscribes the CPU quota (measured: 0.74 -> 1.11 req/s).
+      CONFIGUARD_CPU_THREADS_PER_SESSION: "2"
+      CONFIGUARD_API_KEYS_FILE: /run/secrets/configuard_api_keys
+    secrets:
+      - configuard_api_keys
+    stop_grace_period: 40s             # > serve.py --graceful-timeout (25 s)
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "3"}
+
+secrets:
+  configuard_api_keys:
+    file: ./secrets/api_keys.txt

@@ -8,6 +8,9 @@ const repo = resolve(import.meta.dirname, "..");
 const python = join(repo, ".venv", "Scripts", "python.exe");
 export const PORT = 8790;
 export const UPLOAD_TMP = join(tmpdir(), "cg-e2e-uploads");
+// E2E_BASE_URL: test an already running deployment (e.g. the Docker image) instead of starting serve.py.
+// Its upload directory must be bind-mounted from UPLOAD_TMP so the cleanup checks can see it.
+const EXTERNAL = process.env.E2E_BASE_URL;
 
 export default defineConfig({
   testDir: "tests/e2e",
@@ -18,7 +21,7 @@ export default defineConfig({
   reporter: [["list"]],
   globalSetup: "./tests/e2e/global-setup.ts",
   globalTeardown: "./tests/e2e/global-teardown.ts",
-  use: { baseURL: `http://127.0.0.1:${PORT}`, channel: "chrome", headless: true, trace: "off" },
+  use: { baseURL: EXTERNAL ?? `http://127.0.0.1:${PORT}`, channel: "chrome", headless: true, trace: "off" },
   projects: [
     { name: "chrome", grepInvert: /@nowebgl|@swgl/ },
     // Software rasteriser (SwiftShader): the hero must refuse continuous 3D and keep the poster.
@@ -26,7 +29,7 @@ export default defineConfig({
     // Same browser with WebGL disabled: the hero must fall back to its static composition.
     { name: "chrome-no-webgl", grep: /@nowebgl/, use: { launchOptions: { args: ["--disable-webgl", "--disable-3d-apis"] } } },
   ],
-  webServer: {
+  webServer: EXTERNAL ? undefined : {
     command: `"${python}" "${join(repo, "scripts", "serve.py")}" --env development --port ${PORT}`,
     url: `http://127.0.0.1:${PORT}/health/ready`,
     timeout: 120_000,

@@ -37,7 +37,7 @@ class ServiceConfig:
     api_key_sha256: tuple[str, ...] = field(default=(), repr=False)
     gate_enabled: bool = True
     allow_explanations: bool = False  # off on the server by default; also opt-in per request
-    explain_occlusion_fallback: bool = True  # occlusion hint when Grad-CAM is withheld (explanation-only)
+    explain_occlusion_fallback: bool = False  # opt-in occlusion hint when Grad-CAM is withheld (explanation-only)
     docs_enabled: bool = True
     ui_enabled: bool = True
     public_base_url: str | None = None  # e.g. https://example.org; absolute social/canonical URLs only when set
@@ -68,14 +68,39 @@ def hash_api_key(key: str) -> str:
 
 
 def _api_keys_from_env() -> tuple[str, ...]:
-    """CONFIGUARD_API_KEYS: comma-separated keys, or 'sha256:<hex>' digests. Only digests are kept."""
+    """CONFIGUARD_API_KEYS: comma-separated keys, or 'sha256:<hex>' digests. Only digests are kept.
+    CONFIGUARD_API_KEYS_FILE: the same list read from a file (Docker/Compose secret, one entry per line or
+    comma-separated); combined with CONFIGUARD_API_KEYS. Keys are never written anywhere."""
+    raw = os.environ.get("CONFIGUARD_API_KEYS", "")
+    key_file = os.environ.get("CONFIGUARD_API_KEYS_FILE")
+    if key_file:
+        try:
+            raw += "," + ",".join(Path(key_file).read_text(encoding="utf-8").splitlines())
+        except OSError as exc:
+            raise ServiceConfigError("CONFIGUARD_API_KEYS_FILE is set but cannot be read") from exc
     out = []
-    for item in os.environ.get("CONFIGUARD_API_KEYS", "").split(","):
+    for item in raw.split(","):
         item = item.strip()
         if not item:
             continue
         out.append(item[7:].lower() if item.startswith("sha256:") else hash_api_key(item))
     return tuple(out)
+
+
+_BOOL_ENV = {
+    "CONFIGUARD_UI_ENABLED": "ui_enabled",
+    "CONFIGUARD_ALLOW_EXPLANATIONS": "allow_explanations",
+    "CONFIGUARD_EXPLAIN_OCCLUSION_FALLBACK": "explain_occlusion_fallback",
+}
+
+
+def _env_bool(name: str, raw: str) -> bool:
+    v = raw.strip().lower()
+    if v in ("1", "true", "yes", "on"):
+        return True
+    if v in ("0", "false", "no", "off"):
+        return False
+    raise ServiceConfigError(f"{name} must be true/false, got {raw!r}")
 
 
 def service_config_from_project(project: ProjectConfig, overrides: dict[str, Any] | None = None) -> ServiceConfig:
@@ -93,6 +118,16 @@ def service_config_from_project(project: ProjectConfig, overrides: dict[str, Any
     gate_path = Path(gate) if gate else _default_checkpoint_dir() / "quality_gate" / "p80" / "quality_gate.json"
     from configuard.media.face_detector import default_yunet_model_path
 
+    for env, key in _BOOL_ENV.items():   # deployment toggles (e.g. Docker): environment beats the YAML file
+        raw = os.environ.get(env)
+        if raw is not None and raw.strip() != "":
+            block[key] = _env_bool(env, raw)
+    raw = os.environ.get("CONFIGUARD_CPU_THREADS_PER_SESSION", "").strip()
+    if raw:   # match ONNX Runtime threads to a container CPU quota (the default sizes to all host cores)
+        if not raw.isdigit():
+            raise ServiceConfigError(f"CONFIGUARD_CPU_THREADS_PER_SESSION must be an integer >= 0, got {raw!r}")
+        block["cpu_threads_per_session"] = int(raw)
+    block.update(overrides or {})          # explicit programmatic overrides win over both
     if os.environ.get("CONFIGUARD_PUBLIC_BASE_URL"):
         block["public_base_url"] = os.environ["CONFIGUARD_PUBLIC_BASE_URL"]
     tmp = os.environ.get("CONFIGUARD_SERVICE_TEMP_DIR")

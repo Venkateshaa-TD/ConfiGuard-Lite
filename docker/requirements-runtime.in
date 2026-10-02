@@ -1,0 +1,19 @@
+# Phase 13: the ONLY Python packages in the production image (CPU inference service).
+# Versions match the verified Windows environment for verdict parity. No torch, timm, transformers,
+# CUDA, training or test dependencies. Locked with hashes for linux x86_64 / CPython 3.11 into
+# docker/requirements-runtime.lock by:
+#   uv pip compile docker/requirements-runtime.in --generate-hashes --python-version 3.11 \
+#       --python-platform x86_64-manylinux_2_28 --no-header -o docker/requirements-runtime.lock
+numpy==2.4.6
+PyYAML==6.0.3
+opencv-python-headless==5.0.0.93
+onnx==1.23.0
+onnxruntime==1.23.2
+fastapi==0.142.2
+uvicorn==0.54.0
+python-multipart==0.0.32
+# Content Credentials (official CAI SDK) and its runtime dependencies.
+c2pa-python==0.38.0
+cryptography==50.0.2
+toml==0.10.2
+requests==2.34.2

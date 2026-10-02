@@ -8,6 +8,7 @@ CONFIGUARD_YUNET_MODEL_PATH, CONFIGUARD_SERVICE_TEMP_DIR; production keys: CONFI
 from __future__ import annotations
 
 import argparse
+import signal
 import sys
 from pathlib import Path
 
@@ -26,6 +27,7 @@ def main() -> int:
     ap.add_argument("--port", type=int, default=8000)
     ap.add_argument("--device", choices=("cpu", "cuda"))
     ap.add_argument("--c2pa", choices=("on", "off"), help="override service.c2pa_enabled")
+    ap.add_argument("--graceful-timeout", type=int, default=25, help="seconds to finish in-flight requests on shutdown")
     args = ap.parse_args()
     import uvicorn
 
@@ -40,8 +42,13 @@ def main() -> int:
     except ServiceConfigError as exc:
         print(f"REFUSED TO START: {exc}", file=sys.stderr)
         return 2
+    # SIGTERM/SIGINT: stop accepting connections, let in-flight analyses finish (bounded), then run the
+    # app's shutdown (worker pools, C2PA sandbox) - the container's stop grace period must exceed this.
+    # uvicorn re-raises the captured signal once it has shut down; absorbing SIGTERM afterwards makes a
+    # completed graceful stop exit 0 instead of 143.
+    signal.signal(signal.SIGTERM, lambda *_: None)
     uvicorn.run(create_app(cfg), host=args.host, port=args.port, access_log=False, log_level="warning",
-                timeout_keep_alive=5)
+                timeout_keep_alive=5, timeout_graceful_shutdown=args.graceful_timeout)
     return 0
 
 

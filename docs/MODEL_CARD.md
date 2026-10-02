@@ -73,6 +73,15 @@ resolution and duration. The Phase 5d audit found the F2F/NT width
 change to be a centred crop with no residual geometric cue. Fakes are
 somewhat blurrier than their matched reals (a genuine artifact).
 
+## Release candidate (Phase 13)
+
+- **Artifact:** Docker image `configuard-lite:1.0.0-rc.1` serving the
+  same `student_distilled_p80` ONNX FP32 bundle, calibration and v1
+  quality gate (FP32 SHA-256 `4e365f0d9942…`). Verdicts are identical to
+  the native service on the 15-item parity set.
+- **Scope unchanged:** research use; not legal or forensic proof; FF++
+  c23 development data only, test split still sealed.
+
 ## Content Credentials (Phase 12)
 
 - **What it is:** a C2PA provenance status reported next to, never

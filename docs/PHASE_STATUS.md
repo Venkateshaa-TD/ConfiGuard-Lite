@@ -28,6 +28,7 @@
 | 12c | Cinematic landing experience and detector redesign | PASS | 2026-10-02 |
 | 12d | Realistic human hero, light/dark themes, explanation availability | PASS | 2026-10-02 |
 | 12e | Final website polish and production-readiness audit | PASS | 2026-10-02 |
+| 13 | Hardened Docker release candidate (1.0.0-rc.1) | PASS | 2026-10-02 |
 
 Full per-phase results are recorded below as they complete.
 
@@ -1535,3 +1536,50 @@ per-frame logits, reasons, explanation and C2PA status).
 
 **Physical-phone check:** a checklist was handed to the user. No
 real-device test is claimed.
+
+## 13 — Hardened Docker release candidate (1.0.0-rc.1)
+
+**Status:** PASS (image built and verified locally; tag not pushed; no
+cloud deployment)
+
+**Summary:** one Linux x86_64 CPU image serving the API and website.
+No model, calibration, gate, threshold or C2PA change; FF++ test sealed
+(the bundle records `test_split_touched: false`; all checks use val
+media).
+- **Image:** 3-stage build (Node frontend → hash-locked Python runtime
+  deps → slim runtime). Base images pinned by digest, Python by SHA-256,
+  Debian by snapshot date. No torch/CUDA/training/test packages, no pip.
+  Release manifest with the SHA-256 of every shipped file.
+- **Hardening:** non-root 10001, read-only root, tmpfs `/tmp` only, all
+  capabilities dropped, no-new-privileges, CPU/memory/PID limits, API
+  keys from a secret file, loopback-only port.
+- **Config:** env toggles for UI, explanations, occlusion fallback and
+  ONNX Runtime threads; occlusion fallback now opt-in everywhere.
+
+**Fixed during the phase:**
+- SIGTERM exited 143: uvicorn re-raises the captured signal after its
+  graceful shutdown. `serve.py` now absorbs it → exit 0 with the
+  in-flight analysis completed.
+- 6 CRITICAL / 50 HIGH fixable Debian CVEs from the old base layer:
+  base packages upgraded from the pinned snapshot, snapshot moved to
+  2026-10-02 (libexpat fix); system pip/setuptools/wheel removed.
+- 0.74 req/s under the 4-CPU quota: ONNX Runtime sized its pools to all
+  16 host threads. `CONFIGUARD_CPU_THREADS_PER_SESSION=2` → 1.06 req/s.
+
+**Checks (final image):**
+- `container_check.py`: 25/25 (hardening, auth, production defaults,
+  website + CSP, corrupt upload 422, upload cleanup incl. aborted
+  upload, graceful shutdown, no keys/filenames in logs).
+- Verdict parity vs the native baseline: 15/15 identical (native 15/15).
+- Playwright against the container: 40/40.
+- Trivy: 0 fixable; 11 CRITICAL / 245 HIGH without a Debian fix (see
+  KNOWN_ISSUES). Python packages: 0. SBOM: 298 deb, 37 Python, 2 binary.
+
+**Performance (48 val items, concurrency 4):** container (4 CPUs)
+1.06 req/s, video P50/P95 5.8/13.3 s, image 0.40/0.94 s, cold start
+5.3 s, idle 177 MiB, peak 909 MiB, stop 7.4 s. Native on the same media
+(no CPU cap): 2.07 req/s, video 3.1/6.9 s, image 0.23/0.53 s.
+
+**Tests:** backend full suite 681/681, service 73/73, vitest 82/82, Biome and
+tsc clean, native E2E 40/40.
+

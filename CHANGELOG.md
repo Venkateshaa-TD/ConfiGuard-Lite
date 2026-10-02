@@ -625,3 +625,27 @@ All notable changes to this project are documented here.
     modes, links, console/network, metadata, 404, no WebGL on
     `/detect`, all detector states.
   - Backend `tests/service/test_site_meta.py`.
+
+### 13 — Hardened Docker release candidate 1.0.0-rc.1 (2026-10-02)
+
+- **Image:** `Dockerfile` (Node build → hash-locked Python runtime deps →
+  slim runtime with ffprobe from a dated Debian snapshot), allowlist
+  `.dockerignore`, `compose.yaml` with non-root, read-only root, tmpfs
+  `/tmp`, no capabilities, no-new-privileges, CPU/memory/PID limits, a
+  file-based API-key secret and a loopback-only port. `.gitattributes`
+  keeps the Docker files LF on Windows checkouts.
+- **Release tooling:** `scripts/stage_release.py` (copy + re-verify the
+  production artifacts), `scripts/release_manifest.py` (in-image SHA-256
+  manifest), `scripts/container_check.py` (hardening, auth, cleanup,
+  load, memory, graceful shutdown), `docker/requirements-runtime.{in,lock}`.
+- **Service:** `CONFIGUARD_API_KEYS_FILE`; environment toggles for UI,
+  explanations, occlusion fallback and ONNX Runtime threads; the
+  occlusion fallback is now opt-in in every profile; `serve.py
+  --graceful-timeout` and a clean exit 0 on SIGTERM.
+- **Test hooks:** `detection_parity.py --url/--label` and Playwright
+  `E2E_BASE_URL` to test a running deployment.
+- **Docs:** new `docs/DEPLOYMENT.md`.
+- **Verification:** container checks 25/25, parity 15/15, E2E 40/40 on
+  the image; Trivy 0 fixable; SBOM generated. Local tag `v1.0.0-rc.1`
+  (not pushed). No model, calibration, gate or C2PA change; FF++ test
+  untouched.

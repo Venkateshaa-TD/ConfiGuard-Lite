@@ -1,0 +1,22 @@
+# Allowlist: the build context contains ONLY what the image needs. Datasets, checkpoints, caches,
+# outputs, raw MakeHuman inputs, .env/secrets, virtualenvs, node_modules and test artefacts never enter it.
+*
+!Dockerfile
+!docker/requirements-runtime.in
+!docker/requirements-runtime.lock
+!src/
+!configs/
+!scripts/serve.py
+!scripts/release_manifest.py
+!frontend/
+!build/release/artifacts/
+!build/release/artifacts.json
+
+**/__pycache__
+**/*.pyc
+frontend/node_modules
+frontend/dist
+frontend/test-results
+frontend/playwright-report
+**/.env
+**/.env.*

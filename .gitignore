@@ -20,6 +20,7 @@ env/
 *.key
 secrets.yaml
 secrets.yml
+/secrets/
 
 # --- Datasets, checkpoints, models (never commit) ---
 # NOTE: `dir/*` (not `dir/`) so the `!dir/.gitkeep` exceptions below can

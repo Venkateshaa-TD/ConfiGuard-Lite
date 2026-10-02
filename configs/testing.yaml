@@ -26,7 +26,7 @@ service:
   ready_recheck_s: 0
   ui_enabled: true
   allow_explanations: true
-  explain_occlusion_fallback: true   # occlusion hint only when Grad-CAM is withheld; explanation-only
+  explain_occlusion_fallback: false  # opt-in occlusion hint when Grad-CAM is withheld (env CONFIGUARD_EXPLAIN_OCCLUSION_FALLBACK)
   public_base_url: null          # e.g. https://your-domain.example; enables absolute og:url/og:image/canonical (env CONFIGUARD_PUBLIC_BASE_URL overrides)
   c2pa_enabled: false         # Content Credentials (read-only, offline, sandboxed worker)
   c2pa_timeout_s: 5

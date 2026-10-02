@@ -1038,6 +1038,22 @@ response.provenance = {status, reason, summary, notice, trust_list, sdk, elapsed
 - **Production:** `GatedVideoAnalyzer` with
   `load_thresholds(.../quality_gate.json)` (Phase 9 v1).
 
+## Deployment image (Phase 13)
+
+```
+build context (allowlist)          image layers
+  frontend/  --npm ci + build-->   /app/frontend/dist          (web stage, node digest-pinned)
+  docker/requirements-runtime.lock --pip --require-hashes--> /opt/venv   (deps stage)
+  src/ configs/ scripts/serve.py   /app (read-only, root-owned)
+  build/release/artifacts/         /app/artifacts/{student_p80,quality_gate,yunet,c2pa_trust}
+                                   ffprobe <- snapshot.debian.org/<date>; base pkgs upgraded from same date
+                                   /app/RELEASE-MANIFEST.json  (sha256 of every file + build metadata)
+runtime: tini -> python scripts/serve.py --env production (uid 10001)
+  writable: /tmp only (tmpfs) -> /tmp/configuard-uploads (per-request dirs, deleted)
+  secrets:  /run/secrets/configuard_api_keys -> CONFIGUARD_API_KEYS_FILE (digests only in memory)
+  SIGTERM:  uvicorn graceful shutdown (25 s) -> lifespan closes pool + C2PA worker -> exit 0
+```
+
 ## Repository layout
 
 ```

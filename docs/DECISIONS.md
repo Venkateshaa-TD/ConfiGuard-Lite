@@ -4,6 +4,40 @@ Format: one entry per decision, newest first.
 
 ---
 
+## 2026-10-02 — 13: hardened Docker release candidate
+
+- **One CPU image for API + website, Linux x86_64.** GPU stays an opt-in
+  native path; a CUDA image would add the CUDA runtime for no measured
+  gain on the served FP32 model (Phase 10: CPU 3.78 vs CUDA 3.19 req/s).
+- **Runtime deps are a separate, hash-locked list**
+  (`docker/requirements-runtime.in` → `.lock`, versions identical to the
+  verified Windows environment for verdict parity). Installed with
+  `--no-deps --require-hashes --only-binary=:all:`; no torch, timm,
+  transformers or test tooling.
+- **ffprobe from a dated Debian snapshot**, and the base image's own
+  packages upgraded from the same snapshot. Reproducible, signed, and it
+  removed every fixable CVE. A static or distroless ffprobe was deferred:
+  it changes the decode stack that the parity baseline was measured on.
+- **Artifacts are staged, not mounted.** `stage_release.py` copies only
+  what the service loads and re-runs the startup verification; the image
+  is self-contained and its release manifest hashes every file.
+- **Hardening is part of the contract** (`compose.yaml`) and is verified
+  by `container_check.py`, not assumed.
+- **Occlusion fallback is opt-in** in every profile
+  (`explain_occlusion_fallback: false`); explanations remain off in
+  production. Deployment toggles come from the environment, which beats
+  YAML; explicit programmatic overrides beat both.
+- **ONNX Runtime threads follow the CPU quota**
+  (`CONFIGUARD_CPU_THREADS_PER_SESSION`, 2 in compose = 4 CPUs ÷ 2
+  concurrent analyses). The runtime default sizes to all host cores and
+  oversubscribed the quota (0.74 → 1.06 req/s measured).
+- **SIGTERM is absorbed after uvicorn's graceful shutdown** so a clean
+  stop exits 0 (uvicorn re-raises the captured signal).
+- **Release tag `v1.0.0-rc.1` is annotated and local only.** Not pushed,
+  not deployed.
+
+---
+
 ## 2026-10-02 — 12e: production polish and readiness audit
 
 - **Lint with Biome 2.5.15, not ESLint.**

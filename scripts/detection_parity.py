@@ -10,7 +10,7 @@ warnings, frames_used, stopping_reason, per-frame logits, provenance status (mus
 explanation status/withheld frames are compared and reported separately. Timings and request IDs
 are excluded.
 
-Usage: .venv/Scripts/python.exe scripts/detection_parity.py {baseline|compare} [--videos 8]
+Usage: .venv/Scripts/python.exe scripts/detection_parity.py {baseline|compare} [--videos 8] [--url http://host:port]
 """
 
 from __future__ import annotations
@@ -54,6 +54,8 @@ def main() -> int:
     ap.add_argument("mode", choices=("baseline", "compare"))
     ap.add_argument("--videos", type=int, default=8)
     ap.add_argument("--port", type=int, default=8795)
+    ap.add_argument("--url", help="compare an already running service (e.g. the Docker container) instead of starting one")
+    ap.add_argument("--label", default="", help="suffix for the compare report file name")
     args = ap.parse_args()
     from service_load_test import frame_images, val_media
 
@@ -73,12 +75,12 @@ def main() -> int:
         items.append(("image_signed", s, False))  # provenance status only (signature differs per run)
     except ImportError:
         pass
-    server = subprocess.Popen([sys.executable, str(REPO_ROOT / "scripts" / "serve.py"), "--env", "development",
-                               "--port", str(args.port)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                              env=os.environ | {"CONFIGUARD_SERVICE_TEMP_DIR": str(scratch / "up")})
+    server = None if args.url else subprocess.Popen(
+        [sys.executable, str(REPO_ROOT / "scripts" / "serve.py"), "--env", "development", "--port", str(args.port)],
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=os.environ | {"CONFIGUARD_SERVICE_TEMP_DIR": str(scratch / "up")})
     results = {}
     try:
-        base = f"http://127.0.0.1:{args.port}"
+        base = args.url.rstrip("/") if args.url else f"http://127.0.0.1:{args.port}"
         for _ in range(240):
             try:
                 if httpx.get(base + "/health/ready", timeout=5).status_code == 200:
@@ -93,8 +95,9 @@ def main() -> int:
                 r.raise_for_status()
                 results[name] = essentials(r.json())
     finally:
-        server.terminate()
-        server.wait(timeout=20)
+        if server is not None:
+            server.terminate()
+            server.wait(timeout=20)
         shutil.rmtree(scratch, ignore_errors=True)
     path = out_dir / "detection_parity_baseline.json"
     if args.mode == "baseline":
@@ -113,7 +116,7 @@ def main() -> int:
     ex_diffs = {k: {"before": (base_res.get(k) or {}).get("explanation"), "after": v.get("explanation")}
                 for k, v in results.items() if (base_res.get(k) or {}).get("explanation") != v.get("explanation")}
     report = {"items": len(results), "identical": not diffs, "differences": diffs, "explanation_differences": ex_diffs}
-    (out_dir / f"detection_parity_compare_{time.strftime('%Y%m%d-%H%M%S')}.json").write_text(json.dumps(report, indent=1))
+    (out_dir / f"detection_parity_compare_{time.strftime('%Y%m%d-%H%M%S')}{args.label}.json").write_text(json.dumps(report, indent=1))
     print(json.dumps({"items": len(results), "identical": not diffs, "differing_items": list(diffs),
                       "explanation_differences": ex_diffs}, indent=1))
     return 0 if not diffs else 1
