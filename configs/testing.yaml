@@ -12,3 +12,15 @@ validation:
   max_video_duration_seconds: 5
   allowed_image_extensions: [".jpg", ".jpeg", ".png", ".webp"]
   allowed_video_extensions: [".mp4", ".mov", ".mkv", ".avi"]
+
+service:
+  device: cpu
+  max_concurrent_inference: 1
+  max_queue: 1
+  request_timeout_s: 20
+  upload_timeout_s: 10
+  cpu_threads_per_session: 1
+  require_api_key: false
+  gate_enabled: true
+  docs_enabled: true
+  ready_recheck_s: 0

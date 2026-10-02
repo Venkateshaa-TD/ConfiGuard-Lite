@@ -4,6 +4,42 @@ Format: one entry per issue. Mark resolved issues rather than deleting them.
 
 ---
 
+## OPEN — Service video latency is dominated by decoding + face detection (Phase 10)
+
+Server P50 for a val video: extraction 659 ms vs ONNX 13 ms. The 5d
+contract decodes sequentially up to the last planned frame and runs
+YuNet on all 16 planned frames (plus recovery) before adaptive
+inference. So early stopping saves model time, not extraction time.
+A 90 s 1080p upload costs proportionally more. Making detection lazy
+per stage would change which crops are produced, and needs its own
+parity check.
+
+## OPEN — Service image path uses video-frame statistics (Phase 10)
+
+Images use the 6c `frame` calibration and the Phase 9 thresholds, both
+fitted on aligned FF++ video-frame crops. Still photos (other cameras,
+compression, no motion blur) are out of that distribution. Single
+images have no QUALITY_DEPENDENT check. No formal image evaluation
+exists.
+
+## OPEN — Service operational limits (Phase 10)
+
+- **Timeout is cooperative.** A worker stuck inside one long native
+  call keeps its slot until that call returns. The client still gets a
+  504 on time, and cleanup waits for the worker.
+- **Tampering window.** On-disk artifact tampering is detected at the
+  next readiness re-check (≤ 30 s) or restart.
+- **Network.** No TLS, rate limiting or per-key quotas: deploy behind a
+  reverse proxy.
+- **Upload sampling.** A lone upload's frame indices can differ from
+  5d's family-shared indices (see DECISIONS).
+- **GPU path.** Slower than CPU here, and needs torch's CUDA DLLs on
+  this machine.
+- **YuNet stderr line.** OpenCV DNN prints one non-JSON warning line to
+  stderr at detector load.
+
+---
+
 ## ACCEPTED — Quality-gate experimentation ended; Phase 9 gate weaknesses are final (Phase 9c)
 
 The Phase 9c hybrid (v2 noise/blockiness + v1 FFT resolution) was

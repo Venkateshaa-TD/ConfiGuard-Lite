@@ -881,6 +881,33 @@ On this machine the store root is `D:\ConfiGuard-Data\cache\ffpp_face_crops\stor
   (`ShapePinnedRunner`, ONNX FP32) → `AdaptiveVideoAnalyzer` (6d
   calibration) → quality gate → verdict + reason codes.
 
+## Inference service (Phase 10)
+
+```
+POST /v1/analyze (multipart 'file')
+  -> request ID + JSON log context -> API key (if enabled) -> engine ready? (503)
+  -> admission: running < max_concurrent_inference + max_queue (else 503 server_busy)
+  -> uploads.receive_upload: streamed into <temp>/req-*/ with byte cap (413), upload timeout (408)
+  -> validation.validate_media_file: magic bytes, extension cross-check, size, ffprobe duration
+  -> worker pool (max_concurrent_inference threads), CancelToken deadline (504):
+       image: decode (pixel cap) -> YuNet -> align (5d) -> ONNX FP32 -> 6c 'frame' calibration -> v1 checks + SMALL_FACE
+       video: ffprobe packets -> 5d planned 16 indices -> sequential decode -> YuNet -> primary track -> recovery
+              -> align -> AdaptiveVideoAnalyzer (6d) scoring only requested slots -> apply_gate (Phase 9 v1)
+  -> temp dir removed when the worker finishes; JSON result with timings
+GET /health/live   -> always 200 while the process serves
+GET /health/ready  -> 200 only if verify_bundle passes (re-checked every ready_recheck_s) and sessions loaded
+```
+
+- **`service/config.py`:** `ServiceConfig` from the `service:` YAML block
+  plus env paths and keys; production fails closed.
+- **`service/artifacts.py`:** `verify_bundle` / `ModelBundle`
+  (torch-free).
+- **`service/engine.py`:** `OnnxRunner` (CPU shared session, CUDA one
+  per batch size, fallback) and `InferenceEngine` (per-thread YuNet).
+- **`service/extract.py`, `uploads.py`, `app.py`, `schemas.py`,
+  `logs.py`:** extraction, streamed uploads, routes, response models and
+  structured logs.
+
 ## Quality gate hybrid experiment (Phase 9c; rejected, not in production)
 
 - **`quality/signals_hybrid.py`**: `crop_signals_hybrid` reuses
@@ -959,6 +986,7 @@ ConfiGuard-Lite/
 │   ├── export/                  Production ONNX export + hash-checked package (Phase 8)
 │   │   ├── onnx_student.py, package.py
 │   ├── quality/                 Downgrade-only media-quality safety gate (Phase 9; v2 experiment 9b; hybrid 9c)
+│   ├── service/                 FastAPI inference service (Phase 10)
 │   │   ├── signals.py, signals_v2.py, gate.py
 │   ├── memory_guard.py          available-RAM floor (Phase 6e)
 │   └── training/                Reproducible training pipeline (Phase 5)

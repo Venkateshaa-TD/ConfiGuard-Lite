@@ -11,3 +11,16 @@ validation:
   max_video_duration_seconds: 120
   allowed_image_extensions: [".jpg", ".jpeg", ".png", ".webp"]
   allowed_video_extensions: [".mp4", ".mov", ".mkv", ".avi"]
+
+# Phase 10 inference service (paths/secrets come from .env, never here).
+service:
+  device: cpu                  # cpu (default) | cuda (optional; falls back to CPU if unavailable)
+  max_concurrent_inference: 2
+  max_queue: 8
+  request_timeout_s: 120
+  upload_timeout_s: 120
+  cpu_threads_per_session: 0   # 0 = onnxruntime default
+  require_api_key: false
+  gate_enabled: true
+  docs_enabled: true
+  ready_recheck_s: 30

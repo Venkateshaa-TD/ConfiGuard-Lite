@@ -4,6 +4,54 @@ Format: one entry per decision, newest first.
 
 ---
 
+## 2026-10-02 — Phase 10: inference service design
+
+- **Real pipeline, torch-free.** The service reuses the 5d extraction
+  helpers (`crops.extract` / `crops.matching` / `crops.alignment`,
+  `ExtractionConfig` defaults) in memory.
+  - It verifies the package itself: manifest + file hashes, calibration
+    content/bindings, gate binding to this manifest, ONNX, adaptive
+    calibration and the installed `signals.py`, and the YuNet pin. This
+    replaces `load_package` / `load_calibration`, which need `best.pt`
+    + torch.
+  - Bit-exactness was checked against the stored 5d val crops.
+- **Per-upload sampling.** A lone upload has no content family, so its
+  16 planned indices come from its own frame count. 5d used the family's
+  shared range, so indices can differ for some clips (pixels otherwise
+  identical).
+- **Images:** the 6c `frame` temperature + mondrian α 0.05 thresholds.
+  The gate applies the same v1 per-crop checks + SMALL_FACE; a single
+  frame has no QUALITY_DEPENDENT rule. Downgrade-only is asserted.
+- **Production gate is v1 only.** The service refuses 9b/9c artifacts
+  (`gate_not_production_v1`).
+- **No face / too few frames → "uncertain"** with a reason code. These
+  are not errors: the three-way contract already covers declining to
+  decide.
+- **CPU default.** Measured: GPU (ORT CUDA, onnxruntime-gpu 1.23.2) is
+  slower per request here and roughly doubles RSS (its CUDA DLLs come
+  from torch). It is opt-in, with automatic CPU fallback reported in
+  readiness.
+- **Uploads:** streamed with python-multipart directly into a per-request
+  temp dir. The byte cap is enforced while streaming. Only the client
+  filename's extension is used, as a cross-check with the content
+  signature.
+  - The temp dir is deleted when the worker finishes, so it is never
+    deleted while a timed-out worker still has the file open (Windows).
+- **Concurrency:** a thread pool of `max_concurrent_inference` plus an
+  admission counter (`+ max_queue`). A slot is released only when its
+  worker finishes, also after a 504.
+- **Timeouts:** upload (408) and a cooperative analysis deadline (504),
+  checked between frames, detections and stages. ffprobe is bounded by
+  the remaining time.
+- **Readiness** re-verifies every hash at most every `ready_recheck_s`
+  (30 s). A mismatch makes `/v1/analyze` return 503 (fail closed).
+- **Auth:** API keys from `CONFIGUARD_API_KEYS`; only SHA-256 digests
+  are kept, compared in constant time. Production refuses to start
+  without `require_api_key` + keys; health probes stay open and expose
+  only hashes.
+
+---
+
 ## 2026-10-02 — Phase 9c: hybrid gate rejected; Phase 9 (v1) gate final; quality-gate experimentation ended
 
 - **Design:** v2 noise-corrected sharpness + HIGH_NOISE + v2

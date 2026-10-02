@@ -12,3 +12,17 @@ validation:
   max_video_duration_seconds: 90
   allowed_image_extensions: [".jpg", ".jpeg", ".png", ".webp"]
   allowed_video_extensions: [".mp4", ".mov", ".mkv", ".avi"]
+
+# Phase 10 inference service. Auth is mandatory: the service refuses to
+# start without service.require_api_key and CONFIGUARD_API_KEYS (fail closed).
+service:
+  device: cpu
+  max_concurrent_inference: 2
+  max_queue: 8
+  request_timeout_s: 60
+  upload_timeout_s: 60
+  cpu_threads_per_session: 0
+  require_api_key: true
+  gate_enabled: true
+  docs_enabled: false
+  ready_recheck_s: 30

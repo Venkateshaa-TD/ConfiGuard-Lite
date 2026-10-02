@@ -35,3 +35,8 @@ onnxruntime>=1.18  # CPU-only servers. Dev/GPU venv instead uses onnxruntime-gpu
 transformers>=4.56,<5
 safetensors>=0.4
 huggingface_hub>=0.34,<1.0
+
+# Phase 10: inference API (FastAPI service; torch is NOT needed to serve).
+fastapi>=0.115,<1
+uvicorn>=0.30,<1
+python-multipart>=0.0.9

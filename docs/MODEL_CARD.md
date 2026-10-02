@@ -73,6 +73,21 @@ resolution and duration. The Phase 5d audit found the F2F/NT width
 change to be a centred crop with no residual geometric cue. Fakes are
 somewhat blurrier than their matched reals (a genuine artifact).
 
+## Serving (Phase 10)
+
+- **How it is deployed:** a FastAPI service (`configuard.service`)
+  running the ONNX FP32 student on CPU by default. Videos use adaptive
+  4/8/16 frames; images use frame-level calibration. Both pass through
+  the Phase 9 v1 quality gate.
+- **What it returns:** every response carries a notice that this is an
+  automated estimate validated only on FF++ development data. It is
+  not a forensic determination.
+- **Out-of-distribution inputs:** still images and non-FF++ video are
+  outside what was evaluated.
+- **When it declines:** no face, too few frames, an ambiguous
+  calibrated prediction, or low quality all yield "uncertain", with a
+  reason code.
+
 ## Phase 9c (rejected experiment; gate work ended)
 
 - **What was tried:** a hybrid gate (Phase 9b noise handling and

@@ -21,6 +21,7 @@
 | 9 | Media-quality safety gate | PASS | 2026-10-01 |
 | 9b | Quality-gate hardening (v2 signals) | REJECTED (Phase 9 gate kept) | 2026-10-01 |
 | 9c | Final hybrid quality gate | REJECTED (Phase 9 gate kept; gate experimentation ended) | 2026-10-02 |
+| 10 | Production inference API/service | PASS | 2026-10-02 |
 
 Full per-phase results are recorded below as they complete.
 
@@ -1065,4 +1066,53 @@ gate stays in production and quality-gate experimentation is ended.
 
 **Open items:** v1's known gaps (blur+noise bypass, 0.75×
 over-trigger, residual 0.33× FA) remain and are accepted
+(`docs/KNOWN_ISSUES.md`).
+
+---
+
+## Phase 10 — Production inference API/service
+
+**Status:** PASS
+
+**Summary:** `configuard.service` is a FastAPI app over the real pipeline:
+Phase 5d face extraction → ONNX FP32 → adaptive 4/8/16 (6d) for video or
+6c frame calibration for images → Phase 9 v1 gate. It never imports torch.
+- Live crops are bit-identical to the stored 5d training crops wherever
+  frame indices coincide (8 val videos, max pixel diff 0).
+- CPU load test (80 val requests, concurrency 4, 2 workers): 80/80 OK,
+  3.78 req/s; video P50 1.41 s / P95 2.86 s; image P50 276 ms / P95
+  1.04 s; peak RSS 854 MB.
+- The GPU path works, but is slower (3.19 req/s) and uses more memory
+  (1.57 GB), so CPU stays the default.
+
+**Requirements:**
+1. FastAPI on the real pipeline (the dummy `configuard.pipeline` is not used). **Met.**
+2. Validated image + video uploads via `POST /v1/analyze`. **Met.**
+3. Verdict, calibrated p_fake / confidence, quality + uncertainty reasons,
+   frames used, timeline, model version, timings. **Met.**
+4. `/health/live`, `/health/ready` (re-hashes every artifact, every 30 s;
+   ONNX sessions + detector must load). **Met.**
+5. CPU default; `device: cuda` optional with CPU fallback (tested both). **Met.**
+6. Models loaded once; one session per batch size on CUDA (shared on
+   CPU); bounded worker pool + admission limit (503 when full). **Met.**
+7. Streamed multipart into a private temp dir; magic-byte, size and
+   duration validation; upload + analysis timeouts; cleanup on every
+   path. **Met.**
+8. No uploads retained; filenames/media never logged (verified in tests
+   and in 172 load-test log lines); JSON logs with request IDs. **Met.**
+9. API-key auth (`X-API-Key`, SHA-256, constant-time); production
+   refuses to start without it. **Met.**
+10. Structured 4xx/5xx `{"error": {code, message, request_id}}`, no
+    traces/paths. **Met.**
+11. OpenAPI examples; `service:` config for development/testing/production. **Met.**
+12. 26 tests: image, video, corrupt, oversized (per-type and while
+    streaming), timeout, concurrency, auth, cleanup, 5 artifact
+    tamper cases, safe errors, logs, OpenAPI, GPU fallback, no-torch. **Met.**
+13. Real local smoke + load test (uvicorn process, val media only). **Met.**
+14. Targeted tests (69) then one full suite; docs; commit. **Met.**
+15. No UI, Docker, C2PA or FF++ test access. **Met.**
+
+**Open items:** video latency is dominated by sequential decoding and
+YuNet; the timeout is cooperative; image calibration and gate use
+video-frame statistics; no TLS or rate limiting
 (`docs/KNOWN_ISSUES.md`).

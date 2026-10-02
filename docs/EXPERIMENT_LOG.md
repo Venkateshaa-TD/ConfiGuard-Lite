@@ -2242,3 +2242,51 @@ No tuning was done after these results.
 .venv/Scripts/python.exe -m pytest tests/quality -q -p no:cacheprovider     # 30 passed (13 Phase 9 + 8 Phase 9b + 9 Phase 9c)
 .venv/Scripts/python.exe -m pytest -q -p no:cacheprovider -rs              # 593 passed, 0 skipped, 196.05 s
 ```
+
+## 2026-10-02 — Phase 10 inference service
+
+Dependencies (into `.venv`, `-c constraints-cuda.txt`; torch CUDA build re-verified OK):
+fastapi 0.142.2, uvicorn 0.54.0, python-multipart 0.0.32, httpx 0.28.1, psutil 7.2.2.
+
+Extraction parity (live `service.extract.extract_video` vs stored 5d val crops, real YuNet):
+8 val videos (4 original, 2 Deepfakes, 2 NeuralTextures). Where frame indices coincide
+(16/16 for 7 videos; 1/16 for 046, whose own length differs from its family's shared
+range), max pixel difference **0**. 0.55–1.25 s per video.
+
+```
+.venv/Scripts/python.exe scripts/service_load_test.py --videos 40 --images 40 --concurrency 4 --device cpu
+.venv/Scripts/python.exe scripts/service_load_test.py --videos 20 --images 20 --concurrency 4 --device cuda --port 8766
+```
+
+Server: `scripts/serve.py --env development` (max_concurrent_inference 2, max_queue 8),
+real package + gate + YuNet; media = official val only (frames for images via ffmpeg).
+
+| | CPU (default) | CUDA (opt-in) |
+|---|---|---|
+| requests OK | 80/80 | 40/40 |
+| throughput | 3.78 req/s | 3.19 req/s |
+| video P50 / P95 | 1410 / 2862 ms | 1641 / 3835 ms |
+| image P50 / P95 | 276 / 1039 ms | 176 / 1248 ms |
+| video server P50: queue / extraction / inference | 449 / 659 / 12.7 ms | – / 784 / 20.0 ms |
+| image server P50: extraction / inference | 43.8 / 3.9 ms | 39.1 / 7.6 ms |
+| peak RSS (incl. children) | 854 MB (idle 165 MB) | 1571 MB |
+| avg frames used (video) | 6.8 | – |
+| temp dir empty afterwards | yes | yes |
+| media names in server logs | none (172 lines) | none |
+
+Smoke: live 200; val image 200 (likely_real, 61 ms total); val video 200
+(likely_real, k4 stop, 603 ms total); corrupt MP4 422 `media_unreadable`.
+Load-sample decided accuracy (not an evaluation; 40+40 val items): video
+0.94 (6 uncertain), image 0.91 (5 uncertain).
+A first harness run reported idle RSS 4 MB (it measured the Windows venv
+launcher, not its python child) and a false "media name in logs" hit
+(file stems like `004` matched request IDs); both checks were fixed and
+the run repeated (numbers above).
+Reports: `D:\ConfiGuard-Data\outputs\service_bench\load_{cpu,cuda}_*.json`.
+
+## 2026-10-02 — Phase 10 tests
+
+```
+.venv/Scripts/python.exe -m pytest tests/service tests/quality tests/test_validation.py -q -p no:cacheprovider   # 69 passed (26 service)
+.venv/Scripts/python.exe -m pytest -q -p no:cacheprovider -rs                                                    # 619 passed, 0 skipped, 240.71 s
+```

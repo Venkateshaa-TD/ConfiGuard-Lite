@@ -1,0 +1,124 @@
+"""Response models and OpenAPI examples for the inference API."""
+
+from __future__ import annotations
+
+from typing import Any, Literal
+
+from pydantic import BaseModel, Field
+
+VerdictName = Literal["likely_real", "likely_manipulated", "uncertain"]
+
+
+class ModelInfo(BaseModel):
+    name: str
+    version: str
+    runtime: str
+    onnx_sha256: str
+    export_manifest_sha256: str
+    adaptive_calibration_sha256: str
+    frame_calibration_sha256: str
+    quality_gate: str
+    quality_gate_sha256: str
+
+
+class TimelineEntry(BaseModel):
+    slot: int | None = Field(None, description="Nested-sampling slot (0-15); absent for images")
+    frame_index: int
+    timestamp_s: float | None = None
+    logit: float
+    p_fake_frame: float = Field(description="Per-frame P(fake), frame-level temperature scaling")
+    added_at_stage: int | None = Field(None, description="Adaptive stage (4/8/16) that scored this frame")
+    quality_flags: list[str] = []
+
+
+class AnalyzeResponse(BaseModel):
+    request_id: str
+    media_type: Literal["image", "video"]
+    verdict: VerdictName
+    base_verdict: VerdictName = Field(description="Calibrated verdict before the quality gate")
+    p_fake: float | None = Field(description="Calibrated P(manipulated) of the decision stage")
+    confidence: float | None = Field(description="max(p_fake, 1 - p_fake)")
+    gated: bool = Field(description="True when the quality gate downgraded the verdict to 'uncertain'")
+    quality_reasons: list[str]
+    uncertainty_reasons: list[str]
+    warnings: list[str]
+    frames_used: int
+    stopping_reason: str | None = None
+    frame_count: int | None = None
+    faces_detected: int | None = None
+    stages: list[dict[str, Any]]
+    timeline: list[TimelineEntry]
+    model: ModelInfo
+    device: str | None
+    timings_ms: dict[str, float]
+    notice: str
+
+
+class ErrorDetail(BaseModel):
+    code: str
+    message: str
+    request_id: str
+
+
+class ErrorBody(BaseModel):
+    error: ErrorDetail
+
+
+class LiveResponse(BaseModel):
+    status: Literal["alive"]
+
+
+class ReadyResponse(BaseModel):
+    status: Literal["ready", "not_ready"]
+    checks: dict[str, str]
+    model: ModelInfo | None = None
+    device: dict[str, Any] | None = None
+
+
+_MODEL_EX = {"name": "student_distilled_p80", "version": "student_distilled_p80+onnx-fp32:4e365f0d9942/cal:1bae6e40/gate-v1:548cc52b",
+             "runtime": "onnx-fp32", "onnx_sha256": "4e365f0d9942489b...", "export_manifest_sha256": "819f5866e39f674c...",
+             "adaptive_calibration_sha256": "1bae6e40d395d59c...", "frame_calibration_sha256": "8df62834e9729644...",
+             "quality_gate": "phase9-v1", "quality_gate_sha256": "548cc52b2d3c1651..."}
+
+VIDEO_EXAMPLE = {
+    "request_id": "6f1c2a9e4b7d4e0f9a3c1b2d5e6f7a8b", "media_type": "video", "verdict": "likely_manipulated",
+    "base_verdict": "likely_manipulated", "p_fake": 0.9871, "confidence": 0.9871, "gated": False,
+    "quality_reasons": [], "uncertainty_reasons": [], "warnings": [], "frames_used": 4,
+    "stopping_reason": "confident_singleton_k4", "frame_count": 398, "faces_detected": None,
+    "stages": [{"stage": 4, "score": 4.21, "p_fake": 0.9871, "alpha": 0.015, "set": ["fake"], "verdict": "likely_manipulated"}],
+    "timeline": [{"slot": 0, "frame_index": 12, "timestamp_s": 0.48, "logit": 3.9, "p_fake_frame": 0.97,
+                  "added_at_stage": 4, "quality_flags": []}],
+    "model": _MODEL_EX, "device": "cpu",
+    "timings_ms": {"upload_ms": 41.0, "validation_ms": 55.2, "queue_ms": 0.1, "extraction_ms": 812.4,
+                   "inference_ms": 9.1, "gate_ms": 6.3, "total_ms": 931.0},
+    "notice": "Automated estimate from a model evaluated on FaceForensics++ development data only; ...",
+}
+IMAGE_GATED_EXAMPLE = VIDEO_EXAMPLE | {
+    "media_type": "image", "verdict": "uncertain", "base_verdict": "likely_real", "p_fake": 0.04, "confidence": 0.96,
+    "gated": True, "quality_reasons": ["LOW_SHARPNESS", "LOW_RESOLUTION"], "frames_used": 1, "stopping_reason": None,
+    "frame_count": None, "faces_detected": 1, "stages": [],
+    "timeline": [{"frame_index": 0, "logit": -3.1, "p_fake_frame": 0.04, "quality_flags": ["LOW_SHARPNESS", "LOW_RESOLUTION"]}],
+}
+READY_EXAMPLE = {"status": "ready", "checks": {"artifacts": "ok", "onnx_sessions": "ok"}, "model": _MODEL_EX,
+                 "device": {"requested": "cpu", "active": "cpu", "fallback_reason": None}}
+
+
+def _err(code: str, message: str) -> dict[str, Any]:
+    return {"model": ErrorBody, "content": {"application/json": {"example": {
+        "error": {"code": code, "message": message, "request_id": "6f1c2a9e4b7d4e0f9a3c1b2d5e6f7a8b"}}}}}
+
+
+ANALYZE_RESPONSES: dict[int | str, dict[str, Any]] = {
+    200: {"content": {"application/json": {"examples": {
+        "video": {"summary": "Video, confident at 4 frames", "value": VIDEO_EXAMPLE},
+        "image_gated": {"summary": "Image downgraded by the quality gate", "value": IMAGE_GATED_EXAMPLE}}}}},
+    400: _err("missing_file", "Send exactly one file in the 'file' field."),
+    401: _err("unauthorized", "A valid X-API-Key header is required."),
+    408: _err("upload_timeout", "The upload did not complete in time."),
+    413: _err("file_too_large", "File exceeds the configured size limit."),
+    415: _err("unsupported_media_type", "File content does not match a supported image/video format."),
+    422: _err("media_unreadable", "The media could not be decoded; it may be corrupted."),
+    500: _err("internal_error", "Internal server error."),
+    503: _err("server_busy", "Too many concurrent requests; retry later."),
+    504: _err("analysis_timeout", "Analysis exceeded the time limit."),
+}

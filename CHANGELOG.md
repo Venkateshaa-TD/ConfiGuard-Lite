@@ -469,3 +469,19 @@ All notable changes to this project are documented here.
   Val agrees (0.33× FA 38.8% vs 24.5%).
 - Phase 9 gate stays in production; quality-gate experimentation ended.
 - 9 new tests; full suite 593/593 (196 s). No retraining, recalibration, API/UI or test access.
+
+### Phase 10 — Production inference API/service (2026-10-02)
+
+- Added `configuard.service`: `config` (service block + env, fail-closed
+  production auth), `artifacts` (torch-free bundle verification),
+  `extract` (in-memory 5d crop extraction, cancellable), `engine` (ONNX
+  sessions, CPU default / CUDA fallback, image + adaptive video paths,
+  v1 gate), `uploads` (streamed multipart), `app` (FastAPI:
+  `/v1/analyze`, `/health/live`, `/health/ready`), `schemas`, `logs`.
+- Added `scripts/serve.py` and `scripts/service_load_test.py`; `service:`
+  blocks in development/testing/production configs; `.env.example`
+  service variables; fastapi/uvicorn/python-multipart (runtime),
+  httpx/psutil (dev).
+- CPU load test: 3.78 req/s, video P50/P95 1.41/2.86 s, image 0.28/1.04 s,
+  peak RSS 854 MB. Live crops bit-identical to 5d crops.
+- 26 new tests; full suite 619/619 (241 s). No UI, Docker, C2PA or test access.
