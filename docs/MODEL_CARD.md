@@ -73,6 +73,17 @@ resolution and duration. The Phase 5d audit found the F2F/NT width
 change to be a centred crop with no residual geometric cue. Fakes are
 somewhat blurrier than their matched reals (a genuine artifact).
 
+## Phase 9c (rejected experiment; gate work ended)
+
+- **What was tried:** a hybrid gate (Phase 9b noise handling and
+  compression check + Phase 9 resolution check).
+- **Result:** it closed the blur+noise bypass and the 0.75×
+  over-trigger. However, it protected less against strongly downscaled
+  real videos (false accusations 27% vs 24% held-out, 39% vs 25% on
+  val) and exceeded the 6 ms budget, so it was not adopted.
+- The production gate is unchanged (Phase 9), and its known gaps are
+  accepted as final.
+
 ## Phase 9b (rejected experiment)
 
 - **What was tried:** a hardened quality gate (noise-aware,

@@ -2176,3 +2176,69 @@ protection.
 .venv/Scripts/python.exe -m pytest tests/quality -q -p no:cacheprovider     # 21 passed (13 Phase 9 + 8 Phase 9b)
 .venv/Scripts/python.exe -m pytest -q -p no:cacheprovider -rs              # 584 passed, 0 skipped, 236.10 s
 ```
+
+## 2026-10-02 — Phase 9c hybrid quality gate (rejected)
+
+Commands (in order; all CPU ONNX FP32 `4e365f0d9942`):
+```
+.venv/Scripts/python.exe scripts/quality_gate_hybrid.py assemble          # artifact a57b6f068987c9b5
+.venv/Scripts/python.exe scripts/quality_gate_hybrid.py challenge-split   # 62 families, 310 videos
+.venv/Scripts/python.exe scripts/quality_gate_hybrid.py verify --workers 7   # 8 conditions, ~11-21 s each
+.venv/Scripts/python.exe scripts/quality_gate_hybrid.py bench --videos 120
+.venv/Scripts/python.exe scripts/quality_gate_hybrid.py confirm-val --workers 7   # once; ~9.5 min
+.venv/Scripts/python.exe scripts/quality_gate_hybrid.py decide            # REJECT -> PHASE9C_REJECTED.json
+.venv/Scripts/python.exe scripts/quality_gate_hybrid.py confirm-val       # REFUSED (rerun blocked, verified)
+```
+
+Hybrid thresholds (copied, not fitted): sharpness_min 1.0230 (v2),
+hf_ratio_min −2.9669 (v1), blockiness_max 0.8144 (v2), noise_max
+2.1863 (v2), face_px_min 61.517 (v1), majority 0.5.
+
+**Held-out challenge split** (310 videos, fresh seeds; ungated / v1 / hybrid):
+
+| set | decided | FA |
+|---|---|---|
+| clean | 0.897 / 0.881 / 0.887 | 0 / 0 / 0 |
+| resize 0.75 | 0.910 / 0.000 / 0.881 | 0 / 0 / 0 |
+| resize 0.33 | 0.848 / 0.535 / 0.713 | 0.290 / **0.242** / **0.274** |
+| blur σ2 | 0.955 / 0 / 0 | 0.839 / 0 / 0 |
+| blur2+noise 2/4/6 (mean FA) | | 0.339 / 0.247 / **0.016** |
+| noise σ8 | 0.923 / 0.923 / 0 | 0 / 0 / 0 |
+
+Targets: clean loss 0.0097 ≤ 0.02 ✔; 0.75× decided 0.881 ≥ 0.75 ✔;
+blur+noise FA 0.016 ≤ 0.05 ✔; blur σ2 0 ≤ 0 + 0.01 ✔; **0.33× 0.274 >
+0.242 + 0.01 ✘**.
+
+**Bench** (120 challenge videos, CPU, cv2 1 thread): 1.21 ms/crop,
+**6.35 ms/video (target ≤ 6 ✘)**, 5.27 frames avg; pipeline mean 24.8 →
+31.4 ms (+26.8%).
+
+**CONFIRMATORY val** (695 videos/set; ungated / v1 / hybrid):
+
+| set | decided | FA |
+|---|---|---|
+| clean | 0.868 / 0.862 / 0.863 | 0.014 / 0.014 / 0.014 |
+| resize 0.75 | 0.856 / 0.003 / 0.836 | 0.050 / 0 / 0.050 |
+| resize 0.5 | 0.850 / 0.673 / 0.721 | 0.079 / 0.072 / 0.079 |
+| resize 0.33 | 0.875 / 0.453 / 0.709 | 0.460 / **0.245** / **0.388** |
+| blur σ1 / σ2 | 0.843/0.965 → 0.486/0 → 0.506/0 | 0.058/0.842 → 0.043/0 → 0.050/0 |
+| adv blur σ2 + noise σ4 | 0.285 / 0.285 / 0 | 0.144 / 0.144 / **0** |
+| blur + unsharp | 0.950 / 0.029 / 0.004 | 0.791 / 0.022 / 0 |
+| JPEG q75 / q50 / q30 | 0.80/0.78/0.77 → 0.15/0/0 → 0.80/0.62/0.20 | 0 |
+| x264 crf 23/30/37 | 0.79/0.75/0.68 → 0.78/0.73/0.50 → 0.79/0.75/0.68 | ≤ 0.014 (equal) |
+| noise σ4 / σ10 | 0.72/0.96 → same → 0/0 | 0 |
+| social / stream | 0.673/0.643 → 0/0.604 → 0.504/0.639 | 0 / 0.043 (equal) |
+| bypass one / half / all bad | FA 0.036/0.086/0.842 → 0.029/0/0 → 0.029/0/0 | |
+
+Diagnosis (reason counts, resize 0.33): LOW_RESOLUTION (FFT) fires on
+22 (v1) vs 23 (hybrid) val videos and 12 vs 12 challenge videos;
+LOW_SHARPNESS fires on 313 vs 108 (val) and 108 vs 37 (challenge).
+The regression is caused by the sharpness signal, not the FFT band.
+No tuning was done after these results.
+
+## 2026-10-02 — Phase 9c tests
+
+```
+.venv/Scripts/python.exe -m pytest tests/quality -q -p no:cacheprovider     # 30 passed (13 Phase 9 + 8 Phase 9b + 9 Phase 9c)
+.venv/Scripts/python.exe -m pytest -q -p no:cacheprovider -rs              # 593 passed, 0 skipped, 196.05 s
+```

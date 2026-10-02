@@ -44,6 +44,7 @@ QUALITY_DEPENDENT = "QUALITY_DEPENDENT_VERDICT"
 FRAME_CODES = (LOW_SHARPNESS, LOW_RESOLUTION, HEAVY_COMPRESSION)
 SCHEMA = "p9-quality-gate-1"
 SCHEMA_V2 = "p9b-quality-gate-2"
+SCHEMA_HYBRID = "p9c-quality-gate-hybrid-1"
 FRAME_CODES_V2 = (LOW_SHARPNESS, LOW_RESOLUTION, HEAVY_COMPRESSION, HIGH_NOISE)
 
 
@@ -103,6 +104,38 @@ class GateThresholdsV2:
 
 
 @dataclass(frozen=True)
+class GateThresholdsHybrid:
+    """Phase 9c: v2's noise-corrected sharpness, HIGH_NOISE and offset-robust
+    blockiness (configuard.quality.signals_v2), combined with v1's FFT-based
+    hf_ratio effective-resolution check (configuard.quality.signals) in place
+    of v2's own hf_ratio, which under-protected severe (0.33x) down-scaling
+    (docs/DECISIONS.md). Same (4,) layout as GateThresholdsV2."""
+
+    sharpness_min: float
+    hf_ratio_min: float
+    blockiness_max: float
+    noise_max: float
+    face_px_min: float
+    majority: float = 0.5
+    percentile: float = 0.0
+
+    codes = FRAME_CODES_V2
+    schema = SCHEMA_HYBRID
+
+    def frame_flags(self, q: np.ndarray) -> np.ndarray:
+        """q (n, 4) -> (n, 4) bool in FRAME_CODES_V2 order."""
+        q = np.atleast_2d(q)
+        return np.stack([q[:, 0] < self.sharpness_min, q[:, 1] < self.hf_ratio_min,
+                         q[:, 2] > self.blockiness_max, q[:, 3] > self.noise_max], 1)
+
+    @staticmethod
+    def signal_fn(img_bgr: np.ndarray) -> np.ndarray:
+        from configuard.quality.signals_hybrid import crop_signals_hybrid
+
+        return crop_signals_hybrid(img_bgr)
+
+
+@dataclass(frozen=True)
 class GatedResult:
     verdict: Verdict
     base_verdict: Verdict
@@ -120,7 +153,8 @@ class GatedResult:
 
 
 def apply_gate(result: AdaptiveResult, quality_by_slot: dict[int, np.ndarray], face_px: float | None,
-               thr: "GateThresholds | GateThresholdsV2", calibrator: Calibrator, policy: StagePolicy) -> GatedResult:
+               thr: "GateThresholds | GateThresholdsV2 | GateThresholdsHybrid", calibrator: Calibrator,
+               policy: StagePolicy) -> GatedResult:
     slots = [t["slot"] for t in result.timeline]
     logits = np.array([t["logit"] for t in result.timeline], np.float64)
     if not slots:
@@ -171,9 +205,12 @@ class QualityAwareScorer:
         return np.asarray(self.runner(pixels), np.float32)
 
 
-def save_thresholds(path: str | Path, thr: "GateThresholds | GateThresholdsV2", binding: dict[str, Any]) -> dict[str, Any]:
+def save_thresholds(path: str | Path, thr: "GateThresholds | GateThresholdsV2 | GateThresholdsHybrid",
+                    binding: dict[str, Any]) -> dict[str, Any]:
     if thr.schema == SCHEMA_V2:
         from configuard.quality.signals_v2 import SIGNALS_V2 as names
+    elif thr.schema == SCHEMA_HYBRID:
+        from configuard.quality.signals_hybrid import SIGNALS_HYBRID as names
     else:
         names = SIGNALS
     body = {"schema": thr.schema, "signals": list(names), "thresholds": thr.__dict__, "binding": binding}
@@ -182,16 +219,20 @@ def save_thresholds(path: str | Path, thr: "GateThresholds | GateThresholdsV2", 
     return art
 
 
-def load_thresholds(path: str | Path, expected_binding: dict[str, Any] | None = None) -> "GateThresholds | GateThresholdsV2":
+_SCHEMA_CLASSES = {SCHEMA: GateThresholds, SCHEMA_V2: GateThresholdsV2, SCHEMA_HYBRID: GateThresholdsHybrid}
+
+
+def load_thresholds(path: str | Path,
+                    expected_binding: dict[str, Any] | None = None) -> "GateThresholds | GateThresholdsV2 | GateThresholdsHybrid":
     art = json.loads(Path(path).read_text(encoding="utf-8"))
     body = {k: v for k, v in art.items() if k != "content_sha256"}
-    if art.get("schema") not in (SCHEMA, SCHEMA_V2) or hashlib.sha256(canonical_json(body)).hexdigest() != art.get("content_sha256"):
+    if art.get("schema") not in _SCHEMA_CLASSES or hashlib.sha256(canonical_json(body)).hexdigest() != art.get("content_sha256"):
         raise QualityGateMismatchError(f"{path}: unknown schema or edited content")
     if expected_binding is not None:
         for k, v in expected_binding.items():
             if art["binding"].get(k) != v:
                 raise QualityGateMismatchError(f"{path}: bound to {k}={art['binding'].get(k)!r}, expected {v!r}")
-    return (GateThresholdsV2 if art["schema"] == SCHEMA_V2 else GateThresholds)(**art["thresholds"])
+    return _SCHEMA_CLASSES[art["schema"]](**art["thresholds"])
 
 
 class GatedVideoAnalyzer:
@@ -203,7 +244,8 @@ class GatedVideoAnalyzer:
     downgrade. `enabled=False` returns the ungated verdict unchanged (reasons are
     still reported), which preserves the previous pipeline exactly."""
 
-    def __init__(self, calibrator: Calibrator, policy: StagePolicy, thresholds: "GateThresholds | GateThresholdsV2",
+    def __init__(self, calibrator: Calibrator, policy: StagePolicy,
+                 thresholds: "GateThresholds | GateThresholdsV2 | GateThresholdsHybrid",
                  enabled: bool = True) -> None:
         from configuard.adaptive.analyzer import AdaptiveVideoAnalyzer
 

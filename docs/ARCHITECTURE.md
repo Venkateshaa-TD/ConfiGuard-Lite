@@ -881,6 +881,19 @@ On this machine the store root is `D:\ConfiGuard-Data\cache\ffpp_face_crops\stor
   (`ShapePinnedRunner`, ONNX FP32) → `AdaptiveVideoAnalyzer` (6d
   calibration) → quality gate → verdict + reason codes.
 
+## Quality gate hybrid experiment (Phase 9c; rejected, not in production)
+
+- **`quality/signals_hybrid.py`**: `crop_signals_hybrid` reuses
+  `signals_v2` sharpness / noise σ / blockiness and `signals.hf_ratio`
+  (FFT), each with its own ROI. Same (4,) layout as v2.
+- **`quality/gate.py`**: `GateThresholdsHybrid`, schema
+  `p9c-quality-gate-hybrid-1`; `load_thresholds` maps all three
+  schemas to their classes.
+- **`scripts/quality_gate_hybrid.py`**: `assemble`, `challenge-split`,
+  `verify`, `bench`, `confirm-val` (once; marker
+  `CONFIRMATORY_VAL_RUN_9C.json`) and `decide`.
+- **Production:** unchanged, Phase 9 v1 `quality_gate.json`.
+
 ## Quality gate v2 experiment (Phase 9b; rejected, not in production)
 
 - **`quality/signals_v2.py`**: `crop_signals_v2` returns noise-corrected
@@ -945,7 +958,7 @@ ConfiGuard-Lite/
 │   │   ├── embeddings.py, gru.py
 │   ├── export/                  Production ONNX export + hash-checked package (Phase 8)
 │   │   ├── onnx_student.py, package.py
-│   ├── quality/                 Downgrade-only media-quality safety gate (Phase 9; v2 experiment 9b)
+│   ├── quality/                 Downgrade-only media-quality safety gate (Phase 9; v2 experiment 9b; hybrid 9c)
 │   │   ├── signals.py, signals_v2.py, gate.py
 │   ├── memory_guard.py          available-RAM floor (Phase 6e)
 │   └── training/                Reproducible training pipeline (Phase 5)
@@ -963,7 +976,7 @@ ConfiGuard-Lite/
 │                              robust stress suite + evaluation,
 │                              temporal GRU experiment, production ONNX export,
 │                              quality gate compute/fit/evaluate,
-│                              quality gate v2 experiment)
+│                              quality gate v2 and hybrid experiments)
 ├── tests/                    pytest suite (unit + integration), tests/conftest.py +
 │                              tests/media/conftest.py + tests/datasets/conftest.py +
 │                              tests/models/conftest.py generate all fixtures at

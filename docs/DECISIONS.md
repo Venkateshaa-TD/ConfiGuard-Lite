@@ -4,6 +4,36 @@ Format: one entry per decision, newest first.
 
 ---
 
+## 2026-10-02 — Phase 9c: hybrid gate rejected; Phase 9 (v1) gate final; quality-gate experimentation ended
+
+- **Design:** v2 noise-corrected sharpness + HIGH_NOISE + v2
+  offset-robust blockiness, with v1's FFT hf_ratio in place of v2's.
+  Every threshold was copied unchanged from the frozen v1
+  (hf_ratio, face_px) and v2 (sharpness, blockiness, noise) artifacts,
+  so there was no search and no data-driven selection.
+- **Protocol:** fresh deterministic challenge split drawn only from
+  `final_train` (salt `p9c-challenge-split-v1`; 62 families / 310
+  videos; disjoint from temp_cal and conformal_cal), new corruption
+  seeds, then one confirmatory val run behind a marker.
+- **Outcome:** 3 of 5 targets met (clean −0.97 pp, 0.75× 88.1%
+  decided, blur+noise FA 1.6%). Failed: 0.33× FA +3.2 pp vs v1 (limit
+  1 pp; val +14.3 pp) and cost 6.35 ms/video (limit 6). **Rejected**
+  under the pre-registered rule; `PHASE9C_REJECTED.json` written.
+- **Root cause (corrects the Phase 9b entry below):** the 0.33×
+  regression was not caused by swapping out the FFT band. The FFT check
+  fires identically in v1 and hybrid (val 22 vs 23 videos). v1's
+  downscale protection comes mainly from its median-denoised sharpness
+  check (LOW_SHARPNESS on 313 val videos), which the v2 noise-corrected
+  sharpness replaces (108). Blur+noise robustness and 0.33× protection
+  therefore pull the same sharpness signal in opposite directions.
+- **Not done, deliberately:** no re-tuning after seeing the held-out or
+  val results. Doing so would have been selection on verification data.
+- **Decision:** `quality_gate.json` (Phase 9) remains the production
+  gate. Quality-gate experimentation ends here, per the Phase 9c
+  instruction. The hybrid code and artifact are kept as a record only.
+
+---
+
 ## 2026-10-01 — Phase 9b: v2 quality signals rejected; Phase 9 gate stays in production
 
 - **Protocol:** design on `final_train`, percentile on `temp_cal`,

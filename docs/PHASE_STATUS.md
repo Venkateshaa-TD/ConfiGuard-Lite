@@ -20,6 +20,7 @@
 | 8 | Production ONNX export and optimization | PASS | 2026-10-01 |
 | 9 | Media-quality safety gate | PASS | 2026-10-01 |
 | 9b | Quality-gate hardening (v2 signals) | REJECTED (Phase 9 gate kept) | 2026-10-01 |
+| 9c | Final hybrid quality gate | REJECTED (Phase 9 gate kept; gate experimentation ended) | 2026-10-02 |
 
 Full per-phase results are recorded below as they complete.
 
@@ -1021,3 +1022,47 @@ offset-robust blockiness with v1's FFT effective-resolution band (or a
 downscale-specific detector). Re-verify on fresh held-out training
 families (e.g. a new split of `final_train`), because `conformal_cal`
 has now been used once for gate verification.
+
+---
+
+## Phase 9c — Final hybrid quality gate
+
+**Status:** REJECTED by the pre-registered targets. The Phase 9 (v1)
+gate stays in production and quality-gate experimentation is ended.
+
+**Summary:**
+- Hybrid = v2 noise-corrected sharpness + HIGH_NOISE + v2 offset-robust
+  blockiness + v1 FFT hf_ratio. Thresholds were copied unchanged from
+  the frozen v1/v2 artifacts (no search, no data pass).
+- Verified on a fresh final_train challenge split (62 families, 310
+  videos; new salt; disjoint from temp_cal/conformal_cal) with new
+  corruption seeds, then one confirmatory val run (rerun refused).
+- Passed: clean coverage loss 0.97 pp; 0.75× decided 88.1%; blur+noise
+  FA 1.6% (v1 24.7%); severe blur FA 0% (= v1).
+- **Failed:** 0.33× FA 27.4% vs v1 24.2% (+3.2 pp > 1 pp; val 38.8% vs
+  24.5%); cost 6.35 ms/video > 6 ms (pipeline overhead +27%).
+- **Root cause (corrects the 9b note):** the FFT check fires the same
+  in both gates (val 23 vs 22 videos). v1's 0.33× protection comes from
+  its median-denoised sharpness (313 val videos), which v2's
+  noise-corrected sharpness replaces (108).
+
+**Requirements:**
+1. Only the three named components combined. **Met.**
+2. Frozen thresholds reused; no search. **Met.**
+3. conformal_cal not used. **Met.**
+4. Fresh deterministic train-family challenge split, new seeds. **Met.**
+5. Frozen before one confirmatory val run; rerun blocked (verified).
+   **Met.**
+6. No gate / v1 / hybrid compared (challenge: 8 conditions; val: clean,
+   17 stress, 2 adversarial, 3 bypass). **Met.**
+7. Targets: 3 of 5 met; **0.33× non-regression failed**. **Not met.**
+8. Runtime measured: **6.35 ms/video, target ≤ 6 failed**. **Not met.**
+9. Downgrade-only (asserted; 300-case randomised test). **Met.**
+10. Targets failed → v1 kept, experimentation ended
+    (`PHASE9C_REJECTED.json`). **Met.**
+11. Targeted tests (30), one full suite, docs, commit. **Met.**
+12. No API/UI, no FF++ test access. **Met.**
+
+**Open items:** v1's known gaps (blur+noise bypass, 0.75×
+over-trigger, residual 0.33× FA) remain and are accepted
+(`docs/KNOWN_ISSUES.md`).

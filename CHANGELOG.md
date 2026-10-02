@@ -455,3 +455,17 @@ All notable changes to this project are documented here.
 - **Rejected**; the Phase 9 gate stays in production. Val confirmatory
   run agrees.
 - 8 new tests; full suite 584/584. No retraining, recalibration, API/UI or test access.
+
+### Phase 9c — Final hybrid quality gate (rejected) (2026-10-02)
+
+- Added `configuard.quality.signals_hybrid` (v2 noise-corrected
+  sharpness, noise σ and offset-robust blockiness + v1 FFT hf_ratio)
+  and `GateThresholdsHybrid` (schema `p9c-quality-gate-hybrid-1`).
+- Added `scripts/quality_gate_hybrid.py` (assemble from frozen v1/v2
+  thresholds, fresh final_train challenge split, verify, bench, one
+  confirmatory val run, decide).
+- Held-out: clean −0.97 pp, 0.75× 88.1% decided, blur+noise FA 1.6%;
+  **0.33× FA 27.4% vs v1 24.2% and 6.35 ms/video** → **rejected**.
+  Val agrees (0.33× FA 38.8% vs 24.5%).
+- Phase 9 gate stays in production; quality-gate experimentation ended.
+- 9 new tests; full suite 593/593 (196 s). No retraining, recalibration, API/UI or test access.

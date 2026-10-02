@@ -4,7 +4,21 @@ Format: one entry per issue. Mark resolved issues rather than deleting them.
 
 ---
 
-## OPEN — Phase 9b hardening rejected; Phase 9 gate weaknesses remain in production (Phase 9b)
+## ACCEPTED — Quality-gate experimentation ended; Phase 9 gate weaknesses are final (Phase 9c)
+
+The Phase 9c hybrid (v2 noise/blockiness + v1 FFT resolution) was
+rejected: 0.33× false accusations +3.2 pp vs v1 on the fresh challenge
+split (+14.3 pp on val), and 6.35 ms/video vs the 6 ms budget. Per the
+Phase 9c instruction, no further gate variants will be tried. The
+production gate's known limits (blur+noise bypass, 0.75×
+over-trigger, residual 0.33× false accusations, noise not detected)
+are accepted and must be stated wherever the gate is described.
+
+Finding for any future work: v1's 0.33× protection comes from its
+median-denoised sharpness check, not the FFT band. Noise-corrected
+sharpness and downscale protection trade off on the same signal.
+
+## SUPERSEDED by Phase 9c — Phase 9b hardening rejected; Phase 9 gate weaknesses remain in production (Phase 9b)
 
 The production gate is still Phase 9 (v1 signals). Its blur+noise
 bypass and its 0.75× over-trigger (below) remain.

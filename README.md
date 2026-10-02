@@ -10,7 +10,7 @@ operating rules this project is developed under.
 
 ## Status
 
-Phase 9b (quality-gate hardening experiment, rejected on held-out data; the Phase 9 downgrade-only media-quality gate over ONNX FP32 adaptive inference remains enabled by default; development data only, test sealed). Phase 8 exported the calibrated `student_distilled_p80` to ONNX (FP32 default on CPU and GPU). Phase 7 evaluated and rejected a GRU temporal head. Phase 6e ran the compression-robust training experiment (not selected). Phase 6d added adaptive 4/8/16-frame video inference. Phase 6c added calibration and the uncertain output. Phase 6b trained the MobileNetV4 students (BCE baseline vs GenD-distilled). Phase 6a cached frozen GenD CLIP-L/14 teacher logits for train/val. Before that, Phase 5d (matched face-crop extraction and shortcut audit) — see
+Phase 9c (final hybrid quality-gate experiment, rejected; quality-gate experimentation ended). The Phase 9 downgrade-only media-quality gate over ONNX FP32 adaptive inference remains enabled by default (development data only, test sealed). Phase 9b (quality-gate hardening) was also rejected. Phase 8 exported the calibrated `student_distilled_p80` to ONNX (FP32 default on CPU and GPU). Phase 7 evaluated and rejected a GRU temporal head. Phase 6e ran the compression-robust training experiment (not selected). Phase 6d added adaptive 4/8/16-frame video inference. Phase 6c added calibration and the uncertain output. Phase 6b trained the MobileNetV4 students (BCE baseline vs GenD-distilled). Phase 6a cached frozen GenD CLIP-L/14 teacher logits for train/val. Before that, Phase 5d (matched face-crop extraction and shortcut audit) — see
 `docs/PHASE_STATUS.md` for current status. FF++ c23 (5000 videos,
 8.4 GiB) is downloaded to `D:`, validated, and split with the authors'
 official train/val/test files (720/140/140 originals, leakage-checked).
@@ -371,6 +371,12 @@ QUALITY_DEPENDENT_VERDICT).
 
 ```powershell
 .venv\Scripts\python.exe scripts\quality_gate_v2.py quantiles   # then: cases, fit, bench, verify, confirm-val (once)
+```
+
+## Quality-gate hybrid experiment (Phase 9c; rejected, final)
+
+```powershell
+.venv\Scripts\python.exe scripts\quality_gate_hybrid.py assemble   # then: challenge-split, verify, bench, confirm-val (once), decide
 ```
 
 ## Project layout
