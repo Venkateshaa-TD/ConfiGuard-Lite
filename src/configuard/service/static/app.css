@@ -81,5 +81,10 @@ dt { color: var(--muted); }
 dd { margin: 0; overflow-wrap: anywhere; }
 .notice { color: var(--muted); font-size: .9rem; }
 .foot { color: var(--muted); font-size: .85rem; padding-bottom: 24px; }
+.cred { border-radius: 10px; padding: 12px 14px; border: 2px solid var(--line); }
+.cred .tag { display: block; font-weight: 800; letter-spacing: .02em; }
+.c-ok { border-color: var(--real); }
+.c-bad { border-color: var(--fake); }
+.c-none { border-style: dashed; }
 @media (max-width: 560px) { .verdict .tag { font-size: 1.25rem; } .card { padding: 14px; } }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }

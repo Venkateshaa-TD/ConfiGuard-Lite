@@ -4,6 +4,32 @@ Format: one entry per issue. Mark resolved issues rather than deleting them.
 
 ---
 
+## OPEN — C2PA verification limits (Phase 12)
+
+- **TSA anchors.** The official TSA trust list is cached and pinned
+  but not passed to the SDK. SDK 0.91 exposes one trust-anchor set,
+  and mixing TSA roots into signer anchors could over-trust.
+  Timestamped credentials may show `timestamp: untrusted` even when
+  their TSA is on the TSA list.
+- **No real-world sample.** No real trusted-signer sample was
+  available offline. VERIFIED_TRUSTED is tested with a locally
+  generated test anchor (test-only `extra_anchors_pem`); production
+  uses the official list alone.
+- **Revocation not checked.** Revocation (OCSP) is deliberately not
+  fetched, so a revoked-but-unexpired signer can still verify, unless
+  stapled OCSP data in the manifest says otherwise.
+- **Remote manifests.** Credentials stored only remotely are reported
+  UNSUPPORTED (never fetched).
+- **Wheel pin is Windows-only.** `requirements-c2pa.txt` pins the
+  Windows x64 wheel hash; Linux servers need that platform's wheel
+  hash added.
+- **Network blocking is not a full sandbox.** It relies on SDK
+  settings, proxy variables and Python socket blocking. Native code
+  could in principle open sockets; an OS firewall rule for the worker
+  is the stronger control in deployment.
+
+---
+
 ## OPEN — Evidence hints are only weakly faithful; most are withheld (Phase 11)
 
 Grad-CAM is exact for the head but a linearization of the whole network.

@@ -4,6 +4,49 @@ Format: one entry per decision, newest first.
 
 ---
 
+## 2026-10-02 — Phase 12: C2PA verification design
+
+- **SDK:** the official CAI `c2pa-python` 0.38.0 (Adobe/contentauth;
+  MIT OR Apache-2.0), installed `--no-deps --require-hashes` from a
+  wheel pinned by SHA-256 in `requirements-c2pa.txt`. Its dependencies
+  (cryptography, toml, requests) are in `requirements.txt`.
+  `c2patool` was not needed: the Python SDK wraps the same c2pa-rs core.
+- **Trust:** the official C2PA Trust List (c2pa-org/conformance-public,
+  commit `3573be50…`), verified by git blob SHA and pinned SHA-256 on
+  every load. The service never downloads it.
+  - Only `C2PA-TRUST-LIST.pem` is passed as `trust.trust_anchors`. The
+    TSA list is cached and pinned but not added to the signer anchors:
+    that could let TSA-issued certificates satisfy signer trust.
+- **Status mapping:** `Trusted` → VERIFIED_TRUSTED; `Valid` →
+  VERIFIED_UNTRUSTED; `Invalid` or SDK decode / manifest / signature
+  errors → INVALID.
+  - No manifest → ABSENT.
+  - Remote-only manifest (never fetched), format or size → UNSUPPORTED.
+  - Timeout, crash, memory limit or missing trust list → ERROR. A
+    failed check is never reported as a verification result.
+- **No network:** `remote_manifest_fetch=false`, `ocsp_fetch=false`,
+  proxy variables pointed at 127.0.0.1:9, and Python `socket.connect`
+  disabled in the worker.
+  - The SDK silently ignores unknown setting keys. So a live-listener
+    test with a positive control proves the setting is effective.
+- **Sandbox and limits:** each check runs in a long-lived worker
+  process, started with the real interpreter (not the venv launcher) in
+  isolated mode.
+  - Self-imposed memory cap: Windows Job Object
+    PROCESS_MEMORY|KILL_ON_JOB_CLOSE; POSIX RLIMIT_AS.
+  - Per-call timeout; a stuck worker is killed and respawned.
+  - Size caps: file ≤ 50 MB, manifest JSON ≤ 2 MB.
+- **Only a sanitised allow-list leaves the worker.** No raw manifest,
+  thumbnails, certificates, explanations or URLs. IPTC
+  digital-source-type URIs become codes/labels, including an
+  AI-generated declaration.
+- **Independence from ML:** provenance runs after the ML result is
+  final, writes only `provenance` and `timings_ms.provenance_ms`, and
+  has its own readiness check. A provenance failure never blocks
+  detection.
+
+---
+
 ## 2026-10-02 — Phase 11: evidence hints and local UI
 
 - **Method:** Grad-CAM on the final 7×7 ReLU feature map. The head

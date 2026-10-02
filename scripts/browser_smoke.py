@@ -31,6 +31,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "src"))
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
+sys.path.insert(0, str(REPO_ROOT))
 
 from configuard.env_loader import load_dotenv  # noqa: E402
 
@@ -137,6 +138,9 @@ RESULT_JS = """(() => {
     file_error: t('file-error').textContent,
     injected_img: document.querySelectorAll('img[src="x"], script:not([src])').length,
     selected: t('selected').textContent,
+    credentials_visible: !t('credentials').hidden,
+    credentials_tag: (t('cred-status').querySelector('.tag') || {}).textContent || null,
+    credentials_text: t('cred-body').textContent,
   };
 })()"""
 
@@ -187,6 +191,10 @@ def main() -> int:
     imgs = frame_images(vids, 2, scratch)
     xss = scratch / "x' onerror='alert(1)' %3Cscript%3Ealert(1)%3C%2Fscript%3E.jpg"
     shutil.copy(imgs[0][0], xss)
+    from tests.provenance.c2pa_fixtures import make_chain, sign  # throwaway test credential, in memory only
+
+    signed = scratch / "signed.jpg"
+    signed.write_bytes(sign(imgs[1][0].read_bytes(), "image/jpeg", make_chain()))
     bad = scratch / "corrupt.mp4"
     bad.write_bytes(b"\x00\x00\x00\x18ftypmp42" + os.urandom(4096))
     server = subprocess.Popen([sys.executable, str(REPO_ROOT / "scripts" / "serve.py"), "--env", "development",
@@ -227,13 +235,15 @@ def main() -> int:
         for name, path, explain in (("video_real_normal", vids[0][0], False), ("video_real_explain", vids[0][0], True),
                                     ("video_fake_normal", vids[2][0], False), ("video_fake_explain", vids[2][0], True),
                                     ("image_normal", imgs[1][0], False), ("image_explain", imgs[1][0], True),
-                                    ("xss_filename_explain", xss, True), ("corrupt_video", bad, False)):
+                                    ("xss_filename_explain", xss, True), ("signed_image_credentials", signed, False),
+                                    ("corrupt_video", bad, False)):
             cases[name] = run_case(cdp, path, explain)
             cases[name]["truth"] = {"video_real": "real", "video_fake": "fake"}.get(name.rsplit("_", 1)[0])
             print(name, json.dumps({k: cases[name][k] for k in ("verdict_tag", "ui_latency_ms", "evidence_figures",
-                                                              "evidence_heatmaps", "experimental_visible", "file_error")}),
+                                                              "evidence_heatmaps", "experimental_visible", "file_error",
+                                                              "credentials_tag")}),
                   flush=True)
-            if name in ("video_fake_explain", "image_explain", "corrupt_video"):
+            if name in ("video_fake_explain", "image_explain", "corrupt_video", "signed_image_credentials"):
                 shot(cdp, out_dir / f"{name}.png")
         report["cases"] = cases
         # mobile layout + keyboard

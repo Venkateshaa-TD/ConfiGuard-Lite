@@ -38,6 +38,10 @@ class ServiceConfig:
     allow_explanations: bool = False  # off on the server by default; also opt-in per request
     docs_enabled: bool = True
     ui_enabled: bool = True
+    c2pa_enabled: bool = True  # read-only Content Credentials check (separate signal)
+    c2pa_timeout_s: float = 5.0
+    c2pa_memory_mb: int = 512
+    c2pa_max_file_mb: float = 50.0
     ready_recheck_s: float = 30.0
     temp_dir: Path | None = None
     log_level: str = "INFO"

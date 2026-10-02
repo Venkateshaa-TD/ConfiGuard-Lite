@@ -53,7 +53,7 @@ def test_health_and_image_analysis(tmp_path, bundle):
     with c:
         assert c.get("/health/live").json() == {"status": "alive"}
         r = c.get("/health/ready")
-        assert r.status_code == 200 and r.json()["checks"] == {"artifacts": "ok", "onnx_sessions": "ok", "explanations": "disabled"}
+        assert r.status_code == 200 and r.json()["checks"] == {"artifacts": "ok", "onnx_sessions": "ok", "explanations": "disabled", "content_credentials": "disabled"}
         assert r.json()["device"]["active"] == "cpu"
         fake, real = post(c, image_bytes(250)), post(c, image_bytes(15, ".jpg"), "x.jpg")
     assert fake.status_code == 200 and real.status_code == 200

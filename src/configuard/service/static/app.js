@@ -42,6 +42,24 @@
     service_unavailable: "The model is not ready.", upload_timeout: "The upload took too long.",
   };
 
+  const CRED = {
+    ABSENT: { tag: "NO CONTENT CREDENTIALS", cls: "c-none",
+      what: "This file carries no C2PA Content Credentials. That is normal and does not mean the media is fake." },
+    VERIFIED_TRUSTED: { tag: "CREDENTIALS VERIFIED — TRUSTED SIGNER", cls: "c-ok",
+      what: "The credentials are intact and signed by a certificate on the official C2PA Trust List. This shows who signed and what they declared; it does not prove the content is true." },
+    VERIFIED_UNTRUSTED: { tag: "CREDENTIALS VALID — UNKNOWN SIGNER", cls: "c-none",
+      what: "The credentials are intact and correctly signed, but the signer is not on the official C2PA Trust List." },
+    INVALID: { tag: "CREDENTIALS INVALID", cls: "c-bad",
+      what: "Credentials are present but failed verification (the file may have been altered after signing, or the credentials are damaged or expired)." },
+    UNSUPPORTED: { tag: "NOT CHECKED", cls: "c-none",
+      what: "Content Credentials could not be checked for this file (unsupported format, size limit, or credentials stored remotely, which are never fetched)." },
+    ERROR: { tag: "CHECK FAILED", cls: "c-none", what: "The Content Credentials check could not be completed." },
+  };
+  const ACTIONS = { "c2pa.created": "Created", "c2pa.opened": "Opened", "c2pa.edited": "Edited", "c2pa.cropped": "Cropped",
+    "c2pa.resized": "Resized", "c2pa.color_adjustments": "Colour adjusted", "c2pa.filtered": "Filtered",
+    "c2pa.converted": "Converted", "c2pa.transcoded": "Transcoded", "c2pa.placed": "Content placed", "c2pa.published": "Published",
+    "c2pa.removed": "Content removed", "c2pa.drawing": "Drawn on", "c2pa.orientation": "Rotated", other: "Other action" };
+
   let limits = null;
   let xhr = null;
 
@@ -187,6 +205,7 @@
 
     renderTimeline(r);
     renderEvidence(r);
+    renderCredentials(r.provenance);
 
     const dl = $("details-list");
     clear(dl);
@@ -196,6 +215,7 @@
       ["Total time", fmtMs(t.total_ms)], ["Face extraction", fmtMs(t.extraction_ms)], ["Model inference", fmtMs(t.inference_ms)],
       ["Quality gate", fmtMs(t.gate_ms)]];
     if (t.explanation_ms !== undefined) rows.push(["Evidence hints", fmtMs(t.explanation_ms)]);
+    if (t.provenance_ms !== undefined) rows.push(["Content Credentials check", fmtMs(t.provenance_ms)]);
     for (const [k, val] of rows) { dl.appendChild(el("dt", {}, [k])); dl.appendChild(el("dd", {}, [String(val === undefined || val === null ? "n/a" : val)])); }
     $("notice").textContent = r.notice || "";
     $("result").hidden = false;
@@ -235,6 +255,45 @@
       el("td", {}, [(e.quality_flags || []).join(", ") || "none"])]));
     const head = el("tr", {}, ["Frame", "Time", "P(manipulated)", "Stage", "Quality flags"].map((h) => el("th", { scope: "col" }, [h])));
     box.appendChild(el("div", { class: "table-wrap" }, [el("table", {}, [el("thead", {}, [head]), el("tbody", {}, rows)])]));
+  }
+
+  function renderCredentials(p) {
+    const card = $("credentials");
+    const st = $("cred-status");
+    const body = $("cred-body");
+    clear(st);
+    clear(body);
+    if (!p) { card.hidden = true; return; }
+    const c = CRED[p.status] || CRED.ERROR;
+    st.className = "cred " + c.cls;
+    st.appendChild(el("span", { class: "tag" }, [c.tag]));
+    st.appendChild(el("p", {}, [c.what]));
+    const s = p.summary;
+    if (s) {
+      const dl = el("dl");
+      const add = (k, v) => { if (v) { dl.appendChild(el("dt", {}, [k])); dl.appendChild(el("dd", {}, [String(v)])); } };
+      add("Signed by", [s.signer && s.signer.common_name, s.signer && s.signer.organization].filter(Boolean).join(" — "));
+      add("Signing time", s.signed_at || (s.timestamp === "absent" ? "No trusted timestamp" : null));
+      add("Made with", (s.claim_generator || []).map((g) => [g.name, g.version].filter(Boolean).join(" ")).filter(Boolean).join(", "));
+      add("Title (declared)", s.title);
+      add("Ingredients", s.ingredients && s.ingredients.length ? s.ingredients.length + " source item(s)" : null);
+      body.appendChild(dl);
+      if (s.declares_ai_generated) {
+        body.appendChild(el("p", { class: "banner warn" }, ["The credentials declare that this content was generated or composited with AI."]));
+      }
+      if (s.actions && s.actions.length) {
+        body.appendChild(el("h3", {}, ["Declared history"]));
+        body.appendChild(el("ul", { class: "reasons" }, s.actions.map((a) => el("li", {}, [
+          (ACTIONS[a.action] || ACTIONS.other) + (a.software_agent ? " with " + a.software_agent : "") +
+          (a.when ? " (" + a.when + ")" : "") + (a.digital_source_type ? " — " + a.digital_source_type.label : "")]))));
+      }
+      const fails = (s.validation_codes && s.validation_codes.failure) || [];
+      if (p.status === "INVALID" && fails.length) {
+        body.appendChild(el("h3", {}, ["Failed checks"]));
+        body.appendChild(el("ul", { class: "reasons" }, fails.map((f) => el("li", {}, [el("code", {}, [f])]))));
+      }
+    }
+    card.hidden = false;
   }
 
   function renderEvidence(r) {
@@ -277,7 +336,8 @@
 
   function clearResult() {  // nothing from a previous analysis survives into the next one
     $("result").hidden = true;
-    for (const id of ["verdict", "confidence", "reasons", "timeline", "evidence", "details-list"]) clear($(id));
+    for (const id of ["verdict", "confidence", "reasons", "timeline", "evidence", "details-list", "cred-status", "cred-body"]) clear($(id));
+    $("credentials").hidden = true;
     $("experimental").hidden = true;
     $("experimental").textContent = "";
     $("notice").textContent = "";

@@ -10,7 +10,7 @@ operating rules this project is developed under.
 
 ## Status
 
-Phase 11 (optional Grad-CAM evidence hints, gated by an occlusion check, and a local web UI at `/`). Phase 10 (production inference API: FastAPI over ONNX FP32 adaptive inference + the Phase 9 v1 quality gate; CPU default, development data only, test sealed). Phase 9c (final hybrid quality-gate experiment, rejected; quality-gate experimentation ended). The Phase 9 downgrade-only media-quality gate over ONNX FP32 adaptive inference remains enabled by default (development data only, test sealed). Phase 9b (quality-gate hardening) was also rejected. Phase 8 exported the calibrated `student_distilled_p80` to ONNX (FP32 default on CPU and GPU). Phase 7 evaluated and rejected a GRU temporal head. Phase 6e ran the compression-robust training experiment (not selected). Phase 6d added adaptive 4/8/16-frame video inference. Phase 6c added calibration and the uncertain output. Phase 6b trained the MobileNetV4 students (BCE baseline vs GenD-distilled). Phase 6a cached frozen GenD CLIP-L/14 teacher logits for train/val. Before that, Phase 5d (matched face-crop extraction and shortcut audit) — see
+Phase 12 (read-only C2PA Content Credentials verification as a separate signal; official CAI SDK + pinned official trust list). Phase 11 (optional Grad-CAM evidence hints, gated by an occlusion check, and a local web UI at `/`). Phase 10 (production inference API: FastAPI over ONNX FP32 adaptive inference + the Phase 9 v1 quality gate; CPU default, development data only, test sealed). Phase 9c (final hybrid quality-gate experiment, rejected; quality-gate experimentation ended). The Phase 9 downgrade-only media-quality gate over ONNX FP32 adaptive inference remains enabled by default (development data only, test sealed). Phase 9b (quality-gate hardening) was also rejected. Phase 8 exported the calibrated `student_distilled_p80` to ONNX (FP32 default on CPU and GPU). Phase 7 evaluated and rejected a GRU temporal head. Phase 6e ran the compression-robust training experiment (not selected). Phase 6d added adaptive 4/8/16-frame video inference. Phase 6c added calibration and the uncertain output. Phase 6b trained the MobileNetV4 students (BCE baseline vs GenD-distilled). Phase 6a cached frozen GenD CLIP-L/14 teacher logits for train/val. Before that, Phase 5d (matched face-crop extraction and shortcut audit) — see
 `docs/PHASE_STATUS.md` for current status. FF++ c23 (5000 videos,
 8.4 GiB) is downloaded to `D:`, validated, and split with the authors'
 official train/val/test files (720/140/140 originals, leakage-checked).
@@ -401,6 +401,21 @@ curl.exe http://127.0.0.1:8000/health/ready
   when they fail an occlusion check.
 - **Checks:** `scripts\explain_sanity.py` (offline) and
   `scripts\browser_smoke.py` (headless Chrome).
+
+### Content Credentials / C2PA (Phase 12)
+
+```powershell
+.venv\Scripts\python.exe -m pip install --no-deps --require-hashes -r requirements-c2pa.txt
+.venv\Scripts\python.exe scripts\fetch_c2pa_trust_list.py      # once; the API never downloads
+.venv\Scripts\python.exe scripts\c2pa_bench.py                 # latency with/without credentials
+```
+
+- **Where it appears:** every analysis response has a separate
+  `provenance` object with one of ABSENT, VERIFIED_TRUSTED,
+  VERIFIED_UNTRUSTED, INVALID, UNSUPPORTED or ERROR.
+- **What it does not do:** it never changes the detection verdict.
+  ABSENT does not mean fake, and VERIFIED does not mean factually true.
+- **Switch:** `serve.py --c2pa off` disables it.
 
 ## Quality-gate hybrid experiment (Phase 9c; rejected, final)
 

@@ -908,6 +908,24 @@ GET /health/ready  -> 200 only if verify_bundle passes (re-checked every ready_r
   `logs.py`:** extraction, streamed uploads, routes, response models and
   structured logs.
 
+### Content Credentials (Phase 12)
+
+```
+engine.analyze: ML result final -> (explanation) -> C2paVerifier.verify(upload path, ext, remaining deadline)
+  verifier: ext/size gate -> idle worker (spawned lazily, warmed at startup) -> JSON line {path, mime}
+  worker (real python -I, Job Object / RLIMIT_AS cap, sockets disabled, proxies blackholed):
+      c2pa.Reader(context: trust_anchors = pinned C2PA-TRUST-LIST.pem, remote_manifest_fetch=false, ocsp_fetch=false)
+      -> validation_state + sanitised summary (summary.py) -> JSON line
+  timeout -> worker killed and respawned -> ERROR; crash / memory cap -> ERROR
+response.provenance = {status, reason, summary, notice, trust_list, sdk, elapsed_ms}   (ML fields untouched)
+```
+
+- **`provenance/trust.py`:** the pin plus the SHA-256-verified loader.
+- **`provenance/worker.py`, `provenance/verifier.py`,
+  `provenance/summary.py`:** the sandboxed SDK worker, the pool and
+  limits, and the safe summary.
+- **`service/static`:** the separate Content Credentials card.
+
 ### Evidence hints and UI (Phase 11)
 
 - **`service/explain.py`:** `CamExplainer`. It reuses the verified ONNX
@@ -1003,6 +1021,7 @@ ConfiGuard-Lite/
 │   │   ├── onnx_student.py, package.py
 │   ├── quality/                 Downgrade-only media-quality safety gate (Phase 9; v2 experiment 9b; hybrid 9c)
 │   ├── service/                 FastAPI inference service (Phase 10)
+│   ├── provenance/              C2PA Content Credentials verification (Phase 12)
 │   │   ├── signals.py, signals_v2.py, gate.py
 │   ├── memory_guard.py          available-RAM floor (Phase 6e)
 │   └── training/                Reproducible training pipeline (Phase 5)

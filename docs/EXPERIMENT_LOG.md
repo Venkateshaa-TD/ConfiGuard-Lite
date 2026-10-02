@@ -2354,3 +2354,45 @@ Screenshots + report: `D:\ConfiGuard-Data\outputs\service_bench\browser_20261002
 .venv/Scripts/python.exe -m pytest tests/service tests/quality -q -p no:cacheprovider   # 74 passed (44 service, 18 new)
 .venv/Scripts/python.exe -m pytest -q -p no:cacheprovider -rs                         # 637 passed, 0 skipped, 245.20 s
 ```
+
+## 2026-10-02 — Phase 12 C2PA provenance
+
+```
+pip install --no-deps --require-hashes -r requirements-c2pa.txt   # c2pa-python 0.38.0 (wheel sha256 pinned)
+pip install -c constraints-cuda.txt "toml>=0.10.2" "cryptography>=41" "requests>=2"   # cryptography 50.0.2 added
+scripts/verify_environment.py                                     # torch CUDA build intact, dependency safety OK
+.venv/Scripts/python.exe scripts/fetch_c2pa_trust_list.py         # pinned commit 3573be50; 30 signer + 22 TSA anchors
+.venv/Scripts/python.exe scripts/c2pa_bench.py --images 20 --videos 6
+.venv/Scripts/python.exe scripts/browser_smoke.py
+```
+
+SDK probes (before implementation): plain JPEG → no manifest; locally signed → `Valid`;
+with the test root as anchor → `Trusted`; one flipped byte → `Invalid`; SDK refuses to
+sign with an already-expired certificate, so the expired fixture uses a 2-second
+certificate checked after expiry (`signingCredential.expired`); unknown settings keys are
+silently accepted; a remote-only manifest raises the base `C2paError` ("Remote: …").
+
+Worker: warm-up 0.92 s (2 workers); ABSENT check ≈ 1.3–1.8 ms in-process.
+
+Latency added (real server, development config, concurrency 1; ML verdicts identical on vs off):
+
+| media | n | provenance P50 / P95 | client P50 off → on | status |
+|---|---|---|---|---|
+| val frame image, unsigned | 20 | 1.4 / 1.7 ms | 78.7 → 78.5 ms | ABSENT ×20 |
+| same, test-signed | 20 | 5.7 / 7.0 ms | 86.9 → 83.4 ms | VERIFIED_UNTRUSTED ×20 |
+| val video, unsigned | 6 | 3.1 / 5.8 ms | 1298 → 1317 ms | ABSENT ×6 |
+| same, test-signed | 6 | 8.3 / 19.1 ms | 1319 → 1309 ms | VERIFIED_UNTRUSTED ×6 |
+
+Browser (headless Chrome 154): val media show "NO CONTENT CREDENTIALS"; the test-signed
+image shows "CREDENTIALS VALID — UNKNOWN SIGNER" with signer, "No trusted timestamp",
+generator and "Created — Captured with a digital device", in a card separate from the
+verdict; 0 CSP violations / JS exceptions; temp dir empty.
+Reports: `D:\ConfiGuard-Data\outputs\service_bench\c2pa_bench_20261002-102751.json`,
+`browser_20261002-102808\`.
+
+## 2026-10-02 — Phase 12 tests
+
+```
+.venv/Scripts/python.exe -m pytest tests/service tests/provenance tests/quality -q -p no:cacheprovider   # 92 passed (15 provenance + 3 provenance API)
+.venv/Scripts/python.exe -m pytest -q -p no:cacheprovider -rs                                          # 655 passed, 0 skipped, 258.39 s
+```

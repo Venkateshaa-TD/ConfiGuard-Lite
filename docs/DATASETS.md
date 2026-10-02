@@ -310,3 +310,18 @@ Reports, logs, and contact sheets (human review only) are under
 `...\store\reports\` and `...\store\contact_sheets\`. Superseded trial
 and run stores are kept (refused as stale) in
 `...\ffpp_face_crops\superseded_*`.
+
+---
+
+## C2PA SDK and Trust List (Phase 12)
+
+| Item | Source | Version / pin | Integrity | License |
+|---|---|---|---|---|
+| `c2pa-python` (CAI SDK; native c2pa-rs 0.91.0) | PyPI / github.com/contentauth/c2pa-python | 0.38.0, `c2pa_python-0.38.0-py3-none-win_amd64.whl` (87,904,872 B) | sha256 `5db598a420242229a802c07e84890adb5162aac79afb110e4563c56f33e35256` | MIT OR Apache-2.0 |
+| `C2PA-TRUST-LIST.pem` (official signer anchors, 30 certs) | github.com/c2pa-org/conformance-public `trust-list/` | commit `3573be509a793a989f093df4f86744a3632f6155` (2026-10-01) | git blob `a0d20fd7…25b5ef`, sha256 `75cacc98b79ecac33713c7ecfb58d4a0ef383f3c1f886e7409f9e37e8664aea5`, 37,911 B | C2PA Conformance Program public list |
+| `C2PA-TSA-TRUST-LIST.pem` (TSA anchors, 22 certs) | same | same commit | git blob `30de202a…5b3f24`, sha256 `c688d3555f4a2f1f8d663472bbd37888ff234abdd234c25934c0f9292e4eb5c9`, 28,863 B | same |
+
+Cached at `D:\ConfiGuard-Data\cache\c2pa_trust\3573be50…\` with `provenance.json`
+(URLs, hashes, fetched 2026-10-02T04:48:57Z). Refresh only by bumping the pin in
+`configuard/provenance/trust.py` and re-running `scripts/fetch_c2pa_trust_list.py`.
+Test credentials are generated at test time and are never stored.

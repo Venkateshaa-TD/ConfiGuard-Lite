@@ -1,0 +1,6 @@
+# Phase 12: official Content Authenticity Initiative SDK (github.com/contentauth/c2pa-python),
+# pinned by version AND wheel SHA-256 (Windows x64 wheel; native c2pa-rs 0.91.0). Install with:
+#   pip install --no-deps --require-hashes -r requirements-c2pa.txt
+# (its dependencies cryptography/toml/requests are listed in requirements.txt).
+# Other platforms: add that platform's wheel hash from PyPI before installing.
+c2pa-python==0.38.0 --hash=sha256:5db598a420242229a802c07e84890adb5162aac79afb110e4563c56f33e35256

@@ -23,6 +23,7 @@
 | 9c | Final hybrid quality gate | REJECTED (Phase 9 gate kept; gate experimentation ended) | 2026-10-02 |
 | 10 | Production inference API/service | PASS | 2026-10-02 |
 | 11 | Explainability and lightweight web UI | PASS | 2026-10-02 |
+| 12 | C2PA provenance verification | PASS | 2026-10-02 |
 
 Full per-phase results are recorded below as they complete.
 
@@ -1174,3 +1175,63 @@ weakly faithful, so most are withheld).
 **Open items:** weak CAM faithfulness; evidence JPEGs make explained
 video responses about 70 KB; the UI is a local tool (off in the
 production config) (`docs/KNOWN_ISSUES.md`).
+
+---
+
+## Phase 12 — C2PA provenance verification
+
+**Status:** PASS
+
+**Summary:** read-only Content Credentials verification with the
+official CAI SDK.
+- **SDK:** `c2pa-python` 0.38.0 (native c2pa-rs 0.91.0), pinned by
+  version + wheel SHA-256.
+- **Trust list:** the official C2PA Trust List, pinned to
+  `c2pa-org/conformance-public@3573be50`, cached on D: with provenance
+  and SHA-256-checked on load.
+- **Sandbox:** verification runs in isolated worker processes. Remote
+  manifest fetch and OCSP are off, proxies are blackholed and Python
+  sockets are blocked. Limits: 5 s timeout (kill + respawn), 512 MB
+  per-process memory cap, 50 MB file cap, 2 MB manifest-JSON cap.
+- **API:** returns a separate `provenance` object with six statuses
+  and a sanitised summary.
+- **UI:** a separate Content Credentials card.
+- **Isolation:** ML fields are byte-identical with C2PA on vs off
+  (tests + benchmark).
+- **Cost:** +1.4 ms (unsigned image) to +8.3 ms (signed video) P50.
+
+**Requirements:**
+1. Read-only verification for JPEG/PNG/WebP/MP4/MOV/AVI. MKV is
+   UNSUPPORTED. No signing code in the service. **Met.**
+2. Hard bindings, signatures, chains, validity/timestamps and
+   integrity checked by the SDK. Tampered → `assertion.dataHash.mismatch`;
+   expired → `signingCredential.expired`. **Met.**
+3. Locally cached, hash-pinned official trust list; never fetched in a
+   request (refetch only via `scripts/fetch_c2pa_trust_list.py`). **Met.**
+4. Manifest URLs never followed: a live local listener received 0
+   requests for a remote-manifest asset and an OCSP-URL certificate.
+   The positive control (fetch enabled) did hit it. **Met.**
+5. ABSENT / VERIFIED_TRUSTED / VERIFIED_UNTRUSTED / INVALID /
+   UNSUPPORTED / ERROR. **Met.**
+6. Never modifies the verdict, confidence, calibration or gate (tested
+   for plain/signed/tampered; benchmark identical). **Met.**
+7. Allow-listed summary (signer, generator, actions, IPTC source type
+   incl. an AI-generated declaration, timestamps, ingredients,
+   validation codes). Control/bidi chars stripped; URL-like strings
+   dropped; length caps. **Met.**
+8. Separate "Content Credentials" card with ABSENT ≠ fake and
+   VERIFIED ≠ factual-truth wording (browser-verified). **Met.**
+9. Time, size and memory limits (worker kill on timeout; Job Object /
+   RLIMIT_AS cap verified to stop a 600 MB allocation). **Met.**
+10. Tests: no manifest, valid-untrusted, trusted test anchor, tampered,
+    malformed, expired, timeout (+ crash, memory, SSRF, sanitisation,
+    trust-list tamper). **Met.**
+11. Temp dirs empty after every path; test keys generated in memory /
+    tmp only; a test fails if any tracked file contains a private key. **Met.**
+12. Benchmarked with and without credentials (real server). **Met.**
+13. Targeted tests (92), one full suite, docs, commit. **Met.**
+14. No FF++ test access, Docker/cloud or model changes. **Met.**
+
+**Open items:** TSA list cached but not wired as a separate SDK anchor
+set; no real-world trusted-signer sample tested; Windows-only wheel
+hash pinned (`docs/KNOWN_ISSUES.md`).

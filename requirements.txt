@@ -40,3 +40,8 @@ huggingface_hub>=0.34,<1.0
 fastapi>=0.115,<1
 uvicorn>=0.30,<1
 python-multipart>=0.0.9
+
+# Phase 12: dependencies of c2pa-python (the SDK itself is hash-pinned in requirements-c2pa.txt).
+cryptography>=41
+toml>=0.10.2
+requests>=2

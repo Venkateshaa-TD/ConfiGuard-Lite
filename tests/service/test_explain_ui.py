@@ -19,7 +19,7 @@ from .conftest import API_KEY, API_KEY_SHA, build_bundle, image_bytes, leftover,
 from .test_service import assert_safe_error, client_for, post
 
 STATIC = Path(__file__).resolve().parents[2] / "src" / "configuard" / "service" / "static"
-VOLATILE = {"request_id", "timings_ms", "explanation"}
+VOLATILE = {"request_id", "timings_ms", "explanation", "provenance"}
 
 
 def _px(crops):

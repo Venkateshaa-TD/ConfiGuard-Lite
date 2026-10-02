@@ -25,6 +25,7 @@ def main() -> int:
     ap.add_argument("--host", default="127.0.0.1")
     ap.add_argument("--port", type=int, default=8000)
     ap.add_argument("--device", choices=("cpu", "cuda"))
+    ap.add_argument("--c2pa", choices=("on", "off"), help="override service.c2pa_enabled")
     args = ap.parse_args()
     import uvicorn
 
@@ -32,6 +33,8 @@ def main() -> int:
     from configuard.service.config import ServiceConfigError, load_service_config
 
     overrides = {"device": args.device} if args.device else {}
+    if args.c2pa:
+        overrides["c2pa_enabled"] = args.c2pa == "on"
     try:
         cfg = load_service_config(REPO_ROOT / "configs" / f"{args.env}.yaml", **overrides)
     except ServiceConfigError as exc:

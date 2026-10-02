@@ -122,7 +122,7 @@ def make_config(root: Path, pkg: Path, gate: Path, **kw) -> ServiceConfig:
     base = dict(environment="testing", validation=limits, package_dir=pkg, gate_path=gate,
                 yunet_path=default_yunet_model_path(), device="cpu", max_concurrent_inference=1, max_queue=1,
                 request_timeout_s=20.0, upload_timeout_s=10.0, cpu_threads_per_session=1, ready_recheck_s=0.0,
-                temp_dir=root / "tmp", log_level="INFO", allow_explanations=False)
+                temp_dir=root / "tmp", log_level="INFO", allow_explanations=False, c2pa_enabled=False)
     base.update(kw)
     return ServiceConfig(**base)
 

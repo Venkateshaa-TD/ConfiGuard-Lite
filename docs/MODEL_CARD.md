@@ -73,6 +73,16 @@ resolution and duration. The Phase 5d audit found the F2F/NT width
 change to be a centred crop with no residual geometric cue. Fakes are
 somewhat blurrier than their matched reals (a genuine artifact).
 
+## Content Credentials (Phase 12)
+
+- **What it is:** a C2PA provenance status reported next to, never
+  inside, the model output.
+- **How it is verified:** with the official CAI SDK against the
+  official C2PA Trust List.
+- **What it means:** credentials describe who signed the file and what
+  they declared. Their absence is normal and says nothing about
+  manipulation.
+
 ## Evidence hints (Phase 11)
 
 - **What they are:** optional Grad-CAM heatmaps on the face crops,

@@ -501,3 +501,25 @@ All notable changes to this project are documented here.
 - Explanation cost: +132 ms/video, +53 ms/image server P50; +46 MB RSS.
   52.5% of hints passed the check and were shown.
 - 18 new tests; full suite 637/637 (245 s). No C2PA, Docker, cloud or test access.
+
+### Phase 12 — C2PA provenance verification (2026-10-02)
+
+- Added `configuard.provenance`:
+  - `trust`: pinned official C2PA Trust List, SHA-256-verified local
+    cache;
+  - `worker`: sandboxed SDK process — offline settings, memory cap,
+    sockets blocked;
+  - `verifier`: worker pool, timeout kill/respawn, size caps, six
+    statuses;
+  - `summary`: sanitised allow-list.
+- The API returns a separate `provenance` object
+  (+ `timings_ms.provenance_ms`, readiness `content_credentials`,
+  `/v1/limits.content_credentials_available`). The UI gets a separate
+  Content Credentials card.
+- Added `requirements-c2pa.txt` (c2pa-python 0.38.0, hash-pinned),
+  `scripts/fetch_c2pa_trust_list.py`, `scripts/c2pa_bench.py`,
+  `serve.py --c2pa on|off`, and a signed-image case in the browser smoke
+  test.
+- Added cost: P50 1.4–8.3 ms; ML outputs identical on vs off.
+- 18 new tests; full suite 655/655 (258 s). No signing in the service, no
+  Docker/cloud, no FF++ test access.

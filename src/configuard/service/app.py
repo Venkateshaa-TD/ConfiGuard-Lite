@@ -110,6 +110,7 @@ def create_app(cfg: ServiceConfig, engine: InferenceEngine | None = None) -> Fas
                   device=info.get("device"), auth=cfg.require_api_key)
         yield
         pool.shutdown(wait=True, cancel_futures=True)
+        engine.close()
         log_event("service_stopped")
 
     app = FastAPI(title="ConfiGuard-Lite inference API", version="1.0.0", lifespan=lifespan,
@@ -185,6 +186,7 @@ def create_app(cfg: ServiceConfig, engine: InferenceEngine | None = None) -> Fas
                 "max_video_duration_seconds": lim.max_video_duration_seconds,
                 "image_extensions": list(lim.allowed_image_extensions), "video_extensions": list(lim.allowed_video_extensions),
                 "auth_required": cfg.require_api_key, "explanations_available": engine.explainer is not None,
+                "content_credentials_available": engine.c2pa is not None,
                 "image_analysis_experimental": True}
 
     @app.get("/health/live", response_model=LiveResponse, tags=["health"], summary="Liveness probe")
@@ -265,7 +267,8 @@ def create_app(cfg: ServiceConfig, engine: InferenceEngine | None = None) -> Fas
             log_event("analysis_done", media_type=v.media_type.value, size_bytes=size, verdict=result["verdict"],
                       base_verdict=result["base_verdict"], frames_used=result["frames_used"],
                       quality_reasons=result["quality_reasons"], explain=explain,
-                      explanation_status=(result.get("explanation") or {}).get("status"), timings=timings)
+                      explanation_status=(result.get("explanation") or {}).get("status"),
+                      provenance_status=(result.get("provenance") or {}).get("status"), timings=timings)
             return {"request_id": request_id_var.get()} | result | {"timings_ms": timings}
         finally:
             if not handed_off:

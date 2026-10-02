@@ -64,6 +64,15 @@
       <p id="notice" class="notice"></p>
       <button type="button" id="again">Analyze another file</button>
     </section>
+
+    <section id="credentials" class="card" aria-labelledby="cred-h" hidden>
+      <h2 id="cred-h">Content Credentials (C2PA)</h2>
+      <p class="hint">A separate provenance check. It never changes the detection result above.</p>
+      <div id="cred-status" class="cred"></div>
+      <div id="cred-body"></div>
+      <p class="notice">ABSENT does not mean the media is fake: most photos and videos carry no credentials.
+        VERIFIED means the credentials are intact and signed; it does not prove that the content is factually true.</p>
+    </section>
   </main>
 
   <footer class="foot">

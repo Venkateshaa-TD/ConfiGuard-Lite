@@ -61,6 +61,43 @@ class Explanation(BaseModel):
     frames: list[EvidenceFrame] = []
 
 
+class C2paAction(BaseModel):
+    action: str
+    when: str | None = None
+    software_agent: str | None = None
+    digital_source_type: dict[str, Any] | None = None
+
+
+class C2paIngredient(BaseModel):
+    title: str | None = None
+    format: str | None = None
+    relationship: str
+    has_own_credentials: bool
+
+
+class C2paSummary(BaseModel):
+    signer: dict[str, str | None]
+    signed_at: str | None = None
+    timestamp: Literal["trusted", "untrusted", "present", "absent"]
+    claim_generator: list[dict[str, str | None]]
+    title: str | None = None
+    actions: list[C2paAction]
+    declares_ai_generated: bool
+    ingredients: list[C2paIngredient]
+    manifest_count: int
+    validation_codes: dict[str, list[str]]
+
+
+class Provenance(BaseModel):
+    status: Literal["ABSENT", "VERIFIED_TRUSTED", "VERIFIED_UNTRUSTED", "INVALID", "UNSUPPORTED", "ERROR"]
+    reason: str | None = None
+    summary: C2paSummary | None = None
+    notice: str
+    trust_list: dict[str, Any] | None = None
+    sdk: dict[str, str | None] | None = None
+    elapsed_ms: float
+
+
 class LimitsResponse(BaseModel):
     max_image_size_mb: float
     max_video_size_mb: float
@@ -69,6 +106,7 @@ class LimitsResponse(BaseModel):
     video_extensions: list[str]
     auth_required: bool
     explanations_available: bool
+    content_credentials_available: bool
     image_analysis_experimental: bool
 
 
@@ -95,6 +133,8 @@ class AnalyzeResponse(BaseModel):
     experimental: bool = Field(description="True for still images (calibration fitted on video frames)")
     experimental_reason: str | None = None
     explanation: Explanation | None = Field(None, description="Present only when explain=true was requested")
+    provenance: Provenance | None = Field(None, description="C2PA Content Credentials check: a separate signal that never "
+                                                            "changes the verdict, confidence, calibration or quality gate")
     notice: str
 
 
@@ -136,6 +176,10 @@ VIDEO_EXAMPLE = {
     "timings_ms": {"upload_ms": 41.0, "validation_ms": 55.2, "queue_ms": 0.1, "extraction_ms": 812.4,
                    "inference_ms": 9.1, "gate_ms": 6.3, "total_ms": 931.0},
     "experimental": False, "experimental_reason": None, "explanation": None,
+    "provenance": {"status": "ABSENT", "reason": "no_manifest", "summary": None, "elapsed_ms": 1.4,
+                   "notice": "Content Credentials are a separate provenance signal ... ABSENT does not mean the media is fake ...",
+                   "trust_list": {"source": "https://github.com/c2pa-org/conformance-public", "commit": "3573be50..."},
+                   "sdk": {"package": "c2pa-python", "native_sdk": "0.91.0"}},
     "notice": "Automated estimate from a model evaluated on FaceForensics++ development data only; ...",
 }
 IMAGE_GATED_EXAMPLE = VIDEO_EXAMPLE | {

@@ -27,6 +27,8 @@ from configuard.quality.gate import FRAME_CODES, SMALL_FACE, apply_gate
 from configuard.quality.signals import crop_signals
 from configuard.service.artifacts import ModelBundle, verify_bundle
 from configuard.service.config import ServiceConfig
+from configuard.provenance.trust import TrustListError, default_trust_dir, load_trust_bundle
+from configuard.provenance.verifier import C2paLimits, C2paVerifier
 from configuard.service.explain import LABEL, CamExplainer
 from configuard.service.extract import CancelToken, extract_image, extract_video
 
@@ -120,7 +122,8 @@ class Timer:
 class InferenceEngine:
     def __init__(self, cfg: ServiceConfig,
                  detector_factory: Callable[[], FaceDetector] | None = None,
-                 session_factory: Callable[[Path, str, int], Any] = _session) -> None:
+                 session_factory: Callable[[Path, str, int], Any] = _session,
+                 c2pa_factory: Callable[[], C2paVerifier] | None = None) -> None:
         self.cfg = cfg
         self.policy = StagePolicy()
         self.bundle: ModelBundle | None = None
@@ -133,9 +136,35 @@ class InferenceEngine:
         self._check_lock = threading.Lock()
         self.explainer: CamExplainer | None = None
         self.explainer_error: str | None = None
+        self.c2pa: C2paVerifier | None = None
+        self.c2pa_error: str | None = None
+        self._c2pa_factory = c2pa_factory or self._default_c2pa
+
+    def _default_c2pa(self) -> C2paVerifier:
+        limits = C2paLimits(self.cfg.c2pa_timeout_s, self.cfg.c2pa_memory_mb, self.cfg.c2pa_max_file_mb,
+                            workers=self.cfg.max_concurrent_inference)
+        return C2paVerifier(load_trust_bundle(default_trust_dir()), limits)
+
+    def _load_c2pa(self) -> None:
+        """Independent of the model: a provenance failure never blocks detection."""
+        if not self.cfg.c2pa_enabled or self.c2pa is not None:
+            return
+        try:
+            v = self._c2pa_factory()
+            v.warmup()
+            self.c2pa, self.c2pa_error = v, None
+        except TrustListError as exc:
+            self.c2pa_error = exc.code
+        except Exception as exc:  # noqa: BLE001
+            self.c2pa_error = f"c2pa_unavailable:{type(exc).__name__}"
+
+    def close(self) -> None:
+        if self.c2pa is not None:
+            self.c2pa.close()
 
     # ---------------------------------------------------------- lifecycle / readiness
     def load(self) -> None:
+        self._load_c2pa()
         try:
             bundle = verify_bundle(self.cfg.package_dir, self.cfg.gate_path, self.cfg.yunet_path)
             runner = OnnxRunner(bundle.onnx_path, self.cfg.device, self.cfg.cpu_threads_per_session, self._session_factory)
@@ -167,6 +196,8 @@ class InferenceEngine:
         checks = {"artifacts": "ok" if ok else (self.error or "not_loaded"), "onnx_sessions": "ok" if ok else "unavailable"}
         checks["explanations"] = ("ok" if self.explainer is not None else
                                   ("disabled" if not self.cfg.allow_explanations else (self.explainer_error or "unavailable")))
+        checks["content_credentials"] = ("ok" if self.c2pa is not None else
+                                         ("disabled" if not self.cfg.c2pa_enabled else (self.c2pa_error or "unavailable")))
         info: dict[str, Any] = {"checks": checks}
         if ok:
             info |= {"model": self.bundle.describe(), "device": {"requested": self.runner.device_requested,
@@ -198,7 +229,21 @@ class InferenceEngine:
             t = time.perf_counter()
             result["explanation"] = self._explain(candidates, sign)
             timings["explanation_ms"] = round((time.perf_counter() - t) * 1000, 2)
+        result["provenance"] = None
+        if self.cfg.c2pa_enabled:  # separate signal; reads the upload, never touches the ML fields above
+            cancel.check()
+            t = time.perf_counter()
+            result["provenance"] = self._provenance(path, cancel)
+            timings["provenance_ms"] = round((time.perf_counter() - t) * 1000, 2)
         return result
+
+    def _provenance(self, path: Path, cancel: CancelToken) -> dict[str, Any]:
+        if self.c2pa is None:
+            from configuard.provenance.verifier import NOTICE
+
+            return {"status": "ERROR", "reason": self.c2pa_error or "c2pa_unavailable", "summary": None,
+                    "notice": NOTICE, "trust_list": None, "sdk": None, "elapsed_ms": 0.0}
+        return self.c2pa.verify(path, path.suffix, deadline_s=cancel.remaining())
 
     def _explain(self, candidates: list[dict[str, Any]], sign: int) -> dict[str, Any]:
         if not self.cfg.allow_explanations:
