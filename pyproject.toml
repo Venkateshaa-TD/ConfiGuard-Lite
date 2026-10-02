@@ -11,3 +11,6 @@ pythonpath = ["src"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+"configuard.service" = ["static/*.html", "static/*.css", "static/*.js"]

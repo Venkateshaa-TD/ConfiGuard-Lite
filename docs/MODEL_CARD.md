@@ -73,6 +73,18 @@ resolution and duration. The Phase 5d audit found the F2F/NT width
 change to be a centred crop with no residual geometric cue. Fakes are
 somewhat blurrier than their matched reals (a genuine artifact).
 
+## Evidence hints (Phase 11)
+
+- **What they are:** optional Grad-CAM heatmaps on the face crops,
+  shown only when they pass an occlusion faithfulness check. They are
+  labelled "Visual evidence hint — not proof" and never affect the
+  verdict.
+- **How faithful they are:** offline they only weakly predict
+  occlusion effects (median Spearman ~0.2), so roughly half of the
+  hints are withheld.
+- **What they show:** they indicate where the model's score came from
+  on a coarse 7×7 grid, not where a manipulation is.
+
 ## Serving (Phase 10)
 
 - **How it is deployed:** a FastAPI service (`configuard.service`)

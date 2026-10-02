@@ -2290,3 +2290,67 @@ Reports: `D:\ConfiGuard-Data\outputs\service_bench\load_{cpu,cuda}_*.json`.
 .venv/Scripts/python.exe -m pytest tests/service tests/quality tests/test_validation.py -q -p no:cacheprovider   # 69 passed (26 service)
 .venv/Scripts/python.exe -m pytest -q -p no:cacheprovider -rs                                                    # 619 passed, 0 skipped, 240.71 s
 ```
+
+## 2026-10-02 — Phase 11 evidence hints and UI
+
+Exactness check (real student, 8 val crops): explainer logits == production (max |Δ| 0.0);
+numpy head == logit; sum(M) + c == logit (all 8).
+
+```
+.venv/Scripts/python.exe scripts/explain_sanity.py --per-split 200
+```
+
+| split (200 slot-0 crops) | completeness max err | single-cell occlusion Spearman median / p10 | runtime check pass | mean drop top / random-max | randomized-classifier Spearman median |
+|---|---|---|---|---|---|
+| train | 8.0e-7 | 0.223 / −0.020 | 40.0% | 1.237 / 1.331 | −0.175 |
+| val | 8.5e-7 | 0.176 / −0.035 | 36.5% | 1.164 / 1.452 | −0.144 |
+
+The map is exact and depends on the classifier (randomization passes), but it
+only weakly predicts real occlusion effects; the pre-registered gate withholds
+most hints. No threshold was changed after these results.
+
+Load test (CPU, development config, 40 val videos + 40 val frame images, concurrency 4):
+```
+.venv/Scripts/python.exe scripts/service_load_test.py --videos 40 --images 40 --concurrency 4 --device cpu
+.venv/Scripts/python.exe scripts/service_load_test.py --videos 40 --images 40 --concurrency 4 --device cpu --explain
+```
+
+| | normal | explain=true |
+|---|---|---|
+| OK / throughput | 80/80, 3.00 req/s | 80/80, 2.53 req/s |
+| video client P50 / P95 | 1897 / 3798 ms | 2307 / 4337 ms |
+| image client P50 / P95 | 317 / 1214 ms | 441 / 1492 ms |
+| server explanation P50 | – | 132 ms/video, 53 ms/image |
+| hints shown | – | video 84/160 frames (33 ok, 7 withheld responses); image 21/40 |
+| response size P50 | 2.0 / 1.6 KB | 71.1 / 18.6 KB |
+| peak RSS | 815 MB | 862 MB (+46 MB) |
+| temp dir empty / names in logs | yes / none | yes / none |
+
+(The normal-run throughput is below Phase 10's 3.78 req/s on the same config; run-to-run
+machine load, not a code change on the detection path.)
+
+Real browser smoke test (headless Chrome 154 via CDP, `scripts/browser_smoke.py`):
+```
+.venv/Scripts/python.exe scripts/browser_smoke.py
+```
+
+| case | verdict shown | UI latency normal → explain | evidence frames (heatmaps shown) |
+|---|---|---|---|
+| val real video | LIKELY REAL | 1675 → 1740 ms | 4 (3) |
+| val manipulated video | LIKELY MANIPULATED | 781 → 892 ms | 4 (1) |
+| val frame image | LIKELY REAL + experimental banner | 109 → 124 ms | 1 (1) |
+| XSS-style filename image | UNCERTAIN (AMBIGUOUS_EVIDENCE); filename shown as text, 0 injected nodes | 161 ms | 1 (0) |
+| corrupt MP4 | error "could not be decoded" + request ID | 123 ms | – |
+
+0 CSP violations, 0 JS exceptions, 0 dialogs; console: only the expected 422 of the corrupt
+case (a first run also showed a favicon 404 and a dark-mode button contrast issue, both fixed
+before this run). Mobile 390 px: no horizontal scroll. Tab order: skip link → file →
+evidence checkbox → Analyze. Upload temp dir empty afterwards.
+Screenshots + report: `D:\ConfiGuard-Data\outputs\service_bench\browser_20261002-100612\`.
+
+## 2026-10-02 — Phase 11 tests
+
+```
+.venv/Scripts/python.exe -m pytest tests/service tests/quality -q -p no:cacheprovider   # 74 passed (44 service, 18 new)
+.venv/Scripts/python.exe -m pytest -q -p no:cacheprovider -rs                         # 637 passed, 0 skipped, 245.20 s
+```

@@ -35,7 +35,9 @@ class ServiceConfig:
     require_api_key: bool = False
     api_key_sha256: tuple[str, ...] = field(default=(), repr=False)
     gate_enabled: bool = True
+    allow_explanations: bool = False  # off on the server by default; also opt-in per request
     docs_enabled: bool = True
+    ui_enabled: bool = True
     ready_recheck_s: float = 30.0
     temp_dir: Path | None = None
     log_level: str = "INFO"

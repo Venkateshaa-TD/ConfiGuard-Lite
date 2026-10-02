@@ -84,10 +84,13 @@ def pct(x, q):
     return float(np.percentile(np.asarray(x, float), q)) if x else None
 
 
+EXPLAIN = False
+
+
 async def post(client, path: Path):
     t = time.perf_counter()
     with path.open("rb") as f:
-        r = await client.post("/v1/analyze", files={"file": (path.name, f.read(), "application/octet-stream")})
+        r = await client.post("/v1/analyze?explain=" + ("true" if EXPLAIN else "false"), files={"file": (path.name, f.read(), "application/octet-stream")})
     return r, (time.perf_counter() - t) * 1000
 
 
@@ -98,7 +101,7 @@ async def load(base: str, items: list[tuple[Path, str]], concurrency: int):
         async def one(p, label):
             async with sem:
                 r, ms = await post(client, p)
-                out.append((p.suffix, label, r.status_code, ms, r.json()))
+                out.append((p.suffix, label, r.status_code, ms, r.json(), len(r.content)))
         t = time.perf_counter()
         await asyncio.gather(*(one(p, lab) for p, lab in items))
         return out, time.perf_counter() - t
@@ -113,13 +116,20 @@ def summarize(rows, wall_s):
             continue
         lat = [r[3] for r in sel]
         tm = {k: pct([r[4]["timings_ms"].get(k, 0.0) for r in sel], 50) for k in
-              ("upload_ms", "validation_ms", "queue_ms", "extraction_ms", "inference_ms", "gate_ms", "total_ms")}
+              ("upload_ms", "validation_ms", "queue_ms", "extraction_ms", "inference_ms", "gate_ms", "explanation_ms",
+               "total_ms")}
         verdicts = {}
         for r in sel:
             verdicts[r[4]["verdict"]] = verdicts.get(r[4]["verdict"], 0) + 1
         decided = [r for r in sel if r[4]["verdict"] != "uncertain"]
         acc = np.mean([(r[4]["verdict"] == "likely_manipulated") == (r[1] == "fake") for r in decided]) if decided else None
+        expl = [r[4].get("explanation") for r in sel if r[4].get("explanation")]
+        frames = [fr for e in expl for fr in e.get("frames", [])]
         by["video" if kind == ".mp4" else "image"] = {
+            "explanation_status": {s: sum(e["status"] == s for e in expl) for s in {e["status"] for e in expl}},
+            "evidence_frames_returned": len(frames),
+            "evidence_heatmaps_shown": sum(1 for fr in frames if fr.get("heatmap_jpeg_b64")),
+            "response_kb_p50": pct([r[5] / 1024 for r in sel], 50),
             "n": len(sel), "p50_ms": pct(lat, 50), "p95_ms": pct(lat, 95), "max_ms": max(lat),
             "server_timings_p50_ms": tm, "avg_frames_used": float(np.mean([r[4]["frames_used"] for r in sel])),
             "verdicts": verdicts, "decided_accuracy_on_this_sample": None if acc is None else float(acc)}
@@ -134,7 +144,10 @@ def main() -> int:
     ap.add_argument("--concurrency", type=int, default=4)
     ap.add_argument("--device", choices=("cpu", "cuda"), default="cpu")
     ap.add_argument("--port", type=int, default=8765)
+    ap.add_argument("--explain", action="store_true", help="request evidence hints (explain=true) on every call")
     args = ap.parse_args()
+    global EXPLAIN
+    EXPLAIN = args.explain
 
     scratch = Path(tempfile.mkdtemp(prefix="cg-load-"))
     upload_tmp = scratch / "server-uploads"
@@ -149,6 +162,7 @@ def main() -> int:
     threading.Thread(target=lambda: [log_lines.append(line) for line in server.stdout], daemon=True).start()
     base = f"http://127.0.0.1:{args.port}"
     report: dict = {"generated": datetime.now().isoformat(timespec="seconds"), "device_requested": args.device,
+                    "explain": args.explain,
                     "concurrency": args.concurrency, "config": "configs/development.yaml (max_concurrent_inference 2, max_queue 8)"}
     sampler = None
     try:
@@ -216,7 +230,7 @@ def main() -> int:
             server.kill()
         out_dir = Path(os.environ.get("CONFIGUARD_OUTPUT_DIR", scratch)) / "service_bench"
         out_dir.mkdir(parents=True, exist_ok=True)
-        out = out_dir / f"load_{args.device}_{datetime.now():%Y%m%d-%H%M%S}.json"
+        out = out_dir / f"load_{args.device}{'_explain' if args.explain else ''}_{datetime.now():%Y%m%d-%H%M%S}.json"
         out.write_text(json.dumps(report, indent=1, default=float), encoding="utf-8")
         print("report", out)
         shutil.rmtree(scratch, ignore_errors=True)

@@ -24,3 +24,5 @@ service:
   gate_enabled: true
   docs_enabled: true
   ready_recheck_s: 30
+  ui_enabled: true             # local web UI at /
+  allow_explanations: true     # still opt-in per request (explain=true)

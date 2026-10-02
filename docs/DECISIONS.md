@@ -4,6 +4,48 @@ Format: one entry per decision, newest first.
 
 ---
 
+## 2026-10-02 — Phase 11: evidence hints and local UI
+
+- **Method:** Grad-CAM on the final 7×7 ReLU feature map. The head
+  after pooling is piecewise linear, so the gradient is the same in
+  every cell. Grad-CAM therefore equals HiResCAM, and the signed map is
+  an exact additive decomposition of the logit (minus the head offset).
+  - Computed torch-free: the production ONNX (already hash-verified) is
+    loaded with the feature tensor added as an extra output, in memory.
+    Its logits must equal the production session's (|Δ| ≤ 1e-3) or the
+    hint is `unavailable`.
+- **Faithfulness gate (fixed before evaluation, not tuned after):**
+  blur-occlude the 10 strongest cells vs 3 seeded random 10-cell sets.
+  A hint is shown only if the evidence drop for the top cells is > 0 and
+  beats every random set.
+  - Offline, the CAM is exact but only weakly predictive of occlusion
+    effects (median single-cell Spearman 0.18–0.22). So 48–63% of hints
+    are withheld.
+  - This was accepted rather than loosened: showing unverified heatmaps
+    would overstate what the model "looks at".
+- **Direction:** hints show evidence for the decided class (manipulated
+  or real). For "uncertain" they show the score's leaning, labelled
+  `direction`.
+- **Video evidence frames:** the ≤ 4 scored frames with the strongest
+  support for the decision. No extra frames are decoded or scored by
+  the detector.
+- **Isolation:** the explanation runs after the response fields are
+  fixed. Tests assert identical results with explain on and off.
+- **Off by default twice:** `allow_explanations` is false in code and
+  production config, and `explain` defaults to false per request.
+- **UI:** static files from the package served by FastAPI.
+  - Strict CSP (`default-src 'none'`; self-only script/style;
+    `img-src 'self' data:`) + nosniff / DENY / no-referrer / COOP /
+    CORP.
+  - No inline code; DOM built only via textContent / whitelisted
+    attributes.
+  - Upload progress via XHR. API key held only in page memory.
+  - Off in the production config (`ui_enabled: false`).
+- **Images are experimental:** `experimental: true` + reason in the
+  API, banner in the UI.
+
+---
+
 ## 2026-10-02 — Phase 10: inference service design
 
 - **Real pipeline, torch-free.** The service reuses the 5d extraction

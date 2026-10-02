@@ -24,3 +24,5 @@ service:
   gate_enabled: true
   docs_enabled: true
   ready_recheck_s: 0
+  ui_enabled: true
+  allow_explanations: true

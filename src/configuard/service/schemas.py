@@ -31,6 +31,47 @@ class TimelineEntry(BaseModel):
     quality_flags: list[str] = []
 
 
+class Faithfulness(BaseModel):
+    passed: bool
+    evidence_drop_top_cells: float
+    evidence_drop_random_max: float
+    top_cells: int
+    random_sets: int
+
+
+class EvidenceFrame(BaseModel):
+    slot: int | None = None
+    frame_index: int
+    timestamp_s: float | None = None
+    logit: float
+    faithfulness: Faithfulness
+    completeness_error: float
+    crop_jpeg_b64: str = Field(description="The aligned 224x224 face crop the model scored (JPEG, base64)")
+    heatmap_jpeg_b64: str | None = Field(None, description="Crop with the evidence hint overlaid; absent when withheld")
+    cells: list[list[float]] | None = Field(None, description="7x7 normalised evidence grid; absent when withheld")
+
+
+class Explanation(BaseModel):
+    status: Literal["ok", "withheld", "disabled", "unavailable"]
+    label: str = Field(description="Always 'Visual evidence hint — not proof'")
+    method: str | None = None
+    direction: Literal["toward_manipulated", "toward_real"] | None = None
+    withheld_frames: int | None = None
+    reason: str | None = None
+    frames: list[EvidenceFrame] = []
+
+
+class LimitsResponse(BaseModel):
+    max_image_size_mb: float
+    max_video_size_mb: float
+    max_video_duration_seconds: float
+    image_extensions: list[str]
+    video_extensions: list[str]
+    auth_required: bool
+    explanations_available: bool
+    image_analysis_experimental: bool
+
+
 class AnalyzeResponse(BaseModel):
     request_id: str
     media_type: Literal["image", "video"]
@@ -51,6 +92,9 @@ class AnalyzeResponse(BaseModel):
     model: ModelInfo
     device: str | None
     timings_ms: dict[str, float]
+    experimental: bool = Field(description="True for still images (calibration fitted on video frames)")
+    experimental_reason: str | None = None
+    explanation: Explanation | None = Field(None, description="Present only when explain=true was requested")
     notice: str
 
 
@@ -91,12 +135,14 @@ VIDEO_EXAMPLE = {
     "model": _MODEL_EX, "device": "cpu",
     "timings_ms": {"upload_ms": 41.0, "validation_ms": 55.2, "queue_ms": 0.1, "extraction_ms": 812.4,
                    "inference_ms": 9.1, "gate_ms": 6.3, "total_ms": 931.0},
+    "experimental": False, "experimental_reason": None, "explanation": None,
     "notice": "Automated estimate from a model evaluated on FaceForensics++ development data only; ...",
 }
 IMAGE_GATED_EXAMPLE = VIDEO_EXAMPLE | {
     "media_type": "image", "verdict": "uncertain", "base_verdict": "likely_real", "p_fake": 0.04, "confidence": 0.96,
     "gated": True, "quality_reasons": ["LOW_SHARPNESS", "LOW_RESOLUTION"], "frames_used": 1, "stopping_reason": None,
-    "frame_count": None, "faces_detected": 1, "stages": [],
+    "frame_count": None, "faces_detected": 1, "stages": [], "experimental": True,
+    "experimental_reason": "Still-image analysis is experimental: the calibration and quality thresholds were fitted on video frames, not photographs.",
     "timeline": [{"frame_index": 0, "logit": -3.1, "p_fake_frame": 0.04, "quality_flags": ["LOW_SHARPNESS", "LOW_RESOLUTION"]}],
 }
 READY_EXAMPLE = {"status": "ready", "checks": {"artifacts": "ok", "onnx_sessions": "ok"}, "model": _MODEL_EX,

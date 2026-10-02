@@ -27,11 +27,15 @@ from configuard.quality.gate import FRAME_CODES, SMALL_FACE, apply_gate
 from configuard.quality.signals import crop_signals
 from configuard.service.artifacts import ModelBundle, verify_bundle
 from configuard.service.config import ServiceConfig
+from configuard.service.explain import LABEL, CamExplainer
 from configuard.service.extract import CancelToken, extract_image, extract_video
 
 INPUT, OUTPUT = "pixels", "logit"
 BATCH_SIZES = (1, 4, 8, 16)
 UNCERTAINTY_CODES = {"final_k16_uncertain_both": "AMBIGUOUS_EVIDENCE", "final_k16_uncertain_empty": "ATYPICAL_INPUT"}
+MAX_EVIDENCE_FRAMES = 4
+IMAGE_EXPERIMENTAL = ("Still-image analysis is experimental: the calibration and quality thresholds were fitted on "
+                      "video frames, not photographs.")
 NOTICE = ("Automated estimate from a model evaluated on FaceForensics++ development data only; "
           "not a forensic determination. 'uncertain' means the system declines to decide.")
 
@@ -127,6 +131,8 @@ class InferenceEngine:
         self._session_factory = session_factory
         self._last_check = 0.0
         self._check_lock = threading.Lock()
+        self.explainer: CamExplainer | None = None
+        self.explainer_error: str | None = None
 
     # ---------------------------------------------------------- lifecycle / readiness
     def load(self) -> None:
@@ -136,6 +142,12 @@ class InferenceEngine:
             runner.warmup()
             self.detector()  # the detector must load too
             self.bundle, self.runner, self.error = bundle, runner, None
+            self.explainer, self.explainer_error = None, None
+            if self.cfg.allow_explanations:
+                try:
+                    self.explainer = CamExplainer(bundle.onnx_path, self.cfg.cpu_threads_per_session)
+                except Exception as exc:  # noqa: BLE001 - explanations are optional; detection stays available
+                    self.explainer_error = (exc.args[0] if exc.args else None) or "explainer_failed"
             self._last_check = time.monotonic()
         except Exception as exc:  # noqa: BLE001 - reported via readiness, never raised to clients
             self.bundle, self.runner = None, None
@@ -153,6 +165,8 @@ class InferenceEngine:
                     self.bundle, self.runner = None, None
         ok = self.runner is not None and self.bundle is not None
         checks = {"artifacts": "ok" if ok else (self.error or "not_loaded"), "onnx_sessions": "ok" if ok else "unavailable"}
+        checks["explanations"] = ("ok" if self.explainer is not None else
+                                  ("disabled" if not self.cfg.allow_explanations else (self.explainer_error or "unavailable")))
         info: dict[str, Any] = {"checks": checks}
         if ok:
             info |= {"model": self.bundle.describe(), "device": {"requested": self.runner.device_requested,
@@ -171,13 +185,30 @@ class InferenceEngine:
         return d
 
     # ---------------------------------------------------------- analysis
-    def analyze(self, path: Path, media_type: MediaType, cancel: CancelToken, timings: dict[str, float]) -> dict[str, Any]:
+    def analyze(self, path: Path, media_type: MediaType, cancel: CancelToken, timings: dict[str, float],
+                explain: bool = False) -> dict[str, Any]:
         bundle, runner = self.bundle, self.runner
         if bundle is None or runner is None:
             raise RuntimeError("engine_not_ready")
-        if media_type is MediaType.IMAGE:
-            return self._image(path, bundle, runner, cancel, Timer(timings))
-        return self._video(path, bundle, runner, cancel, Timer(timings))
+        fn = self._image if media_type is MediaType.IMAGE else self._video
+        result, candidates, sign = fn(path, bundle, runner, cancel, Timer(timings))
+        result["explanation"] = None
+        if explain:  # strictly after the verdict is final; never feeds back into it
+            cancel.check()
+            t = time.perf_counter()
+            result["explanation"] = self._explain(candidates, sign)
+            timings["explanation_ms"] = round((time.perf_counter() - t) * 1000, 2)
+        return result
+
+    def _explain(self, candidates: list[dict[str, Any]], sign: int) -> dict[str, Any]:
+        if not self.cfg.allow_explanations:
+            return {"status": "disabled", "label": LABEL, "reason": "explanations_disabled_on_server", "frames": []}
+        if self.explainer is None:
+            return {"status": "unavailable", "label": LABEL, "reason": self.explainer_error or "unavailable", "frames": []}
+        if not candidates:
+            return {"status": "unavailable", "label": LABEL, "reason": "no_face_crops", "frames": []}
+        logits = np.array([c.pop("production_logit") for c in candidates])
+        return self.explainer.explain(candidates, sign, logits)
 
     def _common(self, bundle: ModelBundle, media: str, verdict: Verdict, base: Verdict, p_fake: float | None,
                 quality: list[str], uncertainty: list[str], warnings: list[str], frames_used: int,
@@ -197,7 +228,8 @@ class InferenceEngine:
         cancel.check()
         if ic.crop is None:
             return self._common(bundle, "image", Verdict.UNCERTAIN, Verdict.UNCERTAIN, None, [], ["NO_FACE_DETECTED"],
-                                ic.warnings, 0, {"faces_detected": ic.faces, "timeline": [], "stages": []})
+                                ic.warnings, 0, {"faces_detected": ic.faces, "timeline": [], "stages": [],
+                                                 "experimental": True, "experimental_reason": IMAGE_EXPERIMENTAL}), [], 1
         logit = float(runner(_pixels([ic.crop]))[0])
         out = bundle.static.predict(np.array([logit]), "frame")
         base, p = out.verdicts[0], float(out.p_fake[0])
@@ -209,10 +241,13 @@ class InferenceEngine:
         verdict = Verdict.UNCERTAIN if (self.cfg.gate_enabled and quality and base is not Verdict.UNCERTAIN) else base
         tm.add("gate_ms", t)
         uncertainty = [] if base is not Verdict.UNCERTAIN else ["AMBIGUOUS_EVIDENCE" if _both(bundle, p) else "ATYPICAL_INPUT"]
-        return self._common(bundle, "image", verdict, base, p, quality, uncertainty, ic.warnings, 1,
-                            {"faces_detected": ic.faces, "stages": [],
-                             "timeline": [{"frame_index": 0, "logit": round(logit, 6), "p_fake_frame": round(p, 6),
-                                           "quality_flags": quality}]})
+        res = self._common(bundle, "image", verdict, base, p, quality, uncertainty, ic.warnings, 1,
+                           {"faces_detected": ic.faces, "stages": [], "experimental": True,
+                            "experimental_reason": IMAGE_EXPERIMENTAL,
+                            "timeline": [{"frame_index": 0, "logit": round(logit, 6), "p_fake_frame": round(p, 6),
+                                          "quality_flags": quality}]})
+        return res, [{"frame_index": 0, "slot": None, "timestamp_s": None, "crop": ic.crop,
+                      "production_logit": logit}], _sign(base, logit)
 
     def _video(self, path, bundle, runner, cancel, tm: Timer) -> dict[str, Any]:
         t = time.perf_counter()
@@ -238,7 +273,8 @@ class InferenceEngine:
                 "INSUFFICIENT_FRAMES" if "INSUFFICIENT_FRAMES" in vc.warnings else "INSUFFICIENT_FACE_FRAMES")
             return self._common(bundle, "video", Verdict.UNCERTAIN, Verdict.UNCERTAIN, None, [], [reason], vc.warnings, 0,
                                 {"stopping_reason": result.stopping_reason, "frame_count": vc.frame_count,
-                                 "timeline": [], "stages": []})
+                                 "timeline": [], "stages": [], "experimental": False,
+                                 "experimental_reason": None}), [], 1
         g = apply_gate(result, quality_by_slot, vc.face_px, bundle.gate, bundle.adaptive, self.policy)
         tm.t["gate_ms"] = round(q_ms[0] + (time.perf_counter() - t) * 1000, 2)
         verdict = g.verdict if self.cfg.gate_enabled else result.verdict
@@ -257,10 +293,26 @@ class InferenceEngine:
                              "logit": round(e["logit"], 6), "p_fake_frame": round(float(sigmoid(e["logit"] / t_frame)), 6),
                              "added_at_stage": e["added_at_stage"],
                              "quality_flags": [c for c, f in zip(FRAME_CODES, flags) if f]})
-        return self._common(bundle, "video", verdict, result.verdict, result.p_fake, list(g.reasons), uncertainty,
-                            vc.warnings, result.frames_used,
-                            {"stopping_reason": result.stopping_reason, "frame_count": vc.frame_count,
-                             "stages": result.stages, "timeline": timeline})
+        res = self._common(bundle, "video", verdict, result.verdict, result.p_fake, list(g.reasons), uncertainty,
+                           vc.warnings, result.frames_used,
+                           {"stopping_reason": result.stopping_reason, "frame_count": vc.frame_count,
+                            "stages": result.stages, "timeline": timeline, "experimental": False,
+                            "experimental_reason": None})
+        sign = _sign(result.verdict, result.stages[-1]["score"] if result.stages else 0.0)
+        strongest = sorted(timeline, key=lambda e: (-sign * e["logit"], e["slot"]))[:MAX_EVIDENCE_FRAMES]
+        candidates = [{"slot": e["slot"], "frame_index": e["frame_index"], "timestamp_s": e["timestamp_s"],
+                       "crop": vc.crops[e["slot"]], "production_logit": e["logit"]}
+                      for e in sorted(strongest, key=lambda e: e["slot"])]
+        return res, candidates, sign
+
+
+def _sign(verdict: Verdict, score: float) -> int:
+    """Explanation direction: the decided class, or the leaning of the score when uncertain."""
+    if verdict is Verdict.LIKELY_MANIPULATED:
+        return 1
+    if verdict is Verdict.LIKELY_REAL:
+        return -1
+    return 1 if score >= 0 else -1
 
 
 def _both(bundle: ModelBundle, p: float) -> bool:

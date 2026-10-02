@@ -10,7 +10,7 @@ operating rules this project is developed under.
 
 ## Status
 
-Phase 10 (production inference API: FastAPI over ONNX FP32 adaptive inference + the Phase 9 v1 quality gate; CPU default, development data only, test sealed). Phase 9c (final hybrid quality-gate experiment, rejected; quality-gate experimentation ended). The Phase 9 downgrade-only media-quality gate over ONNX FP32 adaptive inference remains enabled by default (development data only, test sealed). Phase 9b (quality-gate hardening) was also rejected. Phase 8 exported the calibrated `student_distilled_p80` to ONNX (FP32 default on CPU and GPU). Phase 7 evaluated and rejected a GRU temporal head. Phase 6e ran the compression-robust training experiment (not selected). Phase 6d added adaptive 4/8/16-frame video inference. Phase 6c added calibration and the uncertain output. Phase 6b trained the MobileNetV4 students (BCE baseline vs GenD-distilled). Phase 6a cached frozen GenD CLIP-L/14 teacher logits for train/val. Before that, Phase 5d (matched face-crop extraction and shortcut audit) — see
+Phase 11 (optional Grad-CAM evidence hints, gated by an occlusion check, and a local web UI at `/`). Phase 10 (production inference API: FastAPI over ONNX FP32 adaptive inference + the Phase 9 v1 quality gate; CPU default, development data only, test sealed). Phase 9c (final hybrid quality-gate experiment, rejected; quality-gate experimentation ended). The Phase 9 downgrade-only media-quality gate over ONNX FP32 adaptive inference remains enabled by default (development data only, test sealed). Phase 9b (quality-gate hardening) was also rejected. Phase 8 exported the calibrated `student_distilled_p80` to ONNX (FP32 default on CPU and GPU). Phase 7 evaluated and rejected a GRU temporal head. Phase 6e ran the compression-robust training experiment (not selected). Phase 6d added adaptive 4/8/16-frame video inference. Phase 6c added calibration and the uncertain output. Phase 6b trained the MobileNetV4 students (BCE baseline vs GenD-distilled). Phase 6a cached frozen GenD CLIP-L/14 teacher logits for train/val. Before that, Phase 5d (matched face-crop extraction and shortcut audit) — see
 `docs/PHASE_STATUS.md` for current status. FF++ c23 (5000 videos,
 8.4 GiB) is downloaded to `D:`, validated, and split with the authors'
 official train/val/test files (720/140/140 originals, leakage-checked).
@@ -389,6 +389,18 @@ curl.exe http://127.0.0.1:8000/health/ready
   / `likely_manipulated` / `uncertain`), calibrated `p_fake` and
   `confidence`, quality and uncertainty reasons, frames used, the
   evidence timeline, model version and timings.
+
+### Web UI and evidence hints (Phase 11)
+
+- **UI:** open `http://127.0.0.1:8000/` after `scripts\serve.py --env
+  development`. Upload a file and read the verdict, confidence,
+  reasons, timeline and (optionally) evidence frames.
+- **Evidence hints:** `POST /v1/analyze?explain=true` (needs
+  `allow_explanations: true`; on in development, off in production).
+  Hints are labelled "Visual evidence hint — not proof" and are withheld
+  when they fail an occlusion check.
+- **Checks:** `scripts\explain_sanity.py` (offline) and
+  `scripts\browser_smoke.py` (headless Chrome).
 
 ## Quality-gate hybrid experiment (Phase 9c; rejected, final)
 

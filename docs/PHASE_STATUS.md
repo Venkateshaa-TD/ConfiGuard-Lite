@@ -22,6 +22,7 @@
 | 9b | Quality-gate hardening (v2 signals) | REJECTED (Phase 9 gate kept) | 2026-10-01 |
 | 9c | Final hybrid quality gate | REJECTED (Phase 9 gate kept; gate experimentation ended) | 2026-10-02 |
 | 10 | Production inference API/service | PASS | 2026-10-02 |
+| 11 | Explainability and lightweight web UI | PASS | 2026-10-02 |
 
 Full per-phase results are recorded below as they complete.
 
@@ -1116,3 +1117,60 @@ Phase 5d face extraction → ONNX FP32 → adaptive 4/8/16 (6d) for video or
 YuNet; the timeout is cooperative; image calibration and gate use
 video-frame statistics; no TLS or rate limiting
 (`docs/KNOWN_ISSUES.md`).
+
+---
+
+## Phase 11 — Explainability and lightweight web UI
+
+**Status:** PASS (with a documented limitation: the CAM hints are only
+weakly faithful, so most are withheld).
+
+**Summary:**
+- Optional Grad-CAM evidence hints on face crops.
+  - Exact for the student's GAP → 1×1 conv → ReLU → Gemm head: the 7×7
+    map sums to logit − c with error < 1e-6.
+  - Computed torch-free from the hash-verified ONNX, with the feature
+    map added as a second output in memory.
+- A per-hint occlusion check (top-10 cells vs 3 random sets) withholds
+  hints that could mislead.
+- A plain HTML/CSS/JS UI is served by FastAPI. Verdict logic,
+  calibration, the gate and the model are unchanged; with explain on or
+  off the result is identical apart from the explanation field.
+- Offline sanity (200 train + 200 val crops):
+  - randomization check passes (Spearman −0.14 to −0.18);
+  - single-cell occlusion agreement is weak (median Spearman 0.18–0.22);
+  - so only 37–40% of slot-0 hints pass; 52.5% of served hints pass in
+    the load test.
+
+**Requirements:**
+1. Face-crop heatmaps with a faithful CAM for MobileNetV4 (exact Grad-CAM ≡ HiResCAM here). **Met.**
+2. Computed after the verdict, never fed back (equality tested for
+   image + video); labelled "Visual evidence hint — not proof". **Met.**
+3. Perturbation / occlusion / randomization sanity checks;
+   failing hints withheld (`failed_occlusion_check`). **Met.**
+4. Video: ≤ 4 evidence frames (strongest support for the decision)
+   plus the existing timeline. **Met.**
+5. Off by default (server `allow_explanations: false` + per-request
+   `explain=false`). Cost: +132 ms/video, +53 ms/image server P50;
+   +46 MB peak RSS. **Met.**
+6. Responsive UI from FastAPI; plain HTML/CSS/JS, no npm/CDN. **Met.**
+7. Upload → validation/progress → verdict → confidence → reasons →
+   timeline → evidence frames. **Met.**
+8. Three visually and textually distinct verdicts; "likely",
+   "not proof", "declines to decide" wording. **Met.**
+9. Still images marked experimental (API field + UI banner). **Met.**
+10. Evidence generated in memory, returned only in the response;
+    `Cache-Control: no-store`; no browser storage; temp dir empty. **Met.**
+11. Strict CSP + security headers, textContent-only DOM, client- and
+    server-side limits, keyboard and mobile support (verified in a
+    browser). **Met.**
+12. 18 new tests: all verdicts, errors, auth, 5 XSS-like filenames,
+    explain off/disabled/on, cleanup, headers, static-code safety. **Met.**
+13. Real headless-Chrome smoke test (CDP); normal vs explain latency
+    reported. **Met.**
+14. Targeted tests (74), one full suite, docs, commit. **Met.**
+15. No C2PA, Docker, cloud or FF++ test access. **Met.**
+
+**Open items:** weak CAM faithfulness; evidence JPEGs make explained
+video responses about 70 KB; the UI is a local tool (off in the
+production config) (`docs/KNOWN_ISSUES.md`).

@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>ConfiGuard-Lite</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/static/app.css">
+  <script src="/static/app.js" defer></script>
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+  <header class="top">
+    <h1>ConfiGuard-Lite</h1>
+    <p class="sub">Deepfake image and video analysis &middot; local development build</p>
+  </header>
+
+  <main id="main">
+    <section class="card" aria-labelledby="upload-h">
+      <h2 id="upload-h">Analyze a file</h2>
+      <form id="form" novalidate>
+        <label class="drop" id="drop" for="file">
+          <span class="drop-title">Choose an image or video</span>
+          <span class="drop-hint" id="limits-hint">Loading limits&hellip;</span>
+          <input id="file" name="file" type="file" required aria-describedby="limits-hint file-error">
+        </label>
+        <p class="selected" id="selected" aria-live="polite"></p>
+        <p class="error" id="file-error" role="alert"></p>
+
+        <div class="field" id="key-field" hidden>
+          <label for="api-key">API key</label>
+          <input id="api-key" type="password" autocomplete="off" spellcheck="false">
+          <p class="hint">Kept only in this page's memory; never stored.</p>
+        </div>
+
+        <div class="field check">
+          <input id="explain" type="checkbox">
+          <label for="explain">Include visual evidence hints <span class="muted">(slower; off by default)</span></label>
+        </div>
+        <p class="hint" id="explain-hint"></p>
+
+        <div class="actions">
+          <button type="submit" id="submit" class="primary">Analyze</button>
+          <button type="button" id="cancel" hidden>Cancel</button>
+        </div>
+      </form>
+
+      <div id="progress-box" class="progress" hidden>
+        <progress id="progress" max="100" value="0" aria-labelledby="status"></progress>
+      </div>
+      <p id="status" class="status" role="status" aria-live="polite"></p>
+    </section>
+
+    <section id="result" class="card" aria-labelledby="result-h" hidden tabindex="-1">
+      <h2 id="result-h">Result</h2>
+      <div id="verdict" class="verdict"></div>
+      <p id="experimental" class="banner warn" hidden></p>
+      <div id="confidence" class="confidence"></div>
+      <div id="reasons"></div>
+      <div id="timeline"></div>
+      <div id="evidence"></div>
+      <details id="details"><summary>Model and timing details</summary><dl id="details-list"></dl></details>
+      <p id="notice" class="notice"></p>
+      <button type="button" id="again">Analyze another file</button>
+    </section>
+  </main>
+
+  <footer class="foot">
+    <p>Results are automated estimates, not proof. Uploads are processed in memory and temporary files are
+      deleted after each request; nothing is stored by this page.</p>
+  </footer>
+</body>
+</html>

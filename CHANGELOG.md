@@ -485,3 +485,19 @@ All notable changes to this project are documented here.
 - CPU load test: 3.78 req/s, video P50/P95 1.41/2.86 s, image 0.28/1.04 s,
   peak RSS 854 MB. Live crops bit-identical to 5d crops.
 - 26 new tests; full suite 619/619 (241 s). No UI, Docker, C2PA or test access.
+
+### Phase 11 — Explainability and lightweight web UI (2026-10-02)
+
+- Added `configuard.service.explain`: exact Grad-CAM for the student
+  head from the verified ONNX (in memory) + per-hint occlusion
+  faithfulness gate; `explain=true` query flag; `allow_explanations`
+  config (off by default); `experimental` flag for still images;
+  `/v1/limits`.
+- Added a local web UI (`service/static`: HTML/CSS/JS, no npm/CDN)
+  with strict CSP and security headers, `Cache-Control: no-store`, safe
+  DOM rendering and keyboard/mobile support.
+- Added `scripts/explain_sanity.py` and `scripts/browser_smoke.py`
+  (headless Chrome via CDP); `--explain` in the load test.
+- Explanation cost: +132 ms/video, +53 ms/image server P50; +46 MB RSS.
+  52.5% of hints passed the check and were shown.
+- 18 new tests; full suite 637/637 (245 s). No C2PA, Docker, cloud or test access.

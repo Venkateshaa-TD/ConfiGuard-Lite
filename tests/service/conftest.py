@@ -20,7 +20,7 @@ import cv2
 import numpy as np
 import onnx
 import pytest
-from onnx import TensorProto, helper
+from onnx import TensorProto, helper, numpy_helper
 
 from configuard.calibration.artifact import SCHEMA as CAL_SCHEMA
 from configuard.config import ValidationLimits
@@ -36,17 +36,30 @@ MCFG = "d" * 64
 
 
 def _onnx_model(path: Path) -> None:
+    """Same head structure as the exported student (ReLU features -> GAP -> 1x1 conv -> ReLU -> Gemm),
+    so the Grad-CAM explainer attaches to it. Two complementary ReLU channels give
+    logit = (mean pixel - 128) / 8 exactly, on a 7x7 feature grid (32x32-pixel cells)."""
     x = helper.make_tensor_value_info("pixels", TensorProto.FLOAT, ["N", 3, 224, 224])
     y = helper.make_tensor_value_info("logit", TensorProto.FLOAT, ["N"])
+    k = np.full((2, 3, 32, 32), 1.0 / (3 * 32 * 32), np.float32)
+    k[1] *= -1
+    inits = [numpy_helper.from_array(k, "k"), numpy_helper.from_array(np.array([-128.0, 128.0], np.float32), "kb"),
+             numpy_helper.from_array(np.eye(2, dtype=np.float32).reshape(2, 2, 1, 1), "w1"),
+             numpy_helper.from_array(np.zeros(2, np.float32), "b1"),
+             numpy_helper.from_array(np.array([[0.125, -0.125]], np.float32), "w2"),
+             numpy_helper.from_array(np.zeros(1, np.float32), "b2"),
+             numpy_helper.from_array(np.array([1], np.int64), "sq")]
     nodes = [
-        helper.make_node("ReduceMean", ["pixels", "axes"], ["m"], keepdims=0),
-        helper.make_node("Sub", ["m", "c128"], ["s"]),
-        helper.make_node("Div", ["s", "c8"], ["logit"]),
+        helper.make_node("Conv", ["pixels", "k", "kb"], ["c"], kernel_shape=[32, 32], strides=[32, 32]),
+        helper.make_node("Relu", ["c"], ["feat"]),
+        helper.make_node("GlobalAveragePool", ["feat"], ["gap"]),
+        helper.make_node("Conv", ["gap", "w1", "b1"], ["h"], kernel_shape=[1, 1]),
+        helper.make_node("Relu", ["h"], ["hr"]),
+        helper.make_node("Flatten", ["hr"], ["f"], axis=1),
+        helper.make_node("Gemm", ["f", "w2", "b2"], ["g"], transB=1),
+        helper.make_node("Squeeze", ["g", "sq"], ["logit"]),
     ]
-    inits = [helper.make_tensor("axes", TensorProto.INT64, [3], [1, 2, 3]),
-             helper.make_tensor("c128", TensorProto.FLOAT, [], [128.0]),
-             helper.make_tensor("c8", TensorProto.FLOAT, [], [8.0])]
-    g = helper.make_graph(nodes, "brightness", [x], [y], inits)
+    g = helper.make_graph(nodes, "gap_head", [x], [y], inits)
     m = helper.make_model(g, opset_imports=[helper.make_opsetid("", 18)])
     m.ir_version = 9
     onnx.save(m, str(path))
@@ -109,7 +122,7 @@ def make_config(root: Path, pkg: Path, gate: Path, **kw) -> ServiceConfig:
     base = dict(environment="testing", validation=limits, package_dir=pkg, gate_path=gate,
                 yunet_path=default_yunet_model_path(), device="cpu", max_concurrent_inference=1, max_queue=1,
                 request_timeout_s=20.0, upload_timeout_s=10.0, cpu_threads_per_session=1, ready_recheck_s=0.0,
-                temp_dir=root / "tmp", log_level="INFO")
+                temp_dir=root / "tmp", log_level="INFO", allow_explanations=False)
     base.update(kw)
     return ServiceConfig(**base)
 

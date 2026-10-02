@@ -4,6 +4,28 @@ Format: one entry per issue. Mark resolved issues rather than deleting them.
 
 ---
 
+## OPEN — Evidence hints are only weakly faithful; most are withheld (Phase 11)
+
+Grad-CAM is exact for the head but a linearization of the whole network.
+Single-cell occlusion agrees only weakly (median Spearman 0.18–0.22),
+so the per-hint occlusion check withholds 48–63% of hints. Shown hints
+passed the check but remain hints, not localisation proof. A more
+faithful method (e.g. occlusion maps at ~49 extra passes per frame)
+would cost more latency. Hints are 7×7 cells (32 px), so they are
+coarse.
+
+## OPEN — Local UI scope (Phase 11)
+
+- **Production:** the UI is disabled in the production config. When it
+  is enabled with auth, the API key lives in page memory only.
+- **Responses:** explained video responses are about 70 KB (inline
+  JPEGs).
+- **Browser test:** run with headless Chrome via CDP (no Playwright /
+  extension). Accessibility was spot-checked (tab order, mobile width,
+  contrast fix), not audited with a screen reader.
+
+---
+
 ## OPEN — Service video latency is dominated by decoding + face detection (Phase 10)
 
 Server P50 for a val video: extraction 659 ms vs ONNX 13 ms. The 5d

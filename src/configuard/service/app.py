@@ -24,17 +24,18 @@ import uuid
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 from pathlib import Path
-from fastapi import Depends, FastAPI, Request
+from fastapi import Depends, FastAPI, Query, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.security import APIKeyHeader
 from starlette.exceptions import HTTPException as StarletteHTTPException
+from starlette.staticfiles import StaticFiles
 
 from configuard.service.config import ServiceConfig, hash_api_key
 from configuard.service.engine import InferenceEngine
 from configuard.service.extract import AnalysisTimeout, CancelToken, MediaUnreadable
 from configuard.service.logs import configure_logging, log_event, request_id_var
-from configuard.service.schemas import (ANALYZE_RESPONSES, AnalyzeResponse, ErrorBody, LiveResponse, ReadyResponse,
+from configuard.service.schemas import (ANALYZE_RESPONSES, AnalyzeResponse, LimitsResponse, LiveResponse, ReadyResponse,
                                         READY_EXAMPLE)
 from configuard.service.uploads import UploadError, receive_upload
 from configuard.validation import ValidationErrorCode, validate_media_file
@@ -49,6 +50,16 @@ _VALIDATION_HTTP = {
     ValidationErrorCode.VIDEO_UNREADABLE: (422, "media_unreadable"),
     ValidationErrorCode.VIDEO_TOO_LONG: (422, "video_too_long"),
     ValidationErrorCode.FFPROBE_NOT_AVAILABLE: (503, "service_unavailable"),
+}
+STATIC_DIR = Path(__file__).resolve().parent / "static"
+# Strict CSP for the UI and the API: same-origin scripts/styles only, images from self or data: URIs
+# (evidence frames are returned inline), no framing, no plugins, no inline script.
+CSP = ("default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; "
+       "form-action 'none'; base-uri 'none'; frame-ancestors 'none'; object-src 'none'")
+SECURITY_HEADERS = {
+    "X-Content-Type-Options": "nosniff", "X-Frame-Options": "DENY", "Referrer-Policy": "no-referrer",
+    "Cross-Origin-Opener-Policy": "same-origin", "Cross-Origin-Resource-Policy": "same-origin",
+    "Permissions-Policy": "camera=(), microphone=(), geolocation=(), payment=(), usb=()",
 }
 _api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False, description="Required when service auth is enabled.")
 
@@ -120,6 +131,12 @@ def create_app(cfg: ServiceConfig, engine: InferenceEngine | None = None) -> Fas
             log_event("unhandled_error", logging.ERROR, route=request.url.path, error_type=type(exc).__name__)
             response = _error(500, "internal_error", "Internal server error.")
         response.headers["X-Request-ID"] = rid
+        for k, v in SECURITY_HEADERS.items():
+            response.headers.setdefault(k, v)
+        if request.url.path not in ("/docs", "/docs/oauth2-redirect"):  # FastAPI's dev-only Swagger page loads a CDN
+            response.headers["Content-Security-Policy"] = CSP
+        if not request.url.path.startswith("/static/"):
+            response.headers["Cache-Control"] = "no-store"  # results and evidence frames are never cached
         log_event("request", method=request.method, route=request.url.path, status=response.status_code,
                   duration_ms=round((time.perf_counter() - t0) * 1000, 1))
         request_id_var.reset(token)
@@ -154,6 +171,22 @@ def create_app(cfg: ServiceConfig, engine: InferenceEngine | None = None) -> Fas
         if not ok:
             raise ApiError(401, "unauthorized", "A valid X-API-Key header is required.", {"WWW-Authenticate": "ApiKey"})
 
+    if cfg.ui_enabled:
+        app.mount("/static", StaticFiles(directory=STATIC_DIR, html=False), name="static")
+
+        @app.get("/", include_in_schema=False)
+        async def ui_index():
+            return FileResponse(STATIC_DIR / "index.html", media_type="text/html")
+
+    @app.get("/v1/limits", response_model=LimitsResponse, tags=["analysis"], summary="Upload limits and features")
+    async def limits():
+        lim = cfg.validation
+        return {"max_image_size_mb": lim.max_image_size_mb, "max_video_size_mb": lim.max_video_size_mb,
+                "max_video_duration_seconds": lim.max_video_duration_seconds,
+                "image_extensions": list(lim.allowed_image_extensions), "video_extensions": list(lim.allowed_video_extensions),
+                "auth_required": cfg.require_api_key, "explanations_available": engine.explainer is not None,
+                "image_analysis_experimental": True}
+
     @app.get("/health/live", response_model=LiveResponse, tags=["health"], summary="Liveness probe")
     async def live():
         return {"status": "alive"}
@@ -174,7 +207,9 @@ def create_app(cfg: ServiceConfig, engine: InferenceEngine | None = None) -> Fas
                   "type": "object", "required": ["file"],
                   "properties": {"file": {"type": "string", "format": "binary",
                                           "description": "JPEG/PNG/WebP image or MP4/MOV/MKV/AVI video"}}}}}}})
-    async def analyze(request: Request):
+    async def analyze(request: Request, explain: bool = Query(
+            False, description="Also return visual evidence hints (Grad-CAM heatmaps on up to 4 face crops). "
+                               "Off by default; never changes the verdict. Requires allow_explanations on the server.")):
         t_start = time.perf_counter()
         if not engine.ready:
             raise ApiError(503, "service_unavailable", "The model is not ready.")
@@ -207,7 +242,7 @@ def create_app(cfg: ServiceConfig, engine: InferenceEngine | None = None) -> Fas
             def work():
                 timings["queue_ms"] = round((time.perf_counter() - submitted) * 1000, 2)
                 cancel.check()
-                return engine.analyze(path, v.media_type, cancel, timings)
+                return engine.analyze(path, v.media_type, cancel, timings, explain=explain)
 
             fut = pool.submit(work)
             handed_off = True
@@ -229,7 +264,8 @@ def create_app(cfg: ServiceConfig, engine: InferenceEngine | None = None) -> Fas
             timings["total_ms"] = round((time.perf_counter() - t_start) * 1000, 2)
             log_event("analysis_done", media_type=v.media_type.value, size_bytes=size, verdict=result["verdict"],
                       base_verdict=result["base_verdict"], frames_used=result["frames_used"],
-                      quality_reasons=result["quality_reasons"], timings=timings)
+                      quality_reasons=result["quality_reasons"], explain=explain,
+                      explanation_status=(result.get("explanation") or {}).get("status"), timings=timings)
             return {"request_id": request_id_var.get()} | result | {"timings_ms": timings}
         finally:
             if not handed_off:

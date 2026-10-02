@@ -908,6 +908,22 @@ GET /health/ready  -> 200 only if verify_bundle passes (re-checked every ready_r
   `logs.py`:** extraction, streamed uploads, routes, response models and
   structured logs.
 
+### Evidence hints and UI (Phase 11)
+
+- **`service/explain.py`:** `CamExplainer`. It reuses the verified ONNX
+  with the GAP input added as an output, in memory. `cell_maps` gives
+  the signed 7×7 Grad-CAM (exact decomposition), `faithfulness` runs
+  the top-10 vs random-10 cell occlusion, and `explain` builds the
+  `explanation` payload (crop + overlay JPEGs, cells, check result).
+- **Engine flow:** `InferenceEngine.analyze(..., explain)` produces the
+  final result first. Only then does it explain ≤ 4 strongest-evidence
+  crops (video) or the single crop (image). The `explanation_ms` timing
+  is separate.
+- **`service/static/`:** `index.html`, `app.css`, `app.js`, served at
+  `/` and `/static/*`.
+- **Middleware:** applies CSP + security headers to every response and
+  `no-store` to non-static ones. `/v1/limits` feeds the UI.
+
 ## Quality gate hybrid experiment (Phase 9c; rejected, not in production)
 
 - **`quality/signals_hybrid.py`**: `crop_signals_hybrid` reuses
