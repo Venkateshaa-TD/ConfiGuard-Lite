@@ -377,10 +377,31 @@ QUALITY_DEPENDENT_VERDICT).
 
 `/` is the landing page, `/detect` the detector and `/about` covers technology, evaluation and limitations. All are served by the same FastAPI process after `npm run build`, and refreshing any route works.
 
-The landing hero is a procedural Three.js scene, loaded lazily:
+The landing hero is a fictional human head built from MakeHuman CC0 assets
+(`frontend/public/hero/head.glb`; provenance in `docs/DATASETS.md`), loaded lazily:
 - **Phones:** starts on first interaction.
-- **Without WebGL:** shows a static composition.
+- **Without WebGL, on software GL, or if the asset fails:** shows a
+  poster (a still render of the same head).
 - **Reduced motion:** shows a single frame.
+
+**Themes:** Light, Dark and System (default), switchable in the
+navigation and the detector settings. Only this choice is stored in the
+browser (`localStorage["cg-theme"]`).
+
+**Rebuilding the head and posters** (optional; needs the CC0 inputs
+listed in `docs/DATASETS.md`):
+
+```powershell
+.venv\Scripts\python.exe scripts\build_hero_head.py --src D:\ConfiGuard-Data\cache\makehuman --out frontend\public\hero\head.glb
+node frontend\scripts\render-hero-posters.mjs http://127.0.0.1:8000   # with the server running the new build
+```
+
+**Evidence hints:**
+- When a Grad-CAM hint fails its reliability check, the server may try
+  an occlusion fallback (`explain_occlusion_fallback`, on by default
+  when explanations are allowed).
+- `scripts/explanation_eval.py` reports how often each method is used
+  and checks that verdicts are unchanged.
 
 ## Web frontend (React)
 

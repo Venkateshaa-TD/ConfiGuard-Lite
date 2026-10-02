@@ -3,6 +3,7 @@ import { useEffect, useId, useState, type DragEvent } from "react";
 import type { Limits } from "../api/types";
 import { extensionOf, mb } from "../lib/format";
 import { Brackets } from "../brand/primitives";
+import { ThemeSwitcher } from "../brand/ThemeSwitcher";
 import { Button } from "./ui";
 
 export interface Selection { file: File; kind: "image" | "video" }
@@ -146,10 +147,15 @@ export function UploadPanel(p: Props) {
             <label htmlFor={`${inputId}-explain`} className="text-sm font-medium">Include visual evidence hints</label>
             <p id={`${inputId}-exhint`} className="min-h-10 text-xs leading-relaxed text-muted">
               {lim?.explanations_available
-                ? "Heatmaps on up to 4 face crops. Slower. They never change the verdict and are shown only if they pass an occlusion check."
+                ? "Heatmaps on up to 4 face crops. Slower. They never change the verdict and are shown only if they pass a reliability check (Grad-CAM, with an occlusion fallback)."
                 : "Not enabled on this server."}
             </p>
           </div>
+        </div>
+
+        <div className="flex flex-col gap-2">
+          <span className="text-sm font-medium" aria-hidden="true">Appearance</span>
+          <ThemeSwitcher label="Appearance: colour theme" />
         </div>
 
         <div className="flex flex-wrap gap-2">

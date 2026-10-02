@@ -567,3 +567,33 @@ All notable changes to this project are documented here.
   - Landing initial JS 91 KB gzip.
 - Full backend suite 659/659 (263 s). No model, calibration, gate, C2PA or
   verdict changes; no Docker, cloud, training or FF++ test access.
+
+### 12d — Realistic human hero, light/dark themes, explanation availability (2026-10-02)
+
+- **Hero:** a fictional, generic human head built from MakeHuman CC0 data
+  (`scripts/build_hero_head.py`).
+  - 1.64 MB GLB, 1K textures, CSP-safe custom GLB reader.
+  - Textured natural half and cyan wireframe/landmark synthetic half;
+    subtle head and eye motion.
+  - Per-theme posters rendered from the live scene; all fallbacks kept.
+- **Themes:** Light / Dark / System (default System) in the nav, mobile
+  menu and detector.
+  - No-flash external `theme-init.js`.
+  - Only `cg-theme` is stored.
+  - Dark tokens across every route; the 3D scene and posters follow the
+    theme without reloading.
+- **Explanations:**
+  - Occlusion-sensitivity fallback for withheld Grad-CAM frames (≤ 1
+    image / 2 video frames, 2.5 s cap, own stability check, labelled
+    separately).
+  - "Visual evidence unavailable" message with an expandable rationale.
+  - `method_counts` and per-frame `method` in the API.
+  - `scripts/explanation_eval.py`.
+- **Parity tool:** decision fields compared strictly; explanation changes
+  reported separately.
+- **Responsive fixes:** the desktop nav starts at `lg`; the detector
+  header no longer overflows at 390 px.
+- **Verification:** decisions byte-identical across explanation modes
+  (48 VAL items); parity 15/15; Lighthouse a11y 100 in both themes, LCP
+  ≤ 2.42 s; 70 unit, 23 E2E and the full backend suite passed. No model,
+  calibration, gate, C2PA or threshold change; FF++ test untouched.

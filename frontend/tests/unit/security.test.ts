@@ -11,10 +11,22 @@ describe("source safety", () => {
 
   it.each([
     "dangerouslySetInnerHTML", "innerHTML", "outerHTML", "insertAdjacentHTML", "document.write", "eval(", "new Function",
-    "localStorage", "sessionStorage", "document.cookie", "indexedDB", "http://", "https://", "//cdn", "fonts.googleapis",
+    "sessionStorage", "document.cookie", "indexedDB", "http://", "https://", "//cdn", "fonts.googleapis",
   ])("never uses %s", (needle) => {
     const hits = sources.filter(([, text]) => text.includes(needle)).map(([f]) => f);
     expect(hits).toEqual([]);
+  });
+
+  it("persists nothing except the colour-theme preference (src/lib/theme.ts, key cg-theme)", () => {
+    const slash = (f: string) => f.split("\\").join("/");
+    const users = sources.filter(([, t]) => t.includes("localStorage")).map(([f]) => slash(f));
+    expect(users.length).toBe(1);
+    expect(users[0]!.endsWith("src/lib/theme.ts")).toBe(true);
+    const theme = sources.find(([f]) => slash(f).endsWith("src/lib/theme.ts"))![1];
+    expect(theme).toContain('THEME_KEY = "cg-theme"');
+    for (const m of theme.matchAll(/localStorage\.(\w+)\(([^,)]+)/g)) expect(m[2]).toBe("THEME_KEY");
+    const init = readFileSync(join(SRC, "..", "public", "theme-init.js"), "utf8");
+    expect([...init.matchAll(/localStorage\.(\w+)\("([^"]+)"/g)].map((m) => `${m[1]}:${m[2]}`)).toEqual(["getItem:cg-theme"]);
   });
 
   it("calls the API only on the same origin", () => {

@@ -64,13 +64,38 @@ describe("evidence frames", () => {
       withheld_frames: 2, frames: [frame(0, true), frame(1, false), frame(2, true), frame(3, false), frame(4, true)] } });
     const { container } = render(<ResultView r={r} />);
     expect(container.querySelectorAll("figure img")).toHaveLength(4);
-    expect(screen.getAllByText("Heatmap withheld")).toHaveLength(2);
+    expect(screen.getAllByText("No heatmap: reliability check not passed.")).toHaveLength(2);
+    expect(screen.getByText("Why is withholding the heatmap safer?")).toBeInTheDocument();
     expect(screen.getByText("Visual evidence hint — not proof")).toBeInTheDocument();
     expect(screen.getAllByAltText(/^Visual evidence hint — not proof. Face crop with evidence heatmap/)).toHaveLength(2);
     const btn = screen.getAllByRole("button", { name: "Show original crop" })[0]!;
     await userEvent.click(btn);
     expect(btn).toHaveAttribute("aria-pressed", "false");
     await noAxeViolations(container);
+  });
+
+  it("labels the occlusion fallback separately and states when no visual evidence passed", async () => {
+    const base = { logit: 2, crop_jpeg_b64: JPEG_B64, faithfulness: { passed: false, evidence_drop_top_cells: -1, evidence_drop_random_max: 0.5 } };
+    const r = video({ explanation: { status: "ok", label: "Visual evidence hint — not proof", direction: "toward_manipulated",
+      withheld_frames: 2, method_counts: { gradcam: 0, occlusion: 1, none: 1 }, frames: [
+        { ...base, frame_index: 0, timestamp_s: 0, heatmap_jpeg_b64: JPEG_B64, method: "occlusion", label: "Occlusion evidence hint — not proof" },
+        { ...base, frame_index: 9, timestamp_s: 1, heatmap_jpeg_b64: null, method: null },
+      ] } });
+    const { container } = render(<ResultView r={r} />);
+    expect(screen.getByText("Occlusion fallback · check passed")).toBeInTheDocument();
+    expect(screen.getAllByAltText(/^Occlusion evidence hint — not proof. Face crop with evidence heatmap/)).toHaveLength(1);
+    expect(container.querySelector('[data-method="none"]')).not.toBeNull();
+    await noAxeViolations(container);
+
+    const none = video({ explanation: { status: "withheld", label: "Visual evidence hint — not proof", direction: "toward_real",
+      withheld_frames: 1, frames: [{ ...base, frame_index: 0, heatmap_jpeg_b64: null }] } });
+    const view = render(<ResultView r={none} />);
+    expect(within(view.container).getByRole("status")).toHaveTextContent(
+      "Visual evidence unavailable — this explanation did not pass the reliability check.");
+    const why = within(view.container).getByText("Why is withholding the heatmap safer?");
+    await userEvent.click(why);
+    expect(within(view.container).getByText(/No picture is better than a misleading one/)).toBeVisible();
+    expect(view.container.querySelectorAll("figure img[alt*='heatmap']")).toHaveLength(0);
   });
 
   it("refuses non-base64 image payloads", () => {

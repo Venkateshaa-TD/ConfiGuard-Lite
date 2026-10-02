@@ -142,8 +142,10 @@ def create_app(cfg: ServiceConfig, engine: InferenceEngine | None = None) -> Fas
             response.headers["Content-Security-Policy"] = CSP
         if request.url.path.startswith("/assets/") and response.status_code == 200:
             response.headers["Cache-Control"] = "public, max-age=31536000, immutable"  # content-hashed build files
-        elif request.url.path.startswith("/fonts/") and response.status_code == 200:
-            response.headers["Cache-Control"] = "public, max-age=604800"  # stable font file names (preloaded)
+        elif request.url.path.startswith(("/fonts/", "/hero/")) and response.status_code == 200:
+            response.headers["Cache-Control"] = "public, max-age=604800"  # stable font / hero-asset file names
+        elif request.url.path == "/theme-init.js" and response.status_code == 200:
+            response.headers["Cache-Control"] = "no-cache"  # tiny, unhashed: always revalidated (ETag)
         elif not request.url.path.startswith("/static/"):
             response.headers["Cache-Control"] = "no-store"  # results, evidence frames and index.html are never cached
         log_event("request", method=request.method, route=request.url.path, status=response.status_code,
@@ -187,6 +189,8 @@ def create_app(cfg: ServiceConfig, engine: InferenceEngine | None = None) -> Fas
         app.mount("/assets", StaticFiles(directory=dist / "assets", html=False), name="assets")
         if (dist / "fonts").is_dir():
             app.mount("/fonts", StaticFiles(directory=dist / "fonts", html=False), name="fonts")
+        if (dist / "hero").is_dir():  # landing-page 3D head (CC0) and its posters
+            app.mount("/hero", StaticFiles(directory=dist / "hero", html=False), name="hero")
 
         @app.get("/", include_in_schema=False)
         async def ui_index():
@@ -195,6 +199,10 @@ def create_app(cfg: ServiceConfig, engine: InferenceEngine | None = None) -> Fas
         @app.get("/favicon.svg", include_in_schema=False)
         async def ui_favicon():
             return FileResponse(dist / "favicon.svg", media_type="image/svg+xml")
+
+        @app.get("/theme-init.js", include_in_schema=False)
+        async def ui_theme_init():  # applies the saved colour theme before first paint (CSP: external script)
+            return FileResponse(dist / "theme-init.js", media_type="text/javascript")
     elif cfg.ui_enabled:  # Phase 11 plain HTML/JS UI
         app.mount("/static", StaticFiles(directory=STATIC_DIR, html=False), name="static")
 
@@ -301,7 +309,7 @@ def create_app(cfg: ServiceConfig, engine: InferenceEngine | None = None) -> Fas
 
     if react:
         spa_routes = {"", "detect", "about"}
-        reserved = ("v1/", "health/", "assets/", "fonts/", "static/", "docs", "redoc", "openapi.json")
+        reserved = ("v1/", "health/", "assets/", "fonts/", "hero/", "static/", "docs", "redoc", "openapi.json")
 
         # Registered last so every API route wins. Client routes (and refreshes of them) get the SPA
         # shell; unknown non-API paths get the shell with a real 404 status so the app shows its 404 page.

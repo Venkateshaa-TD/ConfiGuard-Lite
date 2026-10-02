@@ -908,6 +908,25 @@ GET /health/ready  -> 200 only if verify_bundle passes (re-checked every ready_r
   `logs.py`:** extraction, streamed uploads, routes, response models and
   structured logs.
 
+### Hero asset, themes and explanation fallback (12d)
+
+```
+scripts/build_hero_head.py     MakeHuman CC0 data -> frontend/public/hero/head.glb (+ head.provenance.json)
+                               base.obj + macro targets; .mhclo proxy fit (eyes, brows, lashes, hair);
+                               head UV islands re-packed into a 1K skin atlas; plain GLB writer
+frontend/src/hero/glb.ts       minimal GLB reader (createImageBitmap from bytes; no blob: fetch, no WASM)
+frontend/src/hero/heroScene.ts fetch /hero/head.glb -> natural (textured) / synthetic (ink + wireframe + landmarks
+                               + points) split by clipping planes; per-eye pivots; setTheme(); dispose()
+frontend/src/hero/HeroFallback poster-{light,dark}.webp (still renders of the same head), CSS picks the theme
+frontend/public/theme-init.js  sets <html data-theme> before first paint (external file, CSP-safe)
+frontend/src/lib/theme.ts      preference store (cg-theme in localStorage only), System via matchMedia
+frontend/src/brand/ThemeSwitcher.tsx  Light / Dark / System toggle group (aria-pressed)
+src/index.css                  :root tokens + :root[data-theme="dark"] overrides
+service/explain.py             CamExplainer.occlusion(): 7x7 single-cell occlusion, two baselines, batched;
+                               explain(fallback=...) -> per-frame method/label/occlusion_check, method_counts
+backend app.py                 /hero (1 week cache), /theme-init.js (no-cache)
+```
+
 ### Website routes and hero (12c)
 
 ```

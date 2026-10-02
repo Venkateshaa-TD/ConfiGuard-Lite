@@ -22,6 +22,9 @@ def fake_dist(root: Path) -> Path:
     (d / "favicon.svg").write_text("<svg xmlns='http://www.w3.org/2000/svg'/>", encoding="utf-8")
     (d / "fonts").mkdir()
     (d / "fonts" / "display.woff2").write_bytes(b"wOF2" + bytes(64))
+    (d / "hero").mkdir()
+    (d / "hero" / "head.glb").write_bytes(b"glTF" + bytes(64))
+    (d / "theme-init.js").write_text('document.documentElement.setAttribute("data-theme","light");', encoding="utf-8")
     return d
 
 
@@ -62,7 +65,15 @@ def test_real_build_has_no_inline_code_or_external_references():
         assert ref.startswith("/") and not ref.startswith("//"), ref
     for js in (REAL_DIST / "assets").glob("*.js"):
         text = js.read_text(encoding="utf-8")
-        assert "localStorage" not in text and "sessionStorage" not in text
+        assert "sessionStorage" not in text and "indexedDB" not in text and "document.cookie" not in text
+        # The ONLY persisted value is the colour-theme preference under the key "cg-theme".
+        if "localStorage" in text:
+            assert "cg-theme" in text, js.name
+    init = (REAL_DIST / "theme-init.js").read_text(encoding="utf-8")
+    assert '<script src="/theme-init.js"></script>' in html
+    assert html.index("/theme-init.js") < html.index('type="module"')  # runs before the app (no theme flash)
+    assert set(re.findall(r'localStorage\.(\w+)\("([^"]+)"', init)) == {("getItem", "cg-theme")}
+    assert "setItem" not in init and "fetch" not in init and "http" not in init
 
 
 def test_spa_fallback_serves_client_routes_and_keeps_api_errors_json(tmp_path, bundle):
@@ -72,6 +83,7 @@ def test_spa_fallback_serves_client_routes_and_keeps_api_errors_json(tmp_path, b
         detect, about, deep = c.get("/detect"), c.get("/about"), c.get("/no/such/page")
         api_missing, health_missing = c.get("/v1/nope"), c.get("/health/nope")
         asset_missing, font = c.get("/assets/missing.js"), c.get("/fonts/display.woff2")
+        head, init, hero_missing = c.get("/hero/head.glb"), c.get("/theme-init.js"), c.get("/hero/nope.glb")
         limits = c.get("/v1/limits")
     for r in (detect, about):
         assert r.status_code == 200 and 'id="root"' in r.text and r.headers["cache-control"] == "no-store"
@@ -80,4 +92,8 @@ def test_spa_fallback_serves_client_routes_and_keeps_api_errors_json(tmp_path, b
     for r in (api_missing, health_missing, asset_missing):
         assert r.status_code == 404 and r.json()["error"]["code"] == "not_found"
     assert font.status_code == 200 and font.headers["cache-control"] == "public, max-age=604800"
+    assert head.status_code == 200 and head.content.startswith(b"glTF") and head.headers["cache-control"] == "public, max-age=604800"
+    assert init.status_code == 200 and init.headers["content-type"].startswith("text/javascript")
+    assert init.headers["cache-control"] == "no-cache" and "content-security-policy" in init.headers
+    assert hero_missing.status_code == 404 and hero_missing.headers["content-type"].startswith("application/json")
     assert limits.status_code == 200 and "max_image_size_mb" in limits.json()

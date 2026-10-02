@@ -67,7 +67,7 @@ export function Stages() {
   return (
     <section id="how" aria-labelledby="how-h" className="cv-auto on-dark relative bg-dark text-on-dark [contain-intrinsic-size:auto_2200px]">
       <span id="technology" className="absolute -top-20" aria-hidden="true" />
-      <div aria-hidden="true" className="grid-lines absolute inset-0 [--grid-c:rgba(233,238,241,0.05)] [--grid-s:72px]" />
+      <div aria-hidden="true" className="grid-lines absolute inset-0 [--grid-c:var(--grid-line-inverse)] [--grid-s:72px]" />
       <div className="relative mx-auto grid max-w-[1440px] gap-12 px-4 py-24 md:px-8 lg:grid-cols-[0.8fr_1.4fr] lg:py-32">
         <div className="flex flex-col gap-6 lg:sticky lg:top-24 lg:self-start">
           <SectionHeading id="how-h" index="02" kicker="How detection works" title={<>Four stages.<br />Every step reported.</>} dark />

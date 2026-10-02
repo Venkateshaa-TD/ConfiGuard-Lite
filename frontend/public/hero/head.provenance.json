@@ -1,0 +1,39 @@
+{
+  "file": "head.glb",
+  "bytes": 1643008,
+  "sha256": "85e6942d93753435bbb93c9c2852e5286dc75c79325e0953d4035485bd6b8bea",
+  "triangles": 13716,
+  "identity": "fictional generic young adult; equal African/Asian/Caucasian MakeHuman macro blend",
+  "licence": "CC0 1.0 (MakeHuman core assets)",
+  "inputs_sha256": {
+    "base.obj": "8e761e6624b8f54536409135d1636da63b32486a90d4897f84e121d144f6fb4c",
+    "african-male-young.target": "894abc1fbb3d28543a51fef16f89d5d4bdf9aa2e1534413339811a3d47818b7d",
+    "asian-male-young.target": "ed2e8c191cb6b87b4a2d97c80486acb2604fa549316c7aa2a738a5d5a14334dc",
+    "caucasian-male-young.target": "70e228ba7164737dae664454394536fc5935fa48d333c1a97d77e2dc6eacc5f5",
+    "makehuman_system_assets_cc0.zip": "b542127a8e25547c7c29c19f2d1d2adb9a664c80396ecd694095dbc8028a0107"
+  },
+  "components": {
+    "skin": "skins/young_caucasian_male/young_lightskinned_male_diffuse.png",
+    "eyes": [
+      "eyes/high-poly/high-poly",
+      "eyes/materials/brown_eye.png"
+    ],
+    "brows": [
+      "eyebrows/eyebrow001/eyebrow001",
+      "eyebrows/eyebrow001/eyebrow001.png"
+    ],
+    "lashes": [
+      "eyelashes/eyelashes01/eyelashes01",
+      "eyelashes/eyelashes01/eyelashes01.png"
+    ],
+    "hair": [
+      "hair/short02/short02",
+      "hair/short02/short02_diffuse.png"
+    ],
+    "targets": [
+      "macrodetails/african-male-young.target",
+      "macrodetails/asian-male-young.target",
+      "macrodetails/caucasian-male-young.target"
+    ]
+  }
+}

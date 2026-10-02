@@ -22,12 +22,25 @@ sigma 6) the k = 10 cells with the highest s * M, and three random sets of 10
 cells (seeded by the crop bytes). The evidence drop is s * (logit - logit_occ).
 The hint is shown only if the drop for the top cells is > 0 and exceeds every
 random set's drop; otherwise it is withheld as potentially misleading.
+
+Occlusion fallback (optional, explanation-only; the Grad-CAM gate is unchanged):
+for frames whose Grad-CAM hint was withheld, at most one frame for images and
+two for videos (strongest decision evidence first), each of the 7x7 cells is
+occluded on its own with two baselines (Gaussian blur, flat mean colour) in one
+batched run of the same verified explainer session. Cell importance is
+s * (logit - logit_occluded), averaged over the baselines; only positive cells
+are drawn. Its own stability check must pass: the two baselines must agree
+(Spearman rank correlation >= 0.5) AND jointly deleting the top 10 cells must
+drop the evidence by more than each of three seeded random 10-cell sets. A time
+budget bounds the fallback; frames it cannot reach are left without a heatmap.
+If both methods fail, no heatmap is shown.
 """
 
 from __future__ import annotations
 
 import base64
 import hashlib
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -36,8 +49,13 @@ import cv2
 import numpy as np
 
 LABEL = "Visual evidence hint — not proof"
+OCCLUSION_LABEL = "Occlusion evidence hint — not proof"
 METHOD = "Grad-CAM on the final 7x7 feature map (exact additive decomposition for this pooling head)"
+OCCLUSION_METHOD = "Occlusion sensitivity: 7x7 cells, blur and mean-colour baselines, positive evidence only"
 TOP_K, N_RANDOM, BLUR_SIGMA, GRID = 10, 3, 6.0, 7
+OCC_MIN_RANK_AGREEMENT = 0.5
+OCC_MAX_FRAMES = {"image": 1, "video": 2}
+OCC_BUDGET_S = 2.5  # wall-clock cap for the whole fallback in one request
 
 
 class ExplainerUnavailable(Exception):
@@ -146,9 +164,42 @@ class CamExplainer:
                         "top_cells": TOP_K, "random_sets": N_RANDOM})
         return out
 
+    # ------------------------------------------------------------------ occlusion fallback
+    @staticmethod
+    def _rank_agreement(a: np.ndarray, b: np.ndarray) -> float:
+        ra = np.argsort(np.argsort(a, kind="stable"), kind="stable").astype(np.float64)
+        rb = np.argsort(np.argsort(b, kind="stable"), kind="stable").astype(np.float64)
+        ra -= ra.mean()
+        rb -= rb.mean()
+        den = float(np.sqrt((ra * ra).sum() * (rb * rb).sum()))
+        return float((ra * rb).sum() / den) if den > 0 else 0.0
+
+    def occlusion(self, crop: np.ndarray, logit: float, sign: float) -> tuple[np.ndarray, dict]:
+        """Single-cell occlusion map (signed evidence per cell) and its stability check, in two batched runs."""
+        blurred = cv2.GaussianBlur(crop, (0, 0), BLUR_SIGMA)
+        flat = np.empty_like(crop)
+        flat[:] = crop.reshape(-1, 3).mean(axis=0).round().astype(crop.dtype)
+        n = GRID * GRID
+        batch = [self._occlude(crop, base, np.array([c])) for base in (blurred, flat) for c in range(n)]
+        z = self.logits(np.stack([b[:, :, ::-1].transpose(2, 0, 1) for b in batch]).astype(np.float32))
+        per_base = sign * (logit - z.reshape(2, n))  # (baseline, cell) evidence drop
+        evidence = per_base.mean(axis=0)
+        agree = self._rank_agreement(per_base[0], per_base[1])
+        deletion = self.faithfulness([crop], evidence.reshape(1, GRID, GRID), np.array([logit]), np.array([sign]))[0]
+        passed = bool(agree >= OCC_MIN_RANK_AGREEMENT and deletion["passed"])
+        return evidence.reshape(GRID, GRID), {
+            "passed": passed, "rank_agreement": round(agree, 4), "min_rank_agreement": OCC_MIN_RANK_AGREEMENT,
+            "evidence_drop_top_cells": deletion["evidence_drop_top_cells"],
+            "evidence_drop_random_max": deletion["evidence_drop_random_max"],
+            "top_cells": TOP_K, "random_sets": N_RANDOM}
+
     # ------------------------------------------------------------------ public
-    def explain(self, candidates: list[dict[str, Any]], sign: int, production_logits: np.ndarray) -> dict[str, Any]:
-        """candidates: [{"crop": BGR, ...metadata}] (<= 4). Returns the `explanation` payload."""
+    def explain(self, candidates: list[dict[str, Any]], sign: int, production_logits: np.ndarray,
+                fallback: bool = False, media: str = "video") -> dict[str, Any]:
+        """candidates: [{"crop": BGR, ...metadata}] (<= 4). Returns the `explanation` payload.
+
+        `fallback` enables the occlusion hint for withheld frames (explanation-only; it never sees or
+        changes the verdict, which is final before this method is called)."""
         crops = [c["crop"] for c in candidates]
         pixels = np.stack([c[:, :, ::-1].transpose(2, 0, 1) for c in crops]).astype(np.float32)
         cm = self.cell_maps(pixels)
@@ -156,25 +207,50 @@ class CamExplainer:
             return {"status": "unavailable", "reason": "explainer_logit_mismatch", "label": LABEL, "frames": []}
         signs = np.full(len(crops), float(sign))
         checks = self.faithfulness(crops, cm.maps, cm.logits, signs)
-        frames, withheld = [], 0
+        frames = []
         for c, m, z, off, chk in zip(candidates, cm.maps, cm.logits, cm.offsets, checks):
             meta = {k: v for k, v in c.items() if k != "crop"}
             entry = meta | {"logit": round(float(z), 6), "faithfulness": chk,
                             "completeness_error": round(abs(float(m.sum() + off - z)), 8),
-                            "crop_jpeg_b64": _jpeg_b64(c["crop"])}
+                            "crop_jpeg_b64": _jpeg_b64(c["crop"]), "method": None, "label": None}
             if chk["passed"]:
-                heat = np.clip(sign * m, 0, None)
-                heat = heat / heat.max()
-                entry["heatmap_jpeg_b64"] = _jpeg_b64(overlay(c["crop"], heat))
-                entry["cells"] = np.round(heat, 3).tolist()
-            else:
-                withheld += 1
+                self._attach(entry, c["crop"], np.clip(sign * m, 0, None), "gradcam", LABEL)
             frames.append(entry)
-        status = "ok" if withheld < len(frames) else "withheld"
+
+        if fallback:
+            # Strongest decision evidence first; capped frame count and wall-clock budget.
+            order = sorted((i for i, f in enumerate(frames) if f["method"] is None),
+                           key=lambda i: -float(sign * cm.logits[i]))[:OCC_MAX_FRAMES.get(media, 2)]
+            t0 = time.perf_counter()
+            for i in order:
+                if time.perf_counter() - t0 > OCC_BUDGET_S:
+                    frames[i]["occlusion_check"] = {"passed": False, "skipped": "time_budget"}
+                    continue
+                evidence, occ = self.occlusion(candidates[i]["crop"], float(cm.logits[i]), float(sign))
+                frames[i]["occlusion_check"] = occ
+                if occ["passed"]:
+                    self._attach(frames[i], candidates[i]["crop"], np.clip(evidence, 0, None), "occlusion",
+                                 OCCLUSION_LABEL)
+
+        counts = {"gradcam": sum(f["method"] == "gradcam" for f in frames),
+                  "occlusion": sum(f["method"] == "occlusion" for f in frames)}
+        counts["none"] = len(frames) - counts["gradcam"] - counts["occlusion"]
+        withheld = sum(not f["faithfulness"]["passed"] for f in frames)
+        status = "ok" if counts["none"] < len(frames) else "withheld"
         return {"status": status, "label": LABEL, "method": METHOD,
+                "fallback_method": OCCLUSION_METHOD if fallback else None,
+                "fallback_label": OCCLUSION_LABEL if fallback else None,
                 "direction": "toward_manipulated" if sign > 0 else "toward_real",
-                "withheld_frames": withheld,
-                "reason": None if status == "ok" else "failed_occlusion_check", "frames": frames}
+                "withheld_frames": withheld, "method_counts": counts,
+                "reason": None if status == "ok" else ("failed_both_checks" if fallback else "failed_occlusion_check"),
+                "frames": frames}
+
+    @staticmethod
+    def _attach(entry: dict[str, Any], crop: np.ndarray, heat: np.ndarray, method: str, label: str) -> None:
+        heat = heat / heat.max()
+        entry["heatmap_jpeg_b64"] = _jpeg_b64(overlay(crop, heat))
+        entry["cells"] = np.round(heat, 3).tolist()
+        entry["method"], entry["label"] = method, label
 
 
 def overlay(crop: np.ndarray, heat_cells: np.ndarray) -> np.ndarray:

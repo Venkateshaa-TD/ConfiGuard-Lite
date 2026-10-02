@@ -4,6 +4,87 @@ Format: one entry per decision, newest first.
 
 ---
 
+## 2026-10-02 — 12d: realistic hero head, themes, explanation fallback
+
+- **Hero asset: MakeHuman CC0 data, assembled by our own script.**
+  - Candidates were reviewed first and rejected: Sketchfab needs a login and
+    the face is a textured plane; the Meshy head needs an account and may
+    resemble a real person; the three.js Lee Perry-Smith head is a
+    real-person scan; Blender base meshes have no textures.
+  - The user approved MakeHuman. Narrower action than approved: instead of
+    installing the MakeHuman desktop app (system software, AGPL code), the
+    CC0 data files are read directly. `scripts/build_hero_head.py`
+    reimplements the documented `.mhclo` proxy rule (three-vertex weighted
+    barycentre plus a scaled offset).
+  - **Identity:** fictional and generic. Equal African/Asian/Caucasian
+    young-male macro blend on the hm08 base mesh, CC0 skin, eyes, brows,
+    lashes and short hair. No celebrity, scan or recognisable person.
+  - **Format:** plain GLB, no Draco/meshopt. The site CSP has no
+    `wasm-unsafe-eval`, and a decoder would add code.
+    - Textures are JPEG/PNG at most 1024 px. The skin texture is re-packed
+      from the head's UV islands into one 1K atlas (0.74× native density
+      instead of 0.5× for a plain downscale).
+    - 1.64 MB in total, 13.7k triangles.
+  - **Loader:** a 100-line GLB reader (`src/hero/glb.ts`) instead of
+    three's GLTFLoader. GLTFLoader decodes embedded images by fetching
+    `blob:` URLs, which `connect-src 'self'` blocks. The custom reader
+    decodes with `createImageBitmap` from bytes, supports only what our
+    file uses, and validates the header and lengths.
+  - **Provenance:** every input's SHA-256, source URL and pinned commit are
+    recorded in `docs/DATASETS.md`; the output's SHA-256 is in
+    `frontend/public/hero/head.provenance.json`.
+- **Hero rendering:** natural half = textured head; synthetic half = dark
+  surface, cyan wireframe of the same mesh, snapped facial-landmark
+  contours and a sparse point cloud. The world-space clipping planes and
+  scan sheet are as in 12c.
+  - **Neck:** a horizontal clip plane plus a CSS mask fade gives a clean
+    bottom edge.
+  - **Eyes:** each eye rotates on its own sphere centre, with a small gaze
+    towards the cursor and rare small saccades. The randomness is a
+    deterministic LCG. Gaze is capped at about 7° so the eyeballs never
+    leave the lids, and the eyes never glow.
+  - Lines and points are excluded from ACES tone mapping so the cyan stays
+    exact.
+  - **Phones:** DPR ≤ 1.25, no point cloud, no alpha-to-coverage, still
+    booted on first interaction.
+- **Poster = still render of the same head**, one per theme (44 KB WebP
+  each, made by `scripts/render-hero-posters.mjs` from the live scene).
+  CSS shows the poster for the active theme, and lazy loading means only
+  that one downloads. The abstract SVG face is gone.
+- **Themes:** Light / Dark / System, default System. CSS custom properties
+  are redefined under `:root[data-theme="dark"]`, so every Tailwind token
+  utility themes automatically.
+  - **Before first paint:** an external `theme-init.js`, loaded
+    synchronously in `<head>`, sets `data-theme` (CSP: no inline script).
+    It is served by its own FastAPI route with `no-cache`.
+  - **Storage:** only `localStorage["cg-theme"]` with an allow-listed
+    value. Nothing is written until the visitor chooses. Unit and build
+    tests enforce that no other storage use exists.
+  - **3D:** material colours and lights switch through `setTheme()` on the
+    running scene. No second download and no new context.
+  - Buttons on cyan use `text-dark` (dark in both themes); hover states use
+    opacity or brightness instead of fixed colours.
+- **Occlusion fallback (explanation-only):** used only for frames whose
+  Grad-CAM hint failed the unchanged gate.
+  - **Frame cap:** at most 1 frame for images and 2 for videos, strongest
+    decision evidence first.
+  - **Method:** 7×7 single-cell occlusion with blur and mean-colour
+    baselines, in one batch through the same verified explainer session.
+    Positive cells only.
+  - **Stability check:** baseline rank agreement ≥ 0.5 (Spearman) AND the
+    top-10 joint deletion must beat 3 seeded random sets.
+  - **Limits:** a 2.5 s wall-clock budget. If both methods fail, there is
+    no heatmap.
+  - **Labelling:** a per-frame `method` field and label "Occlusion evidence
+    hint — not proof", plus `method_counts`.
+  - **Config:** `explain_occlusion_fallback` (default true, effective only
+    when explanations are allowed).
+- **Parity tool:** decision fields must stay identical (exit 1 otherwise).
+  Explanation status changes are reported separately, because Part C
+  legitimately changes explanation availability.
+
+---
+
 ## 2026-10-02 — 12c: landing experience, routing and hero
 
 - **Identity:** original, not derived from the GetLayers/Kimi assets.

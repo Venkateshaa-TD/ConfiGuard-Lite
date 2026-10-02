@@ -36,6 +36,7 @@ class ServiceConfig:
     api_key_sha256: tuple[str, ...] = field(default=(), repr=False)
     gate_enabled: bool = True
     allow_explanations: bool = False  # off on the server by default; also opt-in per request
+    explain_occlusion_fallback: bool = True  # occlusion hint when Grad-CAM is withheld (explanation-only)
     docs_enabled: bool = True
     ui_enabled: bool = True
     ui_dist_dir: Path | None = None  # React build (frontend/dist); falls back to the Phase 11 static UI if absent

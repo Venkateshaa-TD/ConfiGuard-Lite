@@ -33,7 +33,7 @@ export function Chip({ children, tone = "neutral" }: { children: ReactNode; tone
 
 export function Button({ children, variant = "secondary", ...rest }: React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: "primary" | "secondary" | "ghost" }) {
   const look = {
-    primary: "chamfer bg-ink text-paper border-ink hover:bg-dark-2 [--cut:9px]",
+    primary: "chamfer bg-ink text-paper border-ink hover:opacity-85 [--cut:9px]",
     secondary: "bg-surface text-ink border-line-strong hover:bg-raised",
     ghost: "bg-transparent text-ink-2 border-transparent hover:bg-raised",
   }[variant];

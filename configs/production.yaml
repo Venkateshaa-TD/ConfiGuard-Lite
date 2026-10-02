@@ -28,6 +28,7 @@ service:
   ready_recheck_s: 30
   ui_enabled: false            # the web UI is a local tool
   allow_explanations: false    # evidence hints are off unless explicitly enabled
+  explain_occlusion_fallback: true   # occlusion hint only when Grad-CAM is withheld; explanation-only
   c2pa_enabled: true         # Content Credentials (read-only, offline, sandboxed worker)
   c2pa_timeout_s: 5
   c2pa_memory_mb: 512

@@ -35,9 +35,9 @@ export function Wordmark({ dark = false }: { dark?: boolean }) {
 
 export function CtaLink({ to, children, variant = "solid", className = "" }: { to: string; children: ReactNode; variant?: "solid" | "outline" | "cyan" | "ghost-dark"; className?: string }) {
   const look = {
-    solid: "bg-ink text-paper hover:bg-dark-2",
+    solid: "bg-ink text-paper hover:opacity-85",
     outline: "border border-ink text-ink hover:bg-ink hover:text-paper",
-    cyan: "bg-cyan text-ink hover:bg-[#3fe3ee]",
+    cyan: "bg-cyan text-dark hover:brightness-110",
     "ghost-dark": "border border-on-dark-muted/50 text-on-dark hover:border-cyan hover:text-cyan",
   }[variant];
   return (
@@ -71,7 +71,7 @@ export function Reveal({ children, as: Tag = "div", className = "", index = 0 }:
 }
 
 /** Thin concentric contour lines (decorative SVG). */
-export function Contours({ className = "", stroke = "rgba(7,9,13,0.10)" }: { className?: string; stroke?: string }) {
+export function Contours({ className = "", stroke = "var(--contour)" }: { className?: string; stroke?: string }) {
   const rings = Array.from({ length: 14 }, (_, i) => i);
   return (
     <svg aria-hidden="true" focusable="false" className={`pointer-events-none absolute ${className}`} viewBox="0 0 800 800" preserveAspectRatio="xMidYMid slice">

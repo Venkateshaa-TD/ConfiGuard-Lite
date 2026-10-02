@@ -26,6 +26,7 @@
 | 12 | C2PA provenance verification | PASS | 2026-10-02 |
 | 12b | React production frontend upgrade | PASS | 2026-10-02 |
 | 12c | Cinematic landing experience and detector redesign | PASS | 2026-10-02 |
+| 12d | Realistic human hero, light/dark themes, explanation availability | PASS | 2026-10-02 |
 
 Full per-phase results are recorded below as they complete.
 
@@ -1372,3 +1373,105 @@ per-frame logits, reasons, explanation and C2PA status).
 - landing mobile performance 69 → 99 (an eager WebGL probe context, a
   single-task full-page render, WebGL boot under mobile emulation);
 - Three.js console errors when WebGL is disabled.
+
+## 12d — Realistic human hero, light/dark themes, explanation availability
+
+**Status:** PASS
+
+**Summary:**
+- **Hero head:** the abstract procedural head is replaced by a fictional,
+  generic human head.
+  - Built from MakeHuman CC0 data by `scripts/build_hero_head.py`, without
+    the MakeHuman app.
+  - 1.64 MB GLB, 13.7k triangles, textures ≤ 1K.
+  - Has skin texture, eyes, lids, brows, lashes, ears, nose, lips, jaw and
+    short hair.
+- **Themes:** Light / Dark / System on every route, with no flash on load.
+- **Evidence hints:** an occlusion-sensitivity fallback is used when
+  Grad-CAM is withheld, plus a clear "unavailable" message. Decisions are
+  unchanged.
+
+**Requirements:**
+- **Asset:**
+  - Candidates were reviewed first; the user approved MakeHuman. Licence
+    verified (CC0) and the source URLs, pinned commit, retrieval times and
+    SHA-256 recorded (`docs/DATASETS.md`).
+  - ≤ 8 MB (1.64 MB); no executable code; no Kimi/GetLayers, Mixamo or
+    MetaHuman.
+  - Plain GLB: Draco/meshopt would need `wasm-unsafe-eval` in the CSP.
+    Textures are JPEG/PNG ≤ 1024 px.
+  - Lazy-loaded on `/` only and disposed on route change. **Met.**
+- **Visual inspection:** front, three-quarter and profile renders, the
+  live hero at 390/820/1440/1920 px in both themes, and posters were
+  inspected. It reads immediately as a realistic (good-CG, not
+  photographic) human face; natural anatomy, no glowing eyes.
+  - **Fixed during inspection:** a missing iris (a transparent cornea
+    shell), a bulging eye (the pivot came from an index-ignoring bounding
+    box) and washed-out cyan (tone mapping). **Met.**
+- **Hero behaviour:**
+  - Natural textured half vs. dark surface with a cyan wireframe, landmark
+    contours and points. Scan boundary.
+  - Subtle head sway, gaze and saccades (≤ ~7°); restrained cursor
+    response.
+  - Poster = still render per theme (44 KB WebP); posters and the
+    no-WebGL, software-GL, missing-asset and slow-GPU fallbacks were
+    kept.
+  - Simplified phone mode; paused offscreen; reduced motion gives one
+    frame. **Met.**
+- **Themes:**
+  - Light / Dark / System in the nav (compact), the mobile menu and the
+    detector (header and settings); default System.
+  - Only `localStorage["cg-theme"]` is stored.
+  - External `theme-init.js` (CSP-safe) runs before paint.
+  - Semantic tokens on every route; WCAG AA (Lighthouse a11y 100 in both
+    themes); dark surface `#0B1117`, not pure black.
+  - 3D materials, lights and posters switch without reloading the model.
+    **Met.**
+- **Explanations:**
+  - Grad-CAM gate unchanged.
+  - Exact "Visual evidence unavailable — this explanation did not pass
+    the reliability check." message and an expandable "why safer".
+  - **Occlusion fallback:** ≤ 1 image / 2 video frames; 7×7 grid;
+    2.5 s cap; positive only; labelled "Occlusion evidence hint — not
+    proof"; own check (baseline rank agreement ≥ 0.5 + top-10 deletion
+    beats 3 random sets). If both fail, there is no heatmap. **Met.**
+- **Decisions unchanged:**
+  - Byte-identical decision fields with explanations disabled, Grad-CAM
+    only and the fallback (48 VAL items, `scripts/explanation_eval.py`).
+  - Detection parity 15/15 decision-identical vs. the pre-12d baseline
+    (one explanation went withheld → ok via the fallback).
+  - No model, calibration, adaptive-inference, gate, C2PA or threshold
+    change; FF++ test sealed. **Met.**
+
+**Measurements (RTX 4050 laptop, Chrome, localhost):**
+- **Asset:** 1,643,008 bytes; GPU textures about 19.6 MB (RGBA8 + mips);
+  geometry 0.66 MB; 23.5k drawn triangles.
+- **Frame rate:** 144 fps.
+- **Main-thread time:** 210–229 ms/s while animating; 3 ms/s offscreen;
+  0.2 ms/s on `/detect` (no canvas).
+- **Lighthouse (perf / a11y / BP / SEO; LCP):**
+  - Light: `/` mobile 97/100/100/100, 2.42 s; `/` desktop 100 ×4,
+    0.52 s; `/detect` mobile 99, 2.17 s; `/detect` desktop 100, 0.63 s.
+  - Dark: `/` mobile 98, 2.25 s; `/` desktop 97, 0.72 s; `/detect`
+    mobile 97, 2.42 s; `/detect` desktop 100, 0.61 s.
+  - Accessibility, best practices and SEO were 100 on all eight runs.
+- **Explanations:**
+  - Videos: Grad-CAM 39/92 frames, +4 via the fallback, 49 none.
+  - Images: Grad-CAM 9/24, +3 via the fallback, 12 none.
+  - Median latency: video 148 → 1,038 ms; image 63 → 479 ms (Grad-CAM
+    only → with the fallback).
+- **Budget:** landing initial JS 93.1 KB gzip (< 180); hero chunk
+  131.5 KB lazy.
+
+**Tests:**
+- 70 unit tests.
+- 23 real-browser E2E: themes, no-flash, keyboard, hero theme switch
+  without re-download, no-WebGL, SwiftShader, missing asset, both-theme
+  layouts at 4 widths.
+- Full backend suite 665/665 (322 s); detection parity 15/15.
+
+**Fixed during the phase:**
+- Detector header overflow at 390 px: `hidden` lost to the switcher's
+  `inline-flex`.
+- Nav overflow at 820 px: the desktop nav now starts at `lg`.
+- Keyboard-order test updated for the new header buttons.

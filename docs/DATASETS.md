@@ -325,3 +325,51 @@ Cached at `D:\ConfiGuard-Data\cache\c2pa_trust\3573be50…\` with `provenance.js
 (URLs, hashes, fetched 2026-10-02T04:48:57Z). Refresh only by bumping the pin in
 `configuard/provenance/trust.py` and re-running `scripts/fetch_c2pa_trust_list.py`.
 Test credentials are generated at test time and are never stored.
+
+## Landing-page hero head (12d) — MakeHuman CC0 assets
+
+The one 3D asset on the website. It is not training data and never touches the model.
+
+- **Licence:** CC0 1.0. It was independently verified on 2026-10-02 at
+  https://static.makehumancommunity.org/about/license.html ("All core
+  assets are shared under Creative Commons, CC0"). Each data file also
+  carries the CC0 notice. The MakeHuman application code (AGPL) is
+  **not** used or installed.
+- **Copyright holders at CC0 release:** Data Collection AB, Joel
+  Palmius, Jonas Hauquier.
+- **Identity:** fictional, generic young adult. It is an equal blend of
+  the African/Asian/Caucasian young-male macro targets on the neutral
+  hm08 base mesh: not a scan, not a celebrity, not a recognisable person.
+- **Never used:** Kimi/GetLayers assets, Mixamo or MetaHuman.
+
+| Input | Source | Bytes | SHA-256 | Retrieved (UTC) |
+|---|---|---|---|---|
+| `makehuman_system_assets_cc0.zip` (skins, eyes, eyebrows, eyelashes, hair) | https://files.makehumancommunity.org/asset_packs/makehuman_system_assets/makehuman_system_assets_cc0.zip | 280,737,770 | `b542127a8e25547c7c29c19f2d1d2adb9a664c80396ecd694095dbc8028a0107` | 2026-10-02T09:28:06Z |
+| `base.obj` (hm08 base mesh) | github.com/makehumancommunity/makehuman @ `a8bc2d54ff0ac92e78ff71431b1023eda42bf482` `makehuman/data/3dobjs/base.obj` | 1,749,303 | `8e761e6624b8f54536409135d1636da63b32486a90d4897f84e121d144f6fb4c` | 2026-10-02 |
+| `african-male-young.target` | same commit, `makehuman/data/targets/macrodetails/` | 406,170 | `894abc1fbb3d28543a51fef16f89d5d4bdf9aa2e1534413339811a3d47818b7d` | 2026-10-02 |
+| `asian-male-young.target` | same commit, `makehuman/data/targets/macrodetails/` | 421,040 | `ed2e8c191cb6b87b4a2d97c80486acb2604fa549316c7aa2a738a5d5a14334dc` | 2026-10-02 |
+| `caucasian-male-young.target` | same commit, `makehuman/data/targets/macrodetails/` | 396,479 | `70e228ba7164737dae664454394536fc5935fa48d333c1a97d77e2dc6eacc5f5` | 2026-10-02 |
+
+- **Components used from the pack:**
+  - `skins/young_caucasian_male/young_lightskinned_male_diffuse.png`
+  - `eyes/high-poly` with `eyes/materials/brown_eye.png`; the outer
+    cornea shell is dropped.
+  - `eyebrows/eyebrow001`
+  - `eyelashes/eyelashes01`
+  - `hair/short02` (diffuse only)
+- **Inputs are stored outside the repo** in
+  `D:/ConfiGuard-Data/cache/makehuman/` (with `pack.sha256`,
+  `github.sha256` and retrieval-time files). They are never committed.
+- **Output (committed, self-hosted):**
+  - `frontend/public/hero/head.glb`: 1,643,008 bytes, SHA-256
+    `85e6942d93753435bbb93c9c2852e5286dc75c79325e0953d4035485bd6b8bea`,
+    13,716 triangles.
+  - Textures are JPEG/PNG ≤ 1024 px. There is no executable content and
+    no Draco/meshopt.
+  - The output is CC0 (derived from CC0 inputs). Its provenance record
+    is `frontend/public/hero/head.provenance.json`.
+- **Posters:** `poster-light.webp` and `poster-dark.webp`, about 44 KB
+  each, are still renders of the same head.
+- **Rebuild:**
+  `python scripts/build_hero_head.py --src <cache> --out frontend/public/hero/head.glb`,
+  then `node frontend/scripts/render-hero-posters.mjs <server-url>`.

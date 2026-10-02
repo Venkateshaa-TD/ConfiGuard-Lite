@@ -56,6 +56,58 @@
   --unc: #8a5a00;
   --unc-soft: #fbf1db;
   --focus: #07090d;
+
+  /* decorative tokens (grid, contours, hero poster) */
+  --grid-line: rgba(7, 9, 13, 0.06);
+  --grid-line-inverse: rgba(233, 238, 241, 0.05);
+  --contour: rgba(7, 9, 13, 0.1);
+  --porcelain-1: #c9d1d5;
+  --porcelain-2: #eef2f4;
+  --porcelain-3: #dfe5e8;
+  --porcelain-line: #a8b3b9;
+  --synthetic: #0d1015;
+  --selection: #bdf3f7;
+  --glow: rgba(0, 215, 229, 0.12);
+}
+
+/* Dark theme: deep blue-black surfaces (not pure black), readable steel text, controlled cyan.
+   All text pairs meet WCAG-AA; "dark" sections stay one step deeper than the page so the
+   light/dark section rhythm survives in both themes. */
+:root[data-theme="dark"] {
+  --paper: #0b1117;
+  --ink: #e7eef2;
+  --dark: #070b10;
+  --dark-2: #0f161e;
+  --dark-line: #1d2834;
+  --cyan-ink: #3fe0eb;
+  --on-dark: #e7eef2;
+  --on-dark-muted: #9fb0bb;
+  --surface: #101820;
+  --raised: #141e28;
+  --ink-2: #c5d0d8;
+  --muted: #95a5b0;
+  --line: #213040;
+  --line-strong: #34495b;
+  --accent: #2bc9d5;
+  --accent-ink: #061015;
+  --accent-soft: #0d2a30;
+  --real: #6fd3a0;
+  --real-soft: #10261c;
+  --fake: #ff8f84;
+  --fake-soft: #2d1515;
+  --unc: #f0c35c;
+  --unc-soft: #2a2110;
+  --focus: #3fe0eb;
+  --grid-line: rgba(231, 238, 242, 0.05);
+  --grid-line-inverse: rgba(231, 238, 242, 0.04);
+  --contour: rgba(143, 220, 230, 0.12);
+  --porcelain-1: #8e9aa1;
+  --porcelain-2: #c3ccd1;
+  --porcelain-3: #a9b4ba;
+  --porcelain-line: #6f7c84;
+  --synthetic: #05080c;
+  --selection: #0f4c53;
+  --glow: rgba(0, 215, 229, 0.18);
 }
 
 @theme inline {
@@ -96,7 +148,8 @@
   body { @apply bg-paper text-ink font-sans antialiased; }
   :focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; }
   .on-dark :focus-visible, .on-dark:focus-visible { outline-color: var(--cyan); }
-  ::selection { background: #bdf3f7; color: var(--ink); }
+  ::selection { background: var(--selection); color: var(--ink); }
+  html { transition: background-color 200ms ease-out; }
 }
 
 @layer utilities {
@@ -107,7 +160,7 @@
   .tactile { transition: transform 140ms cubic-bezier(0.16, 1, 0.3, 1), background-color 160ms ease-out, border-color 160ms ease-out, color 160ms ease-out; }
   .tactile:active:not(:disabled) { transform: translateY(1px) scale(0.99); }
   .skeleton { background: linear-gradient(90deg, var(--line) 0%, var(--raised) 50%, var(--line) 100%); background-size: 200% 100%; animation: shimmer 1.6s linear infinite; }
-  .grid-lines { background-image: linear-gradient(to right, var(--grid-c, rgba(7, 9, 13, 0.06)) 1px, transparent 1px), linear-gradient(to bottom, var(--grid-c, rgba(7, 9, 13, 0.06)) 1px, transparent 1px); background-size: var(--grid-s, 64px) var(--grid-s, 64px); }
+  .grid-lines { background-image: linear-gradient(to right, var(--grid-c, var(--grid-line)) 1px, transparent 1px), linear-gradient(to bottom, var(--grid-c, var(--grid-line)) 1px, transparent 1px); background-size: var(--grid-s, 64px) var(--grid-s, 64px); }
 
   /* below-the-fold sections: skip layout/paint until near the viewport (DOM stays complete) */
   .cv-auto { content-visibility: auto; contain-intrinsic-size: auto 900px; }
@@ -121,6 +174,10 @@
 
   /* scan line used by the static hero fallback */
   .scan-sweep { animation: sweep 6s cubic-bezier(0.45, 0, 0.55, 1) infinite alternate; }
+  /* Theme-specific media (hero posters): only the image for the active theme is displayed (and, being lazy, fetched). */
+  :root:not([data-theme="dark"]) .theme-dark-only, :root[data-theme="dark"] .theme-light-only { display: none; }
+  /* Soft fade at the bottom of the hero head so the neck never ends on a hard edge. */
+  .hero-fade { mask-image: linear-gradient(to bottom, #000 72%, transparent 96%); }
 }
 @keyframes shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
 @keyframes sweep { from { transform: translateX(-34%); } to { transform: translateX(34%); } }

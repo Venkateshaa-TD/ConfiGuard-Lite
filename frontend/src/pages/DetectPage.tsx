@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { AnalysisFailure, analyze, getLimits, type AnalysisHandle } from "../api/client";
 import type { AnalyzeResult, Limits } from "../api/types";
 import { TechLabel, Wordmark } from "../brand/primitives";
+import { ThemeSwitcher } from "../brand/ThemeSwitcher";
 import { ErrorBoundary } from "../components/ErrorBoundary";
 import { ResultView } from "../components/ResultView";
 import { EmptyState, ErrorView, ProgressView } from "../components/StatusViews";
@@ -88,6 +89,7 @@ export function DetectPage() {
           <nav aria-label="Detector" className="flex items-center gap-5">
             <Link to="/" className="eyebrow inline-flex items-center gap-1.5 text-ink-2 hover:text-ink sm:hidden"><ArrowLeft size={14} aria-hidden="true" />Overview</Link>
             <Link to="/about" className="eyebrow text-ink-2 hover:text-ink">About</Link>
+            <div className="hidden sm:block"><ThemeSwitcher compact /></div>
           </nav>
         </div>
       </header>
@@ -123,7 +125,7 @@ export function DetectPage() {
         <p className="mx-auto max-w-[1440px] px-4 py-4 text-xs leading-relaxed text-muted md:px-8">
           Academic research project. Results are calibrated estimates from a model evaluated on FaceForensics++ data; they are not
           proof and not a legal determination. Uploads are processed in memory, temporary files are deleted after each request,
-          and this page stores nothing.
+          and this page stores nothing except your colour-theme choice.
         </p>
       </footer>
     </div>

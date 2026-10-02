@@ -4,6 +4,37 @@ Format: one entry per issue. Mark resolved issues rather than deleting them.
 
 ---
 
+## OPEN — Realistic hero and themes (12d)
+
+- **Realism ceiling.** The head is good real-time CG, not photographic:
+  diffuse skin texture only (no normal/specular maps or subsurface
+  scattering) and alpha-card hair with a visible hairline edge. Eyes do
+  not blink (no morph targets).
+- **GPU memory.** About 20 MB (textures with mips plus geometry) while
+  the hero is alive; released on route change.
+- **Mobile LCP margin.** Lighthouse mobile LCP is 2.17–2.42 s, close to
+  the 2.5 s target, on localhost with simulated throttling.
+- **Posters must be regenerated** (`render-hero-posters.mjs`) whenever
+  the scene or palette changes; they are committed images.
+- **Theme preference** is the one value stored in the browser (`cg-theme`);
+  clearing site data resets to System.
+- **Full-page screenshots** leave `content-visibility: auto` sections
+  blank below the fold. This is a capture artefact: the sections render
+  when scrolled to (verified).
+
+## OPEN — Occlusion fallback (12d)
+
+- **Coverage.** It adds a small number of hints: on 48 VAL items, 4/92
+  video frames and 3/24 images. About half of all frames still show no
+  heatmap, which is intentional when neither method passes its check.
+- **Latency.** It adds about 0.4 s per attempted frame on CPU (video
+  median 1.04 s vs 0.15 s), bounded by a 2.5 s budget.
+- **Faithfulness.** Occlusion maps measure the model's sensitivity to
+  blurring/flattening 32-px cells. That is still "where the score came
+  from", not where a manipulation is.
+
+---
+
 ## OPEN — Landing hero limits (12c)
 
 - **Phones.** The 3D hero waits for the first interaction; before
@@ -16,8 +47,8 @@ Format: one entry per issue. Mark resolved issues rather than deleting them.
 - **Hero frame cost.** The visible animated hero costs about 150 ms/s
   of main-thread time on the RTX 4050 laptop (144 fps, uncapped). It
   pauses offscreen and on hidden tabs.
-- **Abstract face.** The procedural head is intentionally abstract (a
-  sculpted sphere), not a realistic face model.
+- **Abstract face.** RESOLVED in 12d: the hero is now a realistic
+  MakeHuman CC0 head.
 
 ---
 

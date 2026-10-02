@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { isCoarsePointer, prefersReducedMotion } from "../lib/motion";
 import { subscribe } from "../lib/raf";
+import { resolveTheme, useTheme } from "../lib/theme";
 import { HeroFallback } from "./HeroFallback";
 
 type Mode = "poster" | "webgl" | "fallback";
@@ -14,6 +15,11 @@ export function HeroVisual() {
   const box = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
   const [mode, setMode] = useState<Mode>("poster");
+  const { theme } = useTheme();
+  // Live hooks into the running scene (set once it has booted) so theme changes never reload the model.
+  const live = useRef<{ setTheme: (t: "light" | "dark") => void } | null>(null);
+
+  useEffect(() => { live.current?.setTheme(theme); }, [theme]);
 
   useEffect(() => {
     const el = box.current, cv = canvas.current;
@@ -36,9 +42,10 @@ export function HeroVisual() {
       if (disposed) return;
       let scene: import("./heroScene").HeroScene;
       try {
-        scene = await mod.createHeroScene(cv, { mobile, interactive: !mobile && !reduced, context });
+        scene = await mod.createHeroScene(cv, { mobile, interactive: !mobile && !reduced, theme: resolveTheme(), context });
       } catch (e) {
-        el.dataset.fallbackReason = (e as Error)?.message === "software-renderer" ? "software-renderer" : "no-webgl";
+        const msg = (e as Error)?.message;
+        el.dataset.fallbackReason = msg === "software-renderer" || msg === "asset-unavailable" ? msg : "no-webgl";
         if (!disposed) setMode("fallback");
         return;
       }
@@ -49,6 +56,10 @@ export function HeroVisual() {
       el.dataset.dpr = String(scene.stats.dpr);
       el.dataset.geometryBytes = String(scene.stats.geometryBytes);
       el.dataset.triangles = String(scene.stats.triangles);
+      el.dataset.textureBytes = String(scene.stats.textureBytes);
+      el.dataset.assetBytes = String(scene.stats.assetBytes);
+      live.current = { setTheme: (t) => { scene.setTheme(t); if (reduced || !unsub) scene.render(0, 0); } };
+      scene.setTheme(resolveTheme());   // the theme may have changed while the scene was loading
       el.dataset.motion = reduced ? "static" : mobile ? "auto" : "interactive";
       let frames = 0, avg = 0;
       // Frame-time guard: on a GPU too weak for smooth animation, keep the composed frame and stop.
@@ -82,6 +93,7 @@ export function HeroVisual() {
       el.dataset.frames = "0";
       setMode("webgl");
       cleanup = () => {
+        live.current = null;
         run(false); io.disconnect(); ro.disconnect();
         section?.removeEventListener("pointermove", onMove);
         cv.removeEventListener("webglcontextlost", lost);
@@ -110,7 +122,7 @@ export function HeroVisual() {
   }, []);
 
   return (
-    <div ref={box} data-hero-mode={mode} aria-hidden="true" className="absolute inset-0">
+    <div ref={box} data-hero-mode={mode} aria-hidden="true" className="hero-fade absolute inset-0">
       <div className={`absolute inset-0 transition-opacity duration-700 ${mode === "webgl" ? "opacity-0" : "opacity-100"}`}>
         <HeroFallback animated={mode === "fallback"} />
       </div>

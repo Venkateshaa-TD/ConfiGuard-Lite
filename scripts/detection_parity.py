@@ -6,8 +6,9 @@ before and after a frontend/serving change.
     compare   do the same again and diff against the baseline (exit 1 on any difference)
 
 Compared fields: verdict, base_verdict, p_fake, confidence, gated, quality/uncertainty reasons,
-warnings, frames_used, stopping_reason, per-frame logits, explanation status/withheld frames,
-provenance status. Timings and request IDs are excluded.
+warnings, frames_used, stopping_reason, per-frame logits, provenance status (must be identical);
+explanation status/withheld frames are compared and reported separately. Timings and request IDs
+are excluded.
 
 Usage: .venv/Scripts/python.exe scripts/detection_parity.py {baseline|compare} [--videos 8]
 """
@@ -102,10 +103,19 @@ def main() -> int:
         print(json.dumps({k: [v["verdict"], v["frames_used"], v["provenance"]] for k, v in results.items()}, indent=1))
         return 0
     base_res = json.loads(path.read_text(encoding="utf-8"))
-    diffs = {k: {"before": base_res.get(k), "after": v} for k, v in results.items() if base_res.get(k) != v}
-    report = {"items": len(results), "identical": not diffs, "differences": diffs}
+
+    def decision(v: dict | None) -> dict | None:
+        return None if v is None else {k: x for k, x in v.items() if k != "explanation"}
+
+    # Decision fields must match exactly (exit 1 otherwise). Explanation availability is reported
+    # separately: it may legitimately change when the explanation layer changes (never the verdict).
+    diffs = {k: {"before": base_res.get(k), "after": v} for k, v in results.items() if decision(base_res.get(k)) != decision(v)}
+    ex_diffs = {k: {"before": (base_res.get(k) or {}).get("explanation"), "after": v.get("explanation")}
+                for k, v in results.items() if (base_res.get(k) or {}).get("explanation") != v.get("explanation")}
+    report = {"items": len(results), "identical": not diffs, "differences": diffs, "explanation_differences": ex_diffs}
     (out_dir / f"detection_parity_compare_{time.strftime('%Y%m%d-%H%M%S')}.json").write_text(json.dumps(report, indent=1))
-    print(json.dumps({"items": len(results), "identical": not diffs, "differing_items": list(diffs)}, indent=1))
+    print(json.dumps({"items": len(results), "identical": not diffs, "differing_items": list(diffs),
+                      "explanation_differences": ex_diffs}, indent=1))
     return 0 if not diffs else 1
 
 

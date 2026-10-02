@@ -227,7 +227,7 @@ class InferenceEngine:
         if explain:  # strictly after the verdict is final; never feeds back into it
             cancel.check()
             t = time.perf_counter()
-            result["explanation"] = self._explain(candidates, sign)
+            result["explanation"] = self._explain(candidates, sign, result["media_type"])
             timings["explanation_ms"] = round((time.perf_counter() - t) * 1000, 2)
         result["provenance"] = None
         if self.cfg.c2pa_enabled:  # separate signal; reads the upload, never touches the ML fields above
@@ -245,7 +245,7 @@ class InferenceEngine:
                     "notice": NOTICE, "trust_list": None, "sdk": None, "elapsed_ms": 0.0}
         return self.c2pa.verify(path, path.suffix, deadline_s=cancel.remaining())
 
-    def _explain(self, candidates: list[dict[str, Any]], sign: int) -> dict[str, Any]:
+    def _explain(self, candidates: list[dict[str, Any]], sign: int, media: str = "video") -> dict[str, Any]:
         if not self.cfg.allow_explanations:
             return {"status": "disabled", "label": LABEL, "reason": "explanations_disabled_on_server", "frames": []}
         if self.explainer is None:
@@ -253,7 +253,8 @@ class InferenceEngine:
         if not candidates:
             return {"status": "unavailable", "label": LABEL, "reason": "no_face_crops", "frames": []}
         logits = np.array([c.pop("production_logit") for c in candidates])
-        return self.explainer.explain(candidates, sign, logits)
+        return self.explainer.explain(candidates, sign, logits, fallback=self.cfg.explain_occlusion_fallback,
+                                      media=media)
 
     def _common(self, bundle: ModelBundle, media: str, verdict: Verdict, base: Verdict, p_fake: float | None,
                 quality: list[str], uncertainty: list[str], warnings: list[str], frames_used: int,

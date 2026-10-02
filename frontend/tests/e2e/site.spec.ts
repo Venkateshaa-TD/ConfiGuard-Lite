@@ -5,7 +5,7 @@ import { UPLOAD_TMP } from "../../playwright.config";
 import { MEDIA_INDEX } from "./global-setup";
 
 const media = (): Record<string, string> => JSON.parse(readFileSync(MEDIA_INDEX, "utf8"));
-const OUT = join(process.env.CONFIGUARD_OUTPUT_DIR ?? join(UPLOAD_TMP, ".."), "frontend_12c");
+const OUT = join(process.env.CONFIGUARD_OUTPUT_DIR ?? join(UPLOAD_TMP, ".."), "frontend_12d");
 const VERDICTS = /LIKELY REAL|LIKELY MANIPULATED|UNCERTAIN/;
 const RUN = new Date().toISOString().replace(/[:.]/g, "-");
 const shotDir = join(OUT, RUN);
@@ -24,7 +24,9 @@ async function clean(page: Page, w: { console: string[]; dialogs: string[] }, al
   expect(await page.evaluate(() => (window as unknown as { __csp: string[] }).__csp)).toEqual([]);
   expect(w.dialogs).toEqual([]);
   expect(w.console.filter((c) => !allowed.some((a) => a.test(c)))).toEqual([]);
-  expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+  // The only value the site may persist is the colour-theme preference.
+  expect(await page.evaluate(() => sessionStorage.length)).toBe(0);
+  expect(await page.evaluate(() => Object.keys(localStorage).filter((k) => k !== "cg-theme"))).toEqual([]);
 }
 async function shot(page: Page, name: string) {
   mkdirSync(shotDir, { recursive: true });
@@ -127,6 +129,8 @@ test("error flow, heatmaps and Content Credentials in the redesigned detector", 
 test("WebGL hero renders, pauses offscreen and stays idle on the detector", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   const w = await watch(page);
+  const headRequests: string[] = [];
+  page.on("request", (r) => { if (r.url().includes("/hero/head.glb")) headRequests.push(r.url()); });
   const cdp = await page.context().newCDPSession(page);
   await cdp.send("Performance.enable");
   await page.goto("/");
@@ -149,7 +153,20 @@ test("WebGL hero renders, pauses offscreen and stays idle on the detector", asyn
   const offscreenCpu = ((await taskMs(cdp)) - t1) / 5;
   expect(Number(await hero.getAttribute("data-frames"))).toBe(f3);   // paused offscreen
   const stats = { dpr: await hero.getAttribute("data-dpr"), geometryBytes: Number(await hero.getAttribute("data-geometry-bytes")),
+    textureBytes: Number(await hero.getAttribute("data-texture-bytes")), assetBytes: Number(await hero.getAttribute("data-asset-bytes")),
     triangles: Number(await hero.getAttribute("data-triangles")), fps: (f2 - f1) / 5 };
+  expect(stats.assetBytes).toBeGreaterThan(0);
+  expect(stats.assetBytes).toBeLessThanOrEqual(8 * 1024 * 1024);
+  // Theme changes restyle the running scene: same canvas, same context, no second model download.
+  await page.evaluate(() => window.scrollTo(0, 0));
+  const canvas = await page.locator("[data-hero-mode] canvas").elementHandle();
+  await page.getByRole("button", { name: "Dark theme" }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  await page.getByRole("button", { name: "Light theme" }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+  await expect(hero).toHaveAttribute("data-hero-mode", "webgl");
+  expect(await canvas!.evaluate((c) => c.isConnected)).toBe(true);
+  expect(headRequests).toHaveLength(1);
   await page.evaluate(() => window.scrollTo(0, 0));
   await page.getByRole("link", { name: /Get started/i }).click();
   await expect(page.getByRole("heading", { level: 1, name: "Media detector" })).toBeVisible();
@@ -158,7 +175,9 @@ test("WebGL hero renders, pauses offscreen and stays idle on the detector", asyn
   await page.waitForTimeout(5000);
   const detectCpu = ((await taskMs(cdp)) - t2) / 5;
   expect(await page.locator("canvas").count()).toBe(0);   // WebGL disposed with the landing page
-  const report = { hero: stats, idle_main_thread_ms_per_s: { landing_hero_visible: +visibleCpu.toFixed(1),
+  const marks = await page.evaluate(() => Object.fromEntries(performance.getEntriesByType("mark")
+    .filter((m) => m.name.startsWith("cg:hero")).map((m) => [m.name, Math.round(m.startTime)])));
+  const report = { hero: stats, marks, idle_main_thread_ms_per_s: { landing_hero_visible: +visibleCpu.toFixed(1),
     landing_hero_offscreen: +offscreenCpu.toFixed(1), detector: +detectCpu.toFixed(1) } };
   mkdirSync(OUT, { recursive: true });
   writeFileSync(join(OUT, "runtime_metrics.json"), JSON.stringify(report, null, 1));
@@ -185,32 +204,68 @@ test("static fallback when WebGL is unavailable @nowebgl", async ({ page }) => {
   await page.goto("/");
   await expect(page.locator("[data-hero-mode]")).toHaveAttribute("data-hero-mode", "fallback", { timeout: 10_000 });
   await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+  await expectPoster(page);
   await shot(page, "landing-1440-no-webgl");
   await clean(page, w);
 });
 
-test("layouts at 390, 820, 1440 and 1920 px", async ({ page }) => {
-  test.setTimeout(240_000);
+async function expectPoster(page: Page) {
+  // The fallback is the real head (a still render), not an abstract face: the visible poster must have loaded.
+  await expect.poll(() => page.locator("[data-hero-mode] img").evaluateAll((imgs) =>
+    imgs.filter((i) => getComputedStyle(i).display !== "none" && (i as HTMLImageElement).naturalWidth > 0).length)).toBe(1);
+  expect(await page.locator("canvas").evaluateAll((c) => c.filter((x) => getComputedStyle(x).opacity !== "0").length)).toBe(0);
+}
+
+test("software-renderer GPUs keep the static poster @swgl", async ({ page }) => {
+  const w = await watch(page);
+  await page.goto("/");
+  const hero = page.locator("[data-hero-mode]");
+  await expect(hero).toHaveAttribute("data-hero-mode", "fallback", { timeout: 15_000 });
+  await expect(hero).toHaveAttribute("data-fallback-reason", "software-renderer");
+  await expectPoster(page);
+  await clean(page, w, [/GPU stall due to ReadPixels/, /WebGL/]);
+});
+
+test("a missing 3D asset falls back to the poster", async ({ page }) => {
+  await page.route("**/hero/head.glb", (r) => r.fulfill({ status: 404, body: "" }));
+  const w = await watch(page);
+  await page.goto("/");
+  const hero = page.locator("[data-hero-mode]");
+  await expect(hero).toHaveAttribute("data-hero-mode", "fallback", { timeout: 15_000 });
+  await expect(hero).toHaveAttribute("data-fallback-reason", "asset-unavailable");
+  await expectPoster(page);
+  await clean(page, w, [/status of 404/]);
+});
+
+for (const theme of ["light", "dark"] as const) test(`layouts at 390, 820, 1440 and 1920 px (${theme} theme)`, async ({ page }) => {
+  test.setTimeout(300_000);
+  await page.emulateMedia({ colorScheme: theme });   // default preference is System
   const w = await watch(page);
   for (const width of [390, 820, 1440, 1920]) {
     await page.setViewportSize({ width, height: width < 800 ? 844 : 1000 });
     await page.goto("/");
+    await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
     if (width < 768) await page.mouse.wheel(0, 40);   // phones boot the 3D hero on first interaction
     await expect(page.locator("[data-hero-mode]")).toHaveAttribute("data-hero-mode", "webgl", { timeout: 15_000 });
+    if (width < 768) await page.evaluate(() => window.scrollTo(0, 0));
+    await page.waitForTimeout(1200);
+    mkdirSync(shotDir, { recursive: true });
+    await page.locator("[data-hero-mode]").screenshot({ path: join(shotDir, `hero-${width}-${theme}.png`) });
     await page.evaluate(async () => {   // trigger every scroll reveal before the full-page capture
       for (let y = 0; y < document.body.scrollHeight; y += 600) { window.scrollTo(0, y); await new Promise((r) => setTimeout(r, 40)); }
       window.scrollTo(0, 0);
     });
     await page.waitForTimeout(900);
-    await shot(page, `landing-${width}`);
+    await shot(page, `landing-${width}-${theme}`);
     await page.goto("/about");
-    await shot(page, `about-${width}`);
+    await shot(page, `about-${width}-${theme}`);
     await page.goto("/detect");
     await page.getByLabel(/Drop a file here/).setInputFiles(media().fake!);
     await page.getByLabel("Include visual evidence hints").check();
     await page.getByRole("button", { name: "Analyse" }).click();
     await expect(page.getByRole("heading", { name: "Result · video" })).toBeVisible();
-    await shot(page, `detect-${width}`);
+    expect(await page.locator("canvas").count()).toBe(0);   // the detector never creates a WebGL context
+    await shot(page, `detect-${width}-${theme}`);
   }
   console.log(`screenshots: ${shotDir}`);
   await clean(page, w);
@@ -228,5 +283,69 @@ test("phones show the poster first and boot the simplified 3D hero on first inte
   await page.mouse.wheel(0, 60);
   await expect(hero).toHaveAttribute("data-hero-mode", "webgl", { timeout: 15_000 });
   await expect(hero).toHaveAttribute("data-motion", "auto");
+  await clean(page, w);
+});
+
+test("theme: System default, live system changes, Light/Dark choice persists, keyboard operable", async ({ page }) => {
+  await page.emulateMedia({ colorScheme: "light" });
+  const w = await watch(page);
+  await page.goto("/");
+  const html = page.locator("html");
+  await expect(html).toHaveAttribute("data-theme", "light");
+  await expect(html).toHaveAttribute("data-theme-pref", "system");
+  const nav = page.getByRole("navigation", { name: "Main" });
+  await expect(nav.getByRole("button", { name: "System theme" })).toHaveAttribute("aria-pressed", "true");
+  await page.emulateMedia({ colorScheme: "dark" });   // operating-system change while the page is open
+  await expect(html).toHaveAttribute("data-theme", "dark");
+  expect(await page.evaluate(() => localStorage.length)).toBe(0);   // nothing stored until the visitor chooses
+  const bg = () => page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+  expect(await bg()).not.toBe("rgb(0, 0, 0)");   // deep blue-black, never pure black
+
+  await nav.getByRole("button", { name: "Light theme" }).focus();   // keyboard: Enter / Space toggle
+  await page.keyboard.press("Enter");
+  await expect(html).toHaveAttribute("data-theme", "light");
+  await expect(nav.getByRole("button", { name: "Light theme" })).toHaveAttribute("aria-pressed", "true");
+  expect(await page.evaluate(() => ({ ...localStorage }))).toEqual({ "cg-theme": "light" });
+  await page.reload();
+  await expect(html).toHaveAttribute("data-theme", "light");   // persisted over a dark system setting
+
+  await page.goto("/detect");
+  await expect(html).toHaveAttribute("data-theme", "light");
+  const settings = page.getByRole("group", { name: "Appearance: colour theme" });
+  await expect(settings.getByRole("button", { name: "Light" })).toHaveAttribute("aria-pressed", "true");
+  await settings.getByRole("button", { name: "Dark" }).focus();
+  await page.keyboard.press("Space");
+  await expect(html).toHaveAttribute("data-theme", "dark");
+  await settings.getByRole("button", { name: "System" }).click();
+  await expect(html).toHaveAttribute("data-theme-pref", "system");
+  await page.emulateMedia({ colorScheme: "light" });
+  await expect(html).toHaveAttribute("data-theme", "light");
+  expect(await page.evaluate(() => ({ ...localStorage }))).toEqual({ "cg-theme": "system" });
+  await clean(page, w);
+});
+
+test("theme: no flash - the saved theme applies before the app bundle runs", async ({ page }) => {
+  await page.emulateMedia({ colorScheme: "light" });
+  await page.addInitScript(() => { try { localStorage.setItem("cg-theme", "dark"); } catch { /* opaque origin */ } });
+  // Block the application bundle: only the HTML shell and the external theme-init.js remain.
+  await page.route(/\/assets\/.*\.js$/, (r) => r.abort());
+  await page.goto("/");
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  const shell = await page.evaluate(() => getComputedStyle(document.querySelector("#root > div")!).backgroundColor);
+  expect(shell).toBe("rgb(11, 17, 23)");   // dark paper token, painted without React
+  const firstPaint = await page.evaluate(() => performance.getEntriesByName("first-paint")[0]?.startTime ?? -1);
+  expect(firstPaint).toBeGreaterThan(0);
+});
+
+test("theme: the 3D hero and its poster follow the theme", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.emulateMedia({ colorScheme: "dark" });
+  const w = await watch(page);
+  await page.goto("/");
+  const visiblePoster = () => page.locator("[data-hero-mode] img").evaluateAll((imgs) =>
+    imgs.filter((i) => getComputedStyle(i).display !== "none").map((i) => (i as HTMLImageElement).src.split("/").pop()));
+  expect(await visiblePoster()).toEqual(["poster-dark.webp"]);
+  await page.getByRole("button", { name: "Light theme" }).click();
+  expect(await visiblePoster()).toEqual(["poster-light.webp"]);
   await clean(page, w);
 });

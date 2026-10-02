@@ -39,6 +39,23 @@ class Faithfulness(BaseModel):
     random_sets: int
 
 
+class OcclusionCheck(BaseModel):
+    passed: bool
+    skipped: str | None = None
+    rank_agreement: float | None = None
+    min_rank_agreement: float | None = None
+    evidence_drop_top_cells: float | None = None
+    evidence_drop_random_max: float | None = None
+    top_cells: int | None = None
+    random_sets: int | None = None
+
+
+class MethodCounts(BaseModel):
+    gradcam: int
+    occlusion: int
+    none: int
+
+
 class EvidenceFrame(BaseModel):
     slot: int | None = None
     frame_index: int
@@ -49,6 +66,9 @@ class EvidenceFrame(BaseModel):
     crop_jpeg_b64: str = Field(description="The aligned 224x224 face crop the model scored (JPEG, base64)")
     heatmap_jpeg_b64: str | None = Field(None, description="Crop with the evidence hint overlaid; absent when withheld")
     cells: list[list[float]] | None = Field(None, description="7x7 normalised evidence grid; absent when withheld")
+    method: Literal["gradcam", "occlusion"] | None = Field(None, description="Method that produced the heatmap (None: no heatmap)")
+    label: str | None = Field(None, description="Label shown with this frame's heatmap")
+    occlusion_check: OcclusionCheck | None = Field(None, description="Present when the occlusion fallback was attempted")
 
 
 class Explanation(BaseModel):
@@ -57,6 +77,9 @@ class Explanation(BaseModel):
     method: str | None = None
     direction: Literal["toward_manipulated", "toward_real"] | None = None
     withheld_frames: int | None = None
+    fallback_method: str | None = None
+    fallback_label: str | None = None
+    method_counts: MethodCounts | None = None
     reason: str | None = None
     frames: list[EvidenceFrame] = []
 

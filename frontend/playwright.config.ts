@@ -20,7 +20,9 @@ export default defineConfig({
   globalTeardown: "./tests/e2e/global-teardown.ts",
   use: { baseURL: `http://127.0.0.1:${PORT}`, channel: "chrome", headless: true, trace: "off" },
   projects: [
-    { name: "chrome", grepInvert: /@nowebgl/ },
+    { name: "chrome", grepInvert: /@nowebgl|@swgl/ },
+    // Software rasteriser (SwiftShader): the hero must refuse continuous 3D and keep the poster.
+    { name: "chrome-swiftshader", grep: /@swgl/, use: { launchOptions: { args: ["--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--disable-gpu"] } } },
     // Same browser with WebGL disabled: the hero must fall back to its static composition.
     { name: "chrome-no-webgl", grep: /@nowebgl/, use: { launchOptions: { args: ["--disable-webgl", "--disable-3d-apis"] } } },
   ],

@@ -35,7 +35,9 @@ async function clean(page: Page, w: Watch, allowed: RegExp[] = []) {
   expect(await page.evaluate(() => (window as unknown as { __csp: string[] }).__csp)).toEqual([]);
   expect(w.dialogs).toEqual([]);
   expect(w.console.filter((c) => !allowed.some((a) => a.test(c)))).toEqual([]);
-  expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+  // The only value the site may persist is the colour-theme preference.
+  expect(await page.evaluate(() => sessionStorage.length)).toBe(0);
+  expect(await page.evaluate(() => Object.keys(localStorage).filter((k) => k !== "cg-theme"))).toEqual([]);
 }
 
 test("image: verdict, experimental label, not-legal-proof notice and credentials", async ({ page }) => {
@@ -105,7 +107,7 @@ test("reduced motion and keyboard order", async ({ page }) => {
   const duration = await page.locator("button.tactile").first().evaluate((b) => getComputedStyle(b).transitionDuration);
   expect(parseFloat(duration)).toBeLessThan(0.01);
   const order: string[] = [];
-  for (let i = 0; i < 8; i++) {
+  for (let i = 0; i < 16; i++) {   // header (incl. 3 theme buttons) then the upload controls
     await page.keyboard.press("Tab");
     order.push(await page.evaluate(() => {
       const el = document.activeElement as HTMLElement;

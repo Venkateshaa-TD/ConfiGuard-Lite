@@ -94,6 +94,14 @@ somewhat blurrier than their matched reals (a genuine artifact).
   hints are withheld.
 - **What they show:** they indicate where the model's score came from
   on a coarse 7×7 grid, not where a manipulation is.
+- **Occlusion fallback (12d):** when a Grad-CAM hint is withheld, up
+  to 1 image / 2 video frames may get an occlusion-sensitivity hint
+  instead.
+  - Labelled "Occlusion evidence hint — not proof".
+  - Has its own stability check; if both methods fail, no heatmap is
+    shown.
+  - Explanation-only: decisions were verified byte-identical with it
+    on and off.
 
 ## Serving (Phase 10)
 

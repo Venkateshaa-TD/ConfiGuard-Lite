@@ -41,6 +41,9 @@ export interface EvidenceFrame {
   faithfulness: { passed: boolean; evidence_drop_top_cells: number; evidence_drop_random_max: number };
   crop_jpeg_b64: string;
   heatmap_jpeg_b64?: string | null;
+  method?: "gradcam" | "occlusion" | null;
+  label?: string | null;
+  occlusion_check?: { passed: boolean; skipped?: string | null; rank_agreement?: number | null } | null;
 }
 
 export interface Explanation {
@@ -48,6 +51,8 @@ export interface Explanation {
   label: string;
   direction?: "toward_manipulated" | "toward_real" | null;
   withheld_frames?: number | null;
+  fallback_label?: string | null;
+  method_counts?: { gradcam: number; occlusion: number; none: number } | null;
   reason?: string | null;
   frames: EvidenceFrame[];
 }

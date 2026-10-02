@@ -2492,3 +2492,88 @@ Screenshots (390 / 820 / 1440 / 1920 px for `/`, `/about`, `/detect` with a resu
 cd frontend && npx vitest run && npx playwright test   # 58 passed; 17 passed
 .venv/Scripts/python.exe -m pytest -q -p no:cacheprovider -rs   # 659 passed, 0 skipped, 263.12 s
 ```
+
+## 2026-10-02 — 12d hero asset, themes and explanation fallback
+
+Hero asset (inputs in `D:/ConfiGuard-Data/cache/makehuman/`, never committed):
+
+```
+.venv/Scripts/python.exe scripts/build_hero_head.py --src D:/ConfiGuard-Data/cache/makehuman --out frontend/public/hero/head.glb
+#   head faces 4376, atlas 5 islands at 0.740x, 1,643,008 bytes, 13,716 triangles
+#   sha256 85e6942d93753435bbb93c9c2852e5286dc75c79325e0953d4035485bd6b8bea
+node frontend/scripts/render-hero-posters.mjs http://127.0.0.1:8791   # poster-light.webp 44,004 B, poster-dark.webp 43,948 B
+```
+
+Visual inspection: these were rendered and viewed by eye.
+- An isolated viewer: front, three-quarter and profile views.
+- The live hero at 390/820/1440/1920 px in both themes.
+
+Rejected or corrected iterations:
+- **v1:** blank white eyes. The cornea shell maps to a transparent texture
+  dot; the shell was dropped.
+- **Hero v1:** one eye bulged when the gaze rotated.
+  `computeBoundingBox()` ignores the index, so both split eyes pivoted
+  at x = 0. Fixed with per-eye bounds; a sphere fit confirmed the centre
+  (0.0293, 0.0002, 0.0248) m, r = 0.0151.
+- **ACES tone mapping** desaturated the cyan lines; lines and points now
+  have `toneMapped=false`.
+
+Explanation availability and latency (official FF++ VAL, 24 videos + 24 frame images, CPU, never test):
+
+```
+.venv/Scripts/python.exe scripts/explanation_eval.py --videos 24 --images 24
+```
+
+| mode | video frames Grad-CAM / occlusion / none | image frames Grad-CAM / occlusion / none | video items with any heatmap | image items with any heatmap | explanation ms median (p95) video | image |
+|---|---|---|---|---|---|---|
+| Grad-CAM only | 39 / 0 / 53 | 9 / 0 / 15 | 16/24 | 9/24 | 148 (186) | 63 (76) |
+| + occlusion fallback | 39 / 4 / 49 | 9 / 3 / 12 | 16/24 | 12/24 | 1,038 (1,310) | 479 (726) |
+
+- Decision fields were byte-identical across disabled / Grad-CAM-only /
+  fallback for all 48 items.
+- Output: `D:\ConfiGuard-Data\outputs\explanation_eval\explanation_eval_20261002-153512.json`.
+
+Detection parity vs. the pre-12d baseline:
+
+```
+.venv/Scripts/python.exe scripts/detection_parity.py compare
+#   15 items, identical: true
+#   explanation_differences: video_explain 895_915.mp4 withheld -> ok (fallback)
+```
+
+Lighthouse, both themes (`node frontend/scripts/lighthouse.mjs`; prefers-color-scheme forced per Chrome instance; final
+screenshots checked):
+
+| run | perf / a11y / BP / SEO | LCP | TBT | CLS |
+|---|---|---|---|---|
+| `/` mobile light | 97 / 100 / 100 / 100 | 2.42 s | 17 ms | 0 |
+| `/` desktop light | 100 / 100 / 100 / 100 | 0.52 s | 73 ms | 0 |
+| `/detect` mobile light | 99 / 100 / 100 / 100 | 2.17 s | 7 ms | 0.006 |
+| `/detect` desktop light | 100 / 100 / 100 / 100 | 0.63 s | 0 ms | 0.001 |
+| `/` mobile dark | 98 / 100 / 100 / 100 | 2.25 s | 34 ms | 0 |
+| `/` desktop dark | 97 / 100 / 100 / 100 | 0.72 s | 136 ms | 0 |
+| `/detect` mobile dark | 97 / 100 / 100 / 100 | 2.42 s | 2 ms | 0 |
+| `/detect` desktop dark | 100 / 100 / 100 / 100 | 0.61 s | 0 ms | 0.001 |
+
+Hero runtime (Playwright, 1440 × 900, DPR 1):
+- **Asset:** 1,643,008 B.
+- **GPU textures:** 19,573,419 B estimated (RGBA8 + mip chain).
+- **Geometry:** 656,584 B; 23,528 triangles drawn.
+- **Frame rate:** 144 fps.
+- **Main thread:** 210–229 ms/s visible; 3 ms/s offscreen; 0.2 ms/s on
+  `/detect`.
+- **Marks:** import 409 ms, ready 788 ms, first frame 876 ms after
+  navigation start.
+- **Theme switch:** reuses the same canvas, with one `head.glb` request.
+
+Screenshots: `%TEMP%\frontend_12d\2026-10-02T10-12-10-563Z\` (landing / about / detect at 390, 820, 1440, 1920 px,
+light and dark, plus hero crops; not committed).
+
+## 2026-10-02 — 12d tests
+
+```
+cd frontend && npx vitest run            # 70 passed
+cd frontend && npx playwright test       # 23 passed (chrome, chrome-swiftshader, chrome-no-webgl)
+cd frontend && node scripts/size-report.mjs   # landing 93.1 KB gzip, ok
+.venv/Scripts/python.exe -m pytest -q -p no:cacheprovider   # 665 passed, 322.43 s
+```
