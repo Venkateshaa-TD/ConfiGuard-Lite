@@ -24,6 +24,7 @@
 | 10 | Production inference API/service | PASS | 2026-10-02 |
 | 11 | Explainability and lightweight web UI | PASS | 2026-10-02 |
 | 12 | C2PA provenance verification | PASS | 2026-10-02 |
+| 12b | React production frontend upgrade | PASS | 2026-10-02 |
 
 Full per-phase results are recorded below as they complete.
 
@@ -1235,3 +1236,65 @@ official CAI SDK.
 **Open items:** TSA list cached but not wired as a separate SDK anchor
 set; no real-world trusted-signer sample tested; Windows-only wheel
 hash pinned (`docs/KNOWN_ISSUES.md`).
+
+---
+
+## 12b — React production frontend upgrade
+
+**Status:** PASS
+
+**Summary:** `frontend/` (React 19.3, TypeScript 7.0, Vite 8.3,
+Tailwind 4.3, exact pins + lockfile, `ignore-scripts`) replaces the
+plain UI.
+- **Serving:** FastAPI serves the production build same-origin from
+  `frontend/dist`, falling back to the Phase 11 UI when no build exists.
+- **Design:** visual direction follows the installed
+  `design-taste-frontend-v1` skill at variance 5 / motion 3 / density 7.
+  Project security and accessibility rules took priority (see DECISIONS).
+- **Unchanged:** model, calibration, quality gate, C2PA logic and API
+  verdicts.
+
+**Requirements:**
+1. Inspected the API, schemas, CSP and the existing UI first. **Met.**
+2. React + TypeScript + Vite with exact pins and a lockfile. **Met.**
+3. No model / calibration / gate / C2PA / verdict changes. Backend
+   changes: dist serving, CSP font/blob sources, gzip, cache headers,
+   two read-only timeout fields in `/v1/limits`. **Met.**
+4. Drag/drop, preview (object URLs revoked), real XHR upload progress,
+   honest analysing state (elapsed time, no fake percentage). **Met.**
+5. Verdict, confidence, warnings/reasons, frames used, timeline,
+   heatmaps, C2PA and processing time. **Met.**
+6. Three verdicts distinct by text, icon and colour. **Met.**
+7. Images marked experimental; "Not legal proof" in the header, result
+   and footer. **Met.**
+8. Custom SVG charts; no CDN, trackers or UI libraries (React, Phosphor
+   icons and self-hosted Geist only). **Met.**
+9. Hover/active feedback only; `prefers-reduced-motion` honoured
+   (E2E-verified). **Met.**
+10. API key held only in React state (unit test: no `Storage.setItem`;
+    E2E: storage empty). **Met.**
+11. Cancel (xhr.abort), client timeout = server upload + request
+    timeouts + 15 s, error boundary, `role=alert` errors with request
+    ID. **Met.**
+12. CSP preserved (no inline code; only `font-src 'self'` and `blob:`
+    previews added). React text rendering only; base64 payloads
+    validated; client checks mirror server limits; server cleanup
+    unchanged (E2E: temp dir empty). **Met.**
+13. Same-origin production build served by FastAPI. **Met.**
+14. 49 component / accessibility (axe) / malicious-input / client unit
+    tests and 8 real-browser Playwright E2E tests (installed Chrome 154,
+    real server and model). **Met.**
+15. Initial JS 89.2 KB gzip (< 250). Lighthouse mobile 99 / 100 / 100 /
+    100, desktop 100 / 100 / 100 / 100. **Met.**
+16. Mobile 390, tablet 820 and desktop 1440 screenshots, no horizontal
+    scroll. **Met.**
+17. Frontend tests and one full backend suite. **Met.**
+18. Documentation and commit. **Met.**
+19. No FF++ test, retraining, Docker or new phase. **Met.**
+
+**Found and fixed during verification:**
+- mobile chart text scaled down with the SVG;
+- metric columns ran together;
+- UNCERTAIN evidence copy implied a decision;
+- mobile CLS 0.162 from late limits text and a font swap → 0.009;
+- assets served uncompressed (mobile performance 82 → 99 after gzip).

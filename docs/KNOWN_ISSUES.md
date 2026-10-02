@@ -4,6 +4,27 @@ Format: one entry per issue. Mark resolved issues rather than deleting them.
 
 ---
 
+## OPEN — React frontend limits
+
+- **Cancellation is client-side.** The server finishes an analysis
+  already in progress and then discards it; temp files are still
+  deleted.
+- **Build step required.** `frontend/dist` is not committed: run
+  `npm ci && npm run build` before serving. Without a build the server
+  falls back to the Phase 11 UI. The build is served from the repo
+  path, not packaged into the Python wheel.
+- **Fonts.** With `font-display: optional`, a slow first visit may stay
+  on the system font until the next load (intentional: no layout
+  shift).
+- **Lighthouse scope.** Measured on localhost against the empty upload
+  screen (the result views need a real upload). Accessibility of result
+  states is covered by axe unit tests and the Playwright run, not
+  audited with a screen reader.
+- **TypeScript 7.0.2** is the new native compiler. If it misbehaves,
+  pin a 5.x/6.x compiler.
+
+---
+
 ## OPEN — C2PA verification limits (Phase 12)
 
 - **TSA anchors.** The official TSA trust list is cached and pinned

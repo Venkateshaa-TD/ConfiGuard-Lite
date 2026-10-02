@@ -2396,3 +2396,47 @@ Reports: `D:\ConfiGuard-Data\outputs\service_bench\c2pa_bench_20261002-102751.js
 .venv/Scripts/python.exe -m pytest tests/service tests/provenance tests/quality -q -p no:cacheprovider   # 92 passed (15 provenance + 3 provenance API)
 .venv/Scripts/python.exe -m pytest -q -p no:cacheprovider -rs                                          # 655 passed, 0 skipped, 258.39 s
 ```
+
+## 2026-10-02 — React production frontend
+
+```
+cd frontend
+npm install                      # 233 packages, 0 vulnerabilities, install scripts disabled
+npm run build                    # tsc --noEmit + vite build
+node scripts/size-report.mjs     # initial JS 89.2 KB gzip (level 9; Vite reports 92.4), CSS 5.7 KB
+npx vitest run                   # 49 passed (component, axe accessibility, malicious input, client, app flow, source scan)
+npx playwright test              # 8 passed (installed Chrome, real FastAPI + model, val media only)
+node scripts/lighthouse.mjs      # real server, installed Chrome
+```
+
+Lighthouse (performance / accessibility / best practices / SEO; FCP, LCP, TBT, CLS):
+
+| run | mobile | desktop |
+|---|---|---|
+| first build | 82 / 100 / 100 / 100; 2.79 s, 3.10 s, 19 ms, 0.162 | 100 / 100 / 100 / 100 |
+| + reserved text space, `font-display: optional`, static shell | 89; 2.79 s, 3.10 s, 29 ms, 0.009 | 100 ×4 |
+| + gzip responses (final) | **99 / 100 / 100 / 100; 1.61 s, 1.93 s, 25 ms, 0.009** | **100 ×4; 0.39 s, 0.44 s, 0 ms, 0** |
+
+E2E (real browser; no CSP violations, no unexpected console errors, no dialogs, browser storage empty):
+
+- **image:** verdict + experimental + not-legal-proof + "No Content
+  Credentials";
+- **video with hints:** timeline SVG, 1–4 evidence frames, frames used;
+- **test-signed image:** "Credentials valid — unknown signer";
+- **corrupt MP4:** `role=alert` "could not be decoded";
+- **hostile filename** (`<img src=x onerror=…><script>…`): shown as
+  text, 0 injected nodes;
+- **cancel:** "Analysis cancelled.", server upload dir empty;
+- **reduced motion:** transition ≈ 0; tab order skip link → file input →
+  checkbox;
+- **layouts:** 390 / 820 / 1440 px with no horizontal scroll.
+
+Screenshots: `D:\ConfiGuard-Data\outputs\frontend_e2e\2026-10-02T06-19-49-400Z\`;
+Lighthouse: `D:\ConfiGuard-Data\outputs\frontend_lighthouse\lighthouse_2026-10-02T06-17-28-613Z.json`.
+
+## 2026-10-02 — 12b tests
+
+```
+cd frontend && npx vitest run && npx playwright test        # 49 passed; 8 passed
+.venv/Scripts/python.exe -m pytest -q -p no:cacheprovider -rs   # 658 passed, 0 skipped, 318.51 s
+```

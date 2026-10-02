@@ -523,3 +523,24 @@ All notable changes to this project are documented here.
 - Added cost: P50 1.4–8.3 ms; ML outputs identical on vs off.
 - 18 new tests; full suite 655/655 (258 s). No signing in the service, no
   Docker/cloud, no FF++ test access.
+
+### 12b — React production frontend (2026-10-02)
+
+- Added `frontend/`: React 19 + TypeScript + Vite + Tailwind v4
+  (exact pins, lockfile, install scripts disabled).
+  - Drag/drop + preview, real upload progress, honest analysing state,
+    cancel/timeout, error boundary.
+  - Verdict / confidence / reasons / frames / timeline (custom SVG) /
+    evidence heatmaps / Content Credentials / processing time.
+  - Experimental image label and "not legal proof" notices.
+- Backend serves `frontend/dist` same-origin (static Phase 11 UI as
+  fallback).
+  - CSP adds only `font-src 'self'` and `blob:` previews.
+  - gzip responses; immutable hashed assets.
+  - `/v1/limits` exposes the upload/request timeouts.
+- Tests: 49 Vitest (incl. axe, malicious input), 8 Playwright real-browser
+  E2E, 3 backend serving tests.
+- Initial JS 89.2 KB gzip. Lighthouse mobile 99/100/100/100, desktop
+  100×4.
+- Full backend suite 658/658 (319 s). No model/calibration/gate/C2PA/verdict
+  changes, no Docker, no FF++ test access.

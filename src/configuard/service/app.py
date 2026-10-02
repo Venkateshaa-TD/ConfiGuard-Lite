@@ -29,6 +29,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.security import APIKeyHeader
 from starlette.exceptions import HTTPException as StarletteHTTPException
+from starlette.middleware.gzip import GZipMiddleware
 from starlette.staticfiles import StaticFiles
 
 from configuard.service.config import ServiceConfig, hash_api_key
@@ -54,7 +55,8 @@ _VALIDATION_HTTP = {
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 # Strict CSP for the UI and the API: same-origin scripts/styles only, images from self or data: URIs
 # (evidence frames are returned inline), no framing, no plugins, no inline script.
-CSP = ("default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; "
+CSP = ("default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; "
+       "font-src 'self'; connect-src 'self'; "
        "form-action 'none'; base-uri 'none'; frame-ancestors 'none'; object-src 'none'")
 SECURITY_HEADERS = {
     "X-Content-Type-Options": "nosniff", "X-Frame-Options": "DENY", "Referrer-Policy": "no-referrer",
@@ -119,6 +121,8 @@ def create_app(cfg: ServiceConfig, engine: InferenceEngine | None = None) -> Fas
                   description="Deepfake image/video analysis: ONNX FP32 student, adaptive 4/8/16 frames, "
                               "calibrated three-way verdict and a downgrade-only media-quality gate.")
     app.state.engine, app.state.cfg, app.state.temp_root, app.state.admission = engine, cfg, temp_root, admission
+    # Compress text responses (UI assets, JSON). Responses never echo secrets, so compression leaks nothing.
+    app.add_middleware(GZipMiddleware, minimum_size=1024, compresslevel=6)
 
     @app.middleware("http")
     async def request_context(request: Request, call_next):
@@ -136,8 +140,10 @@ def create_app(cfg: ServiceConfig, engine: InferenceEngine | None = None) -> Fas
             response.headers.setdefault(k, v)
         if request.url.path not in ("/docs", "/docs/oauth2-redirect"):  # FastAPI's dev-only Swagger page loads a CDN
             response.headers["Content-Security-Policy"] = CSP
-        if not request.url.path.startswith("/static/"):
-            response.headers["Cache-Control"] = "no-store"  # results and evidence frames are never cached
+        if request.url.path.startswith("/assets/") and response.status_code == 200:
+            response.headers["Cache-Control"] = "public, max-age=31536000, immutable"  # content-hashed build files
+        elif not request.url.path.startswith("/static/"):
+            response.headers["Cache-Control"] = "no-store"  # results, evidence frames and index.html are never cached
         log_event("request", method=request.method, route=request.url.path, status=response.status_code,
                   duration_ms=round((time.perf_counter() - t0) * 1000, 1))
         request_id_var.reset(token)
@@ -172,7 +178,20 @@ def create_app(cfg: ServiceConfig, engine: InferenceEngine | None = None) -> Fas
         if not ok:
             raise ApiError(401, "unauthorized", "A valid X-API-Key header is required.", {"WWW-Authenticate": "ApiKey"})
 
-    if cfg.ui_enabled:
+    dist = Path(cfg.ui_dist_dir) if cfg.ui_dist_dir else None
+    react = cfg.ui_enabled and dist is not None and (dist / "index.html").is_file()
+    app.state.ui = "react" if react else ("static" if cfg.ui_enabled else "off")
+    if react:  # production React build (frontend/dist), same origin as the API
+        app.mount("/assets", StaticFiles(directory=dist / "assets", html=False), name="assets")
+
+        @app.get("/", include_in_schema=False)
+        async def ui_index():
+            return FileResponse(dist / "index.html", media_type="text/html")
+
+        @app.get("/favicon.svg", include_in_schema=False)
+        async def ui_favicon():
+            return FileResponse(dist / "favicon.svg", media_type="image/svg+xml")
+    elif cfg.ui_enabled:  # Phase 11 plain HTML/JS UI
         app.mount("/static", StaticFiles(directory=STATIC_DIR, html=False), name="static")
 
         @app.get("/", include_in_schema=False)
@@ -187,6 +206,7 @@ def create_app(cfg: ServiceConfig, engine: InferenceEngine | None = None) -> Fas
                 "image_extensions": list(lim.allowed_image_extensions), "video_extensions": list(lim.allowed_video_extensions),
                 "auth_required": cfg.require_api_key, "explanations_available": engine.explainer is not None,
                 "content_credentials_available": engine.c2pa is not None,
+                "upload_timeout_seconds": cfg.upload_timeout_s, "request_timeout_seconds": cfg.request_timeout_s,
                 "image_analysis_experimental": True}
 
     @app.get("/health/live", response_model=LiveResponse, tags=["health"], summary="Liveness probe")

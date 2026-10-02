@@ -4,6 +4,53 @@ Format: one entry per decision, newest first.
 
 ---
 
+## 2026-10-02 — React production frontend
+
+- **Stack:** React 19 + TypeScript + Vite + Tailwind v4 (build-time
+  only). Exact versions + `package-lock.json`.
+  - `.npmrc` `ignore-scripts=true`: no package install scripts run.
+    Native toolchain binaries come from optionalDependencies.
+  - Playwright drives the installed Chrome (`channel: chrome`), so no
+    browser download.
+- **Serving:** the build is static and served by FastAPI from
+  `frontend/dist` (`CONFIGUARD_UI_DIST` overrides). The API stays same
+  origin, so CORS and cookies are not needed.
+  - Hashed `/assets/*` are `immutable`; `index.html` and API responses
+    are `no-store`.
+  - With no build, the Phase 11 plain UI is served.
+  - Node is needed only to build, not to serve.
+- **CSP stays strict.** The only additions are `font-src 'self'`
+  (self-hosted fonts) and `blob:` for `img-src` / `media-src` (local
+  preview of the selected file via object URLs, revoked on change).
+  React sets the one dynamic style (progress `scaleX`) through the
+  CSSOM, which the CSP allows. There is no inline script or style.
+- **gzip (`GZipMiddleware`, ≥ 1 KB):** without it the 322 KB raw bundle
+  dominated mobile load time. API responses never reflect secrets, so
+  compression creates no BREACH-style oracle.
+- **Honest progress:** the upload percentage comes from XHR events.
+  After upload, only elapsed time and the server-side steps are shown;
+  the server reports no percentage, so none is invented.
+- **Cancellation is client-side.** It aborts the request. An analysis
+  already running on the server completes, its result is discarded,
+  and its temp files are deleted as usual.
+- **Fonts:** Geist / Geist Mono (OFL-1.1), self-hosted, Latin subsets
+  only, `font-display: optional` (no layout shift on slow first loads).
+- **Skill use:** `design-taste-frontend-v1` was read in full and applied
+  for visual design only, at the requested dials (variance 5, motion 3,
+  density 7).
+  - **Kept:** zinc neutrals, one desaturated accent, no purple/glows/pure
+    black/emoji; Geist fonts; Phosphor icons; left-aligned offset
+    layout with a one-column mobile fallback; monospace numbers;
+    skeleton/empty/error states; labels above inputs; `min-h-[100dvh]`.
+  - **Overridden by project rules or the request:** no Framer Motion and
+    no perpetual animation (motion 3, not flashy, reduced motion); no
+    external images or font CDNs (CSP); no Next.js server components
+    (Vite requested); no "Bento motion engine".
+  - The skill files (`.agents/`, `skills-lock.json`) are left untracked
+    pending the user's decision.
+
+---
+
 ## 2026-10-02 — Phase 12: C2PA verification design
 
 - **SDK:** the official CAI `c2pa-python` 0.38.0 (Adobe/contentauth;

@@ -373,6 +373,25 @@ QUALITY_DEPENDENT_VERDICT).
 .venv\Scripts\python.exe scripts\quality_gate_v2.py quantiles   # then: cases, fit, bench, verify, confirm-val (once)
 ```
 
+## Web frontend (React)
+
+The production UI is a React + TypeScript app in `frontend/`. FastAPI serves its build at `/` (same origin as the API).
+
+```powershell
+cd frontend
+npm ci                      # exact, locked versions; install scripts disabled (.npmrc)
+npm run build               # type-check + production build into frontend/dist
+cd ..
+.venv\Scripts\python.exe scripts\serve.py --env development   # open http://127.0.0.1:8000/
+```
+
+Development with hot reload: run `scripts\serve.py` on port 8000, then `npm run dev` in `frontend/` (http://127.0.0.1:5173, API proxied).
+
+Tests:
+- `npm test`: unit, accessibility and malicious-input tests.
+- `npm run e2e`: real-browser tests with the installed Chrome. Requires a build.
+- `node scripts/lighthouse.mjs`: Lighthouse audit.
+
 ## Inference API (Phase 10)
 
 ```powershell

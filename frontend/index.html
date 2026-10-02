@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="referrer" content="no-referrer" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="description" content="ConfiGuard-Lite: deepfake image and video analysis with calibrated, uncertainty-aware verdicts." />
+    <title>ConfiGuard-Lite — media analysis</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <script type="module" src="/src/main.tsx"></script>
+  </head>
+  <body>
+    <noscript>This tool needs JavaScript. The API remains available at /v1/analyze.</noscript>
+    <div id="root">
+      <div class="flex min-h-[100dvh] flex-col">
+        <header class="border-b border-line bg-surface">
+          <div class="mx-auto flex max-w-[1400px] flex-wrap items-center justify-between gap-3 px-4 py-3 md:px-8">
+            <div class="flex items-center gap-3">
+              <span class="block size-[26px]"></span>
+              <div>
+                <p class="text-[17px] font-semibold leading-tight tracking-tight">ConfiGuard-Lite</p>
+                <p class="text-xs text-muted">Face-manipulation analysis · development build</p>
+              </div>
+            </div>
+            <p class="rounded-md border border-line-strong px-2.5 py-1 text-xs font-medium text-ink-2">Not legal proof. Automated estimate evaluated on research data only.</p>
+          </div>
+        </header>
+        <main class="mx-auto grid w-full max-w-[1400px] flex-1 items-start gap-6 px-4 py-6 md:px-8 lg:grid-cols-[minmax(320px,400px)_minmax(0,1fr)]">
+          <div class="h-[460px] rounded-xl border border-line bg-surface"></div>
+          <div class="h-48 rounded-xl border border-dashed border-line-strong"></div>
+        </main>
+      </div>
+    </div>
+  </body>
+</html>

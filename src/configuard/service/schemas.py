@@ -107,6 +107,8 @@ class LimitsResponse(BaseModel):
     auth_required: bool
     explanations_available: bool
     content_credentials_available: bool
+    upload_timeout_seconds: float
+    request_timeout_seconds: float
     image_analysis_experimental: bool
 
 

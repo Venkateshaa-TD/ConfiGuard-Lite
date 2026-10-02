@@ -38,6 +38,7 @@ class ServiceConfig:
     allow_explanations: bool = False  # off on the server by default; also opt-in per request
     docs_enabled: bool = True
     ui_enabled: bool = True
+    ui_dist_dir: Path | None = None  # React build (frontend/dist); falls back to the Phase 11 static UI if absent
     c2pa_enabled: bool = True  # read-only Content Credentials check (separate signal)
     c2pa_timeout_s: float = 5.0
     c2pa_memory_mb: int = 512
@@ -78,7 +79,8 @@ def service_config_from_project(project: ProjectConfig, overrides: dict[str, Any
     block = dict(project.extra.get("service") or {})
     block.update(overrides or {})
     known = {f for f in ServiceConfig.__dataclass_fields__} - {"environment", "validation", "package_dir", "gate_path",
-                                                                 "yunet_path", "api_key_sha256", "temp_dir", "log_level"}
+                                                                 "yunet_path", "api_key_sha256", "temp_dir", "log_level",
+                                                                 "ui_dist_dir"}
     unknown = set(block) - known
     if unknown:
         raise ServiceConfigError(f"unknown service config keys: {sorted(unknown)}")
@@ -89,9 +91,12 @@ def service_config_from_project(project: ProjectConfig, overrides: dict[str, Any
     from configuard.media.face_detector import default_yunet_model_path
 
     tmp = os.environ.get("CONFIGUARD_SERVICE_TEMP_DIR")
+    dist = os.environ.get("CONFIGUARD_UI_DIST")
+    default_dist = Path(__file__).resolve().parents[3] / "frontend" / "dist"
+    ui_dist = Path(dist) if dist else (default_dist if (default_dist / "index.html").is_file() else None)
     cfg = ServiceConfig(environment=project.environment, validation=project.validation, package_dir=package_dir,
                         gate_path=gate_path, yunet_path=default_yunet_model_path(), api_key_sha256=_api_keys_from_env(),
-                        temp_dir=Path(tmp) if tmp else None, log_level=project.log_level, **block)
+                        temp_dir=Path(tmp) if tmp else None, log_level=project.log_level, ui_dist_dir=ui_dist, **block)
     return validate_service_config(cfg)
 
 

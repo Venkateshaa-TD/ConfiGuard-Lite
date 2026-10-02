@@ -908,6 +908,24 @@ GET /health/ready  -> 200 only if verify_bundle passes (re-checked every ready_r
   `logs.py`:** extraction, streamed uploads, routes, response models and
   structured logs.
 
+### React frontend (12b)
+
+```
+frontend/ (Vite)
+  src/api/client.ts      same-origin fetch (/v1/limits) + XHR upload (progress, abort, timeout, response shape check)
+  src/App.tsx            state machine idle -> uploading -> analyzing -> done | error; API key in React state only
+  src/components/        UploadPanel, ProgressView/EmptyState/ErrorView, ResultView, Charts (SVG), EvidenceGrid,
+                         CredentialsPanel, ErrorBoundary, ui primitives
+  dist/                  build output (not committed) -> served by FastAPI: "/" index.html (no-store), /assets/* (immutable)
+```
+
+- **Rendering:** React text rendering only; server images are accepted
+  only as validated base64 data URIs.
+- **Assets:** no external origins; fonts are self-hosted.
+- **Serving:** the backend selects React when `ServiceConfig.ui_dist_dir`
+  contains `index.html` (default `frontend/dist`, override
+  `CONFIGUARD_UI_DIST`), otherwise the Phase 11 static UI.
+
 ### Content Credentials (Phase 12)
 
 ```
