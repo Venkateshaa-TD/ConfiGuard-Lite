@@ -908,6 +908,20 @@ GET /health/ready  -> 200 only if verify_bundle passes (re-checked every ready_r
   `logs.py`:** extraction, streamed uploads, routes, response models and
   structured logs.
 
+### Production polish (12e)
+
+```
+frontend/src/route-meta.json     per-route title + description (single source; emitted to dist by a Vite plugin)
+frontend/src/lib/meta.ts         client-side: title, description, og:/twitter: tags, canonical (if present), robots
+service/site.py                  ShellRenderer: per-route HTML shells (meta, optional absolute URLs from
+                                 public_base_url, 404 noindex, modulepreload of the route chunk, body-font
+                                 preload); re-renders when dist changes; ROOT_FILES (icons, manifest, og-image,
+                                 theme-init.js) with media types and cache policy
+frontend/scripts/render-icons.mjs  favicon.ico, apple-touch-icon, icon-192/512, maskable, og-image.jpg (local only)
+frontend/biome.json              lint configuration (recommended preset)
+frontend/tests/e2e/audit.spec.ts production-readiness audit suite
+```
+
 ### Hero asset, themes and explanation fallback (12d)
 
 ```

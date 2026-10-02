@@ -44,6 +44,7 @@ export function CredentialsPanel({ p }: { p: Provenance }) {
             {s.actions.length ? (
               <ul className="flex flex-col gap-1" aria-label="Declared history">
                 {s.actions.map((a, i) => (
+                  // biome-ignore lint/suspicious/noArrayIndexKey: static list rendered once; actions may repeat verbatim
                   <li key={i} className="text-ink-2">
                     {ACTIONS[a.action] ?? ACTIONS.other}
                     {a.software_agent ? ` with ${a.software_agent}` : ""}

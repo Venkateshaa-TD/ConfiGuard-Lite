@@ -58,7 +58,7 @@ export function TimelineChart({ points }: { points: TimelineEntry[] }) {
         {points.map((e, i) => {
           const flagged = e.quality_flags.length > 0;
           return (
-            <circle key={`${e.frame_index}-${i}`} cx={X(xs[i]!)} cy={Y(e.p_fake_frame)} r={flagged ? 5 : 4}
+            <circle key={`${e.slot ?? "-"}:${e.frame_index}`} cx={X(xs[i]!)} cy={Y(e.p_fake_frame)} r={flagged ? 5 : 4}
               className={flagged ? "fill-unc stroke-surface" : "fill-accent stroke-surface"} strokeWidth={1.5}>
               <title>{`${hasTime ? seconds(e.timestamp_s) : `frame ${e.frame_index}`}: ${pct(e.p_fake_frame)}${flagged ? " (quality flag)" : ""}`}</title>
             </circle>

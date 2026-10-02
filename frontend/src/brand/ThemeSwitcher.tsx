@@ -14,7 +14,8 @@ export function ThemeSwitcher({ compact = false, tone = "page", label = "Colour 
   const { pref, setPref } = useTheme();
   const frame = tone === "inverse" ? "border-dark-line" : "border-line-strong";
   return (
-    <div role="group" aria-label={label} className={`inline-flex border ${frame} ${className}`}>
+    <fieldset className={`inline-flex min-w-0 border ${frame} ${className}`}>
+      <legend className="sr-only">{label}</legend>
       {OPTIONS.map(({ value, label, Icon }) => {
         const on = pref === value;
         const look = on
@@ -29,6 +30,6 @@ export function ThemeSwitcher({ compact = false, tone = "page", label = "Colour 
           </button>
         );
       })}
-    </div>
+    </fieldset>
   );
 }

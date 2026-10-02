@@ -8,7 +8,7 @@ import { ErrorBoundary } from "../components/ErrorBoundary";
 import { ResultView } from "../components/ResultView";
 import { EmptyState, ErrorView, ProgressView } from "../components/StatusViews";
 import { UploadPanel, type Selection } from "../components/UploadPanel";
-import { NOT_LEGAL_PROOF } from "../lib/labels";
+import { NOT_LEGAL_PROOF, type RecoveryAction } from "../lib/labels";
 import { Link } from "../router";
 
 type Phase =
@@ -27,17 +27,30 @@ export function DetectPage() {
   const [selection, setSelection] = useState<Selection | null>(null);
   const [explain, setExplain] = useState(false);
   const [apiKey, setApiKey] = useState(""); // memory only, never persisted
+  const [keyRequired, setKeyRequired] = useState(false);
   const [phase, setPhase] = useState<Phase>({ kind: "idle" });
   const handle = useRef<AnalysisHandle | null>(null);
   const resultHeading = useRef<HTMLHeadingElement>(null);
   const errorBox = useRef<HTMLDivElement>(null);
 
+  const [limitsAttempt, setLimitsAttempt] = useState(0);
+  const [online, setOnline] = useState(() => (typeof navigator === "undefined" ? true : navigator.onLine !== false));
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: limitsAttempt is the retry trigger
   useEffect(() => {
     const ctrl = new AbortController();
+    setLimitsError(null);
     getLimits(ctrl.signal).then(setLimits).catch((e: unknown) => {
       if ((e as Error)?.name !== "AbortError") setLimitsError("Could not load upload limits; the server may be offline.");
     });
     return () => ctrl.abort();
+  }, [limitsAttempt]);
+
+  useEffect(() => {
+    const up = () => setOnline(true), down = () => setOnline(false);
+    window.addEventListener("online", up);
+    window.addEventListener("offline", down);
+    return () => { window.removeEventListener("online", up); window.removeEventListener("offline", down); };
   }, []);
 
   useEffect(() => () => handle.current?.cancel(), []); // leaving the page aborts an in-flight upload
@@ -61,12 +74,29 @@ export function DetectPage() {
     handle.current = h;
     h.result
       .then((result) => setPhase({ kind: "done", result }))
-      .catch((e: unknown) =>
-        setPhase({ kind: "error", failure: e instanceof AnalysisFailure ? e : new AnalysisFailure("invalid_response", "invalid_response", "Unexpected error.") }))
+      .catch((e: unknown) => {
+        let failure = e instanceof AnalysisFailure ? e : new AnalysisFailure("invalid_response", "invalid_response", "Unexpected error.");
+        if (failure.kind === "network" && navigator.onLine === false) failure = new AnalysisFailure("network", "offline", "You appear to be offline.");
+        if (failure.code === "unauthorized") setKeyRequired(true);
+        setPhase({ kind: "error", failure });
+      })
       .finally(() => { if (handle.current === h) handle.current = null; });
   }, [selection, limits, explain, apiKey]);
 
   const cancel = useCallback(() => handle.current?.cancel(), []);
+
+  // Recovery from an error: re-run, pick a different file, or go to the API-key field.
+  const recover = (a: RecoveryAction) => {
+    const panel = document.querySelector<HTMLElement>('section[aria-labelledby="upload-h"]');
+    if (a === "retry") { start(); return; }
+    setPhase({ kind: "idle" });
+    if (a === "choose") {
+      setSelection(null);
+      window.setTimeout(() => panel?.querySelector<HTMLInputElement>('input[type="file"]')?.focus(), 0);
+    } else {
+      window.setTimeout(() => panel?.querySelector<HTMLInputElement>('input[type="password"]')?.focus(), 0);
+    }
+  };
   const busy = phase.kind === "uploading" || phase.kind === "analyzing";
   const select = (s: Selection | null) => {
     setSelection(s);
@@ -81,7 +111,7 @@ export function DetectPage() {
       <header className="border-b border-line bg-surface">
         <div className="mx-auto flex h-16 max-w-[1440px] items-center justify-between gap-4 px-4 md:px-8">
           <div className="flex items-center gap-5">
-            <Link to="/" aria-label="ConfiGuard-Lite overview"><Wordmark /></Link>
+            <Link to="/" aria-label="ConfiGuard-Lite overview"><Wordmark compact /></Link>
             <Link to="/" className="eyebrow hidden items-center gap-2 text-ink-2 hover:text-ink sm:inline-flex">
               <ArrowLeft size={14} aria-hidden="true" />Back to overview
             </Link>
@@ -102,11 +132,19 @@ export function DetectPage() {
           </div>
           <p className="max-w-[46ch] text-sm text-ink-2">{NOT_LEGAL_PROOF} Image analysis is experimental.</p>
         </div>
+        <div role="status" aria-live="polite">
+          {online ? null : (
+            <p className="mb-6 border-l-2 border-unc bg-unc-soft px-3 py-2 text-sm font-medium text-ink">
+              You are offline. Analysis needs a connection to the server; reconnect and then analyse.
+            </p>
+          )}
+        </div>
         <div className="grid items-start gap-6 lg:grid-cols-[minmax(320px,400px)_minmax(0,1fr)]">
           <div className="lg:sticky lg:top-6">
             <UploadPanel
               limits={limits} limitsError={limitsError} busy={busy} selection={selection} onSelect={select}
               explain={explain} onExplain={setExplain} apiKey={apiKey} onApiKey={setApiKey} onAnalyze={start} onCancel={cancel}
+              onRetryLimits={() => setLimitsAttempt((n) => n + 1)} keyRequired={keyRequired}
             />
           </div>
           <div id="results" className="min-w-0">
@@ -115,7 +153,7 @@ export function DetectPage() {
               {phase.kind === "uploading" ? <ProgressView phase="uploading" fraction={phase.fraction} since={phase.since} onCancel={cancel} /> : null}
               {phase.kind === "analyzing" ? <ProgressView phase="analyzing" fraction={1} since={phase.since} onCancel={cancel} /> : null}
               {phase.kind === "done" ? <ResultView ref={resultHeading} r={phase.result} /> : null}
-              {phase.kind === "error" ? <ErrorView ref={errorBox} failure={phase.failure} onRetry={() => setPhase({ kind: "idle" })} /> : null}
+              {phase.kind === "error" ? <ErrorView ref={errorBox} failure={phase.failure} onAction={recover} /> : null}
             </ErrorBoundary>
           </div>
         </div>

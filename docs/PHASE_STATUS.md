@@ -27,6 +27,7 @@
 | 12b | React production frontend upgrade | PASS | 2026-10-02 |
 | 12c | Cinematic landing experience and detector redesign | PASS | 2026-10-02 |
 | 12d | Realistic human hero, light/dark themes, explanation availability | PASS | 2026-10-02 |
+| 12e | Final website polish and production-readiness audit | PASS | 2026-10-02 |
 
 Full per-phase results are recorded below as they complete.
 
@@ -1475,3 +1476,62 @@ per-frame logits, reasons, explanation and C2PA status).
   `inline-flex`.
 - Nav overflow at 820 px: the desktop nav now starts at `lg`.
 - Keyboard-order test updated for the new header buttons.
+
+## 12e — Final website polish and production-readiness audit
+
+**Status:** PASS (committed by the user)
+
+**Summary:** no redesign and no model or API behaviour change.
+- **Metadata and icons:** per-route titles, descriptions and social tags
+  (written by the server and updated client-side); a configurable public
+  base URL (never guessed); icons, web manifest and a social image.
+- **Copy and states:** honest copy fixes; a recovery action for every
+  detector failure; offline handling.
+- **Quality and performance:** Biome lint; correct static media types;
+  route-chunk and font preloads.
+- **Audit:** a new 17-test Playwright audit suite.
+
+**Checks:**
+- **Routes and themes:** `/`, `/detect`, `/about` and 404 in Light, Dark
+  and System (OS light and dark). axe, including colour contrast, finds
+  0 violations in all 4 modes.
+- **Overflow:** none at 320/360/390/412/768/820/1024/1440/1920 px, at
+  844×390 and 915×412 (landscape), or at 1280×560 and 1024×480 (short).
+  Fixed along the way: the detector wordmark wrapped at 360 px.
+- **Zoom and input:** 200% zoom (a 640×400 viewport at device scale 2)
+  and 200% text both work without horizontal scrolling. Keyboard-only:
+  every tab stop shows a ≥ 2 px focus ring; skip link; Enter activates
+  CTAs. Reduced motion: existing tests.
+- **Links:** 9 distinct internal links (nav, CTAs, footer, hash targets)
+  all resolve, with no empty, `#` or off-site hrefs; back/forward and
+  deep links pass. No placeholder/TODO copy; no contact details invented
+  or exposed.
+- **Detector states:** all 14 states verified in a real browser, with
+  mocked server responses where needed (built from a real API result).
+  Each is announced (role alert or status) and has a working recovery
+  action.
+- **404:** real 404 status; both actions work.
+- **Network hygiene:** a full walk in both themes had no console
+  errors/warnings, failed requests or unexpected 4xx/5xx.
+- **WebGL:** `/detect` makes zero `getContext('webgl*')` calls and never
+  fetches the Three.js chunk.
+- **Security retest:** hostile filenames, XSS-like text, CSP (only
+  `manifest-src 'self'` added), API key in memory only (also checked
+  after a 401) and upload cleanup — the existing E2E and backend tests
+  passed again.
+- **Assets:** all compressible files are gzipped; hashed `/assets` are
+  immutable; fonts, hero and icons are cached 1 week, the manifest
+  1 day, `theme-init.js` no-cache and HTML no-store. No unused source
+  files. See EXPERIMENT_LOG for sizes.
+- **Lighthouse (8 runs):** accessibility, best practices and SEO were
+  100 on every run; performance 96–100. LCP: `/` mobile 2.35 s, `/detect`
+  mobile 2.49 s, desktop 0.50–0.63 s.
+
+**Tests:**
+- Biome lint clean; typecheck clean.
+- 82 unit tests.
+- 40 real-browser E2E (chrome, SwiftShader, no-WebGL).
+- Full backend suite 679/679 (271 s); detection parity 15/15.
+
+**Physical-phone check:** a checklist was handed to the user. No
+real-device test is claimed.

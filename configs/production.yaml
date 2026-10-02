@@ -29,6 +29,7 @@ service:
   ui_enabled: false            # the web UI is a local tool
   allow_explanations: false    # evidence hints are off unless explicitly enabled
   explain_occlusion_fallback: true   # occlusion hint only when Grad-CAM is withheld; explanation-only
+  public_base_url: null          # e.g. https://your-domain.example; enables absolute og:url/og:image/canonical (env CONFIGUARD_PUBLIC_BASE_URL overrides)
   c2pa_enabled: true         # Content Credentials (read-only, offline, sandboxed worker)
   c2pa_timeout_s: 5
   c2pa_memory_mb: 512

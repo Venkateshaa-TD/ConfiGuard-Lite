@@ -32,6 +32,9 @@ interface Props {
   onApiKey: (v: string) => void;
   onAnalyze: () => void;
   onCancel: () => void;
+  onRetryLimits: () => void;
+  /** Show the API-key field even if /v1/limits said none is needed (the server answered 401). */
+  keyRequired?: boolean;
 }
 
 export function UploadPanel(p: Props) {
@@ -101,12 +104,15 @@ export function UploadPanel(p: Props) {
         />
       </label>
       <p id={`${inputId}-err`} role="alert" className="mt-2 min-h-5 text-sm text-fake">{error ?? ""}</p>
+      {p.limitsError && !lim ? (
+        <div className="mb-2"><Button onClick={p.onRetryLimits}>Retry connection</Button></div>
+      ) : null}
 
       {p.selection && preview ? (
         <div className="mt-1 overflow-hidden border border-line bg-raised">
           <div className="grid place-items-center bg-canvas">
             {p.selection.kind === "image" ? (
-              <img src={preview} alt="Preview of the selected image" className="max-h-56 w-auto object-contain" />
+              <img src={preview} alt="Preview of the selected file" className="max-h-56 w-auto object-contain" />
             ) : (
               <video src={preview} className="max-h-56 w-full" controls muted preload="metadata" aria-label="Preview of the selected video" />
             )}
@@ -129,7 +135,7 @@ export function UploadPanel(p: Props) {
       ) : null}
 
       <div className="mt-4 flex flex-col gap-4 border-t border-line pt-4">
-        {lim?.auth_required ? (
+        {lim?.auth_required || p.keyRequired ? (
           <div className="flex flex-col gap-2">
             <label htmlFor={`${inputId}-key`} className="text-sm font-medium">API key</label>
             <input id={`${inputId}-key`} type="password" autoComplete="off" spellCheck={false} value={p.apiKey}

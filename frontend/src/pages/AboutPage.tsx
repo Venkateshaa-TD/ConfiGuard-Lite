@@ -30,7 +30,7 @@ const LIMITS = [
   "Evaluation is limited to the FaceForensics++ validation split; the test split is sealed and no cross-dataset evaluation has been run.",
   "Still-image analysis is experimental: calibration and quality thresholds were fitted on video frames.",
   "Known quality-gate gaps remain: blur followed by noise can pass the checks, mild 0.75× rescaling is over-flagged, and strongly downscaled real video can still be misclassified.",
-  "Evidence heatmaps are hints, not proof. Many are withheld because they fail an occlusion faithfulness check.",
+  "Evidence heatmaps are hints, not proof. Many are withheld because they fail a reliability check; a slower occlusion fallback is labelled separately, and some frames get no heatmap at all.",
   "Content Credentials prove who signed a file and that it is unchanged since signing — not that its content is true. Most files carry none.",
   "Results are automated estimates for screening and research. They are not legal proof or a forensic determination.",
 ];

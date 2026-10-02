@@ -34,6 +34,7 @@ function FramesInstrument() {
     <div className="flex flex-col gap-3">
       <div className="grid grid-cols-8 gap-1.5 sm:grid-cols-16">
         {Array.from({ length: 16 }, (_, i) => (
+          // biome-ignore lint/suspicious/noArrayIndexKey: fixed decorative 16-cell strip, never reordered
           <span key={i} className={`h-8 border ${slot(i) === 4 ? "border-cyan bg-cyan/80" : slot(i) === 8 ? "border-cyan/70 bg-cyan/25" : "border-on-dark-muted/40"}`} />
         ))}
       </div>

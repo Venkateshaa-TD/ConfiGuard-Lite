@@ -1,6 +1,7 @@
 // Minimal history-API router (no dependency): /, /detect, /about and an in-app 404.
 // Back/forward restore scroll position; hash links scroll to sections; focus moves to the page H1.
 import { useEffect, useSyncExternalStore, type AnchorHTMLAttributes, type MouseEvent } from "react";
+import { applyRouteMeta } from "./lib/meta";
 import { prefersReducedMotion } from "./lib/motion";
 
 export const ROUTES = { "/": "Overview", "/detect": "Detector", "/about": "About" } as const;
@@ -51,8 +52,7 @@ export function useLocation(): { path: string; hash: string } {
 export function useRouteEffects(path: string, hash: string, ready: boolean) {
   useEffect(() => {
     if (!ready) return;
-    const title = (ROUTES as Record<string, string>)[path] ?? "Not found";
-    document.title = `${title} — ConfiGuard-Lite`;
+    applyRouteMeta(path);
     const state = window.history.state as { y?: number; pushed?: boolean } | null;
     // Lazy pages may not be in the DOM yet: retry briefly until the page H1 (or hash target) exists.
     let tries = 0, timer = 0;

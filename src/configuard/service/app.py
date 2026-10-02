@@ -15,6 +15,7 @@ from __future__ import annotations
 import asyncio
 import hmac
 import logging
+import mimetypes
 import re
 import shutil
 import tempfile
@@ -26,7 +27,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from fastapi import Depends, FastAPI, Query, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.security import APIKeyHeader
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.gzip import GZipMiddleware
@@ -38,6 +39,7 @@ from configuard.service.extract import AnalysisTimeout, CancelToken, MediaUnread
 from configuard.service.logs import configure_logging, log_event, request_id_var
 from configuard.service.schemas import (ANALYZE_RESPONSES, AnalyzeResponse, LimitsResponse, LiveResponse, ReadyResponse,
                                         READY_EXAMPLE)
+from configuard.service.site import ROOT_FILES, ShellRenderer
 from configuard.service.uploads import UploadError, receive_upload
 from configuard.validation import ValidationErrorCode, validate_media_file
 
@@ -56,8 +58,14 @@ STATIC_DIR = Path(__file__).resolve().parent / "static"
 # Strict CSP for the UI and the API: same-origin scripts/styles only, images from self or data: URIs
 # (evidence frames are returned inline), no framing, no plugins, no inline script.
 CSP = ("default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; "
-       "font-src 'self'; connect-src 'self'; "
+       "font-src 'self'; connect-src 'self'; manifest-src 'self'; "
        "form-action 'none'; base-uri 'none'; frame-ancestors 'none'; object-src 'none'")
+# Correct media types for the UI's static files (served with X-Content-Type-Options: nosniff); the
+# platform's mimetypes table often lacks these and would fall back to application/octet-stream.
+for _ext, _type in ((".woff2", "font/woff2"), (".webp", "image/webp"), (".glb", "model/gltf-binary"),
+                    (".webmanifest", "application/manifest+json")):
+    mimetypes.add_type(_type, _ext)
+
 SECURITY_HEADERS = {
     "X-Content-Type-Options": "nosniff", "X-Frame-Options": "DENY", "Referrer-Policy": "no-referrer",
     "Cross-Origin-Opener-Policy": "same-origin", "Cross-Origin-Resource-Policy": "same-origin",
@@ -144,8 +152,8 @@ def create_app(cfg: ServiceConfig, engine: InferenceEngine | None = None) -> Fas
             response.headers["Cache-Control"] = "public, max-age=31536000, immutable"  # content-hashed build files
         elif request.url.path.startswith(("/fonts/", "/hero/")) and response.status_code == 200:
             response.headers["Cache-Control"] = "public, max-age=604800"  # stable font / hero-asset file names
-        elif request.url.path == "/theme-init.js" and response.status_code == 200:
-            response.headers["Cache-Control"] = "no-cache"  # tiny, unhashed: always revalidated (ETag)
+        elif request.url.path.lstrip("/") in ROOT_FILES and response.status_code == 200:
+            response.headers["Cache-Control"] = ROOT_FILES[request.url.path.lstrip("/")][1]
         elif not request.url.path.startswith("/static/"):
             response.headers["Cache-Control"] = "no-store"  # results, evidence frames and index.html are never cached
         log_event("request", method=request.method, route=request.url.path, status=response.status_code,
@@ -192,17 +200,22 @@ def create_app(cfg: ServiceConfig, engine: InferenceEngine | None = None) -> Fas
         if (dist / "hero").is_dir():  # landing-page 3D head (CC0) and its posters
             app.mount("/hero", StaticFiles(directory=dist / "hero", html=False), name="hero")
 
+        shells = ShellRenderer(dist, cfg.public_base_url)  # per-route <title>/description/social tags
+
         @app.get("/", include_in_schema=False)
         async def ui_index():
-            return FileResponse(dist / "index.html", media_type="text/html")
+            return HTMLResponse(shells.page("")[0])
 
-        @app.get("/favicon.svg", include_in_schema=False)
-        async def ui_favicon():
-            return FileResponse(dist / "favicon.svg", media_type="image/svg+xml")
+        def root_file(name: str, media_type: str):
+            async def handler():
+                if not (dist / name).is_file():
+                    raise StarletteHTTPException(status_code=404)
+                return FileResponse(dist / name, media_type=media_type)
+            return handler
 
-        @app.get("/theme-init.js", include_in_schema=False)
-        async def ui_theme_init():  # applies the saved colour theme before first paint (CSP: external script)
-            return FileResponse(dist / "theme-init.js", media_type="text/javascript")
+        # Icons, manifest, social image and the pre-paint theme script live at the site root.
+        for name, (media_type, _cache) in ROOT_FILES.items():
+            app.add_api_route(f"/{name}", root_file(name, media_type), methods=["GET"], include_in_schema=False)
     elif cfg.ui_enabled:  # Phase 11 plain HTML/JS UI
         app.mount("/static", StaticFiles(directory=STATIC_DIR, html=False), name="static")
 
@@ -308,7 +321,6 @@ def create_app(cfg: ServiceConfig, engine: InferenceEngine | None = None) -> Fas
                 admission.release()
 
     if react:
-        spa_routes = {"", "detect", "about"}
         reserved = ("v1/", "health/", "assets/", "fonts/", "hero/", "static/", "docs", "redoc", "openapi.json")
 
         # Registered last so every API route wins. Client routes (and refreshes of them) get the SPA
@@ -318,6 +330,7 @@ def create_app(cfg: ServiceConfig, engine: InferenceEngine | None = None) -> Fas
             path = full_path.strip("/")
             if path.startswith(reserved) or "." in path.rsplit("/", 1)[-1]:
                 raise StarletteHTTPException(status_code=404)
-            return FileResponse(dist / "index.html", media_type="text/html", status_code=200 if path in spa_routes else 404)
+            body, status = shells.page(path)
+            return HTMLResponse(body, status_code=status)
 
     return app

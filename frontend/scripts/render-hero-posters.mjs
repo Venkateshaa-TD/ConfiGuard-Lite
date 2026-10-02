@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 
 const base = process.argv[2] ?? "http://127.0.0.1:8000";
 const outDir = join(dirname(fileURLToPath(import.meta.url)), "..", "public", "hero");
-const W = 720, H = 900, CSS_W = 560;   // the hero frame is 560x700 CSS px at desktop widths
+const W = 720, CSS_W = 560;   // 720x900 output: the hero frame is 560x700 CSS px at desktop widths
 
 const browser = await chromium.launch({ channel: "chrome" });
 try {
@@ -18,7 +18,7 @@ try {
     const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: W / CSS_W,
       colorScheme: theme, reducedMotion: "reduce", bypassCSP: true });   // only to inject the capture-only stylesheet
     const page = await ctx.newPage();
-    await page.goto(base + "/");
+    await page.goto(`${base}/`);
     await page.mouse.move(5, 5);
     const hero = page.locator("[data-hero-mode]");
     await hero.waitFor();

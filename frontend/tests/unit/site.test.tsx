@@ -32,7 +32,7 @@ describe("landing page", () => {
   it("has one H1, the headline, working CTAs and the WebGL fallback in a GPU-less environment", async () => {
     const { container } = render(<App />);
     expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
-    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(/Truth, verified\s*frame by frame\./i);
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(/Faces, examined\s*frame by frame\./i);
     expect(screen.getByRole("link", { name: /Get started/i })).toHaveAttribute("href", "/detect");
     expect(screen.getByRole("link", { name: /How it works/i })).toHaveAttribute("href", "/#how");
     for (const label of ["Adaptive 04/08/16", "ONNX CPU", "Calibrated uncertainty"]) expect(screen.getByText(label)).toBeInTheDocument();
@@ -71,7 +71,7 @@ describe("routing", () => {
     expect(await screen.findByRole("heading", { level: 1, name: "Media detector" })).toBeInTheDocument();
     expect(screen.getAllByRole("link", { name: /overview/i }).length).toBeGreaterThan(0);
     await act(async () => { window.history.back(); await new Promise((r) => setTimeout(r, 30)); });
-    expect(await screen.findByRole("heading", { level: 1, name: /Truth, verified/i })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 1, name: /Faces, examined/i })).toBeInTheDocument();
     await act(async () => { window.history.forward(); await new Promise((r) => setTimeout(r, 30)); });
     expect(await screen.findByRole("heading", { level: 1, name: "Media detector" })).toBeInTheDocument();
   });
@@ -86,7 +86,30 @@ describe("routing", () => {
     await noAxeViolations(h1.closest("div")!.parentElement!.parentElement!);
     act(() => navigate("/nowhere"));
     expect(await screen.findByRole("heading", { level: 1, name: "Page not found." })).toBeInTheDocument();
-    expect(document.title).toMatch(/Not found/);
+    expect(document.title).toBe("Page not found — ConfiGuard-Lite");
+    const notFound = screen.getByRole("main");
+    expect(within(notFound).getByRole("link", { name: "Go to the overview" })).toHaveAttribute("href", "/");
+    expect(within(notFound).getByRole("link", { name: "Open the detector" })).toHaveAttribute("href", "/detect");
+    expect(document.querySelector('meta[name="robots"]')?.getAttribute("content")).toBe("noindex");
+  });
+
+  it("gives every route a unique title and description", async () => {
+    const head = document.head;
+    for (const [name, content] of [["description", ""], ["twitter:title", ""]] as const) {
+      const m = document.createElement("meta"); m.name = name; m.content = content; head.appendChild(m);
+    }
+    render(<App />);
+    const seen = new Map<string, string>();
+    for (const path of ["/detect", "/about", "/"]) {
+      act(() => navigate(path));
+      await screen.findAllByRole("heading", { level: 1 });
+      await act(async () => { await new Promise((r) => setTimeout(r, 30)); });
+      seen.set(document.title, head.querySelector('meta[name="description"]')!.getAttribute("content")!);
+      expect(head.querySelector('meta[name="twitter:title"]')!.getAttribute("content")).toBe(document.title);
+    }
+    expect(seen.size).toBe(3);
+    expect(new Set(seen.values()).size).toBe(3);
+    expect([...seen.keys()].every((t) => t.includes("ConfiGuard-Lite"))).toBe(true);
   });
 
   it("modified clicks are left to the browser", () => {

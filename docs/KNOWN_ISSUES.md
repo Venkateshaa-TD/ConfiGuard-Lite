@@ -4,6 +4,29 @@ Format: one entry per issue. Mark resolved issues rather than deleting them.
 
 ---
 
+## OPEN — Production readiness (12e)
+
+- **No real-device test.** Phones were only emulated in Chrome. A
+  physical-phone checklist was handed to the user; until it is done, iOS
+  Safari and Android Chrome behaviour (WebGL boot on first touch, file
+  picker, safe areas) is unverified.
+- **Mobile LCP margin.** `/detect` mobile LCP is 2.49 s under Lighthouse
+  simulation, just under the 2.5 s target.
+- **Link previews need a public base URL.** Without one,
+  `og:image`/`twitter:image` are relative and many preview crawlers
+  ignore relative images. Set `CONFIGUARD_PUBLIC_BASE_URL` at deployment.
+- **Social-image cross-origin policy.** `Cross-Origin-Resource-Policy:
+  same-origin` applies to all responses, including `og-image.jpg`.
+  Preview crawlers fetch server-side and are unaffected, but third-party
+  pages cannot hot-link the image.
+- **Gzip on already-compressed files.** The middleware also gzips woff2,
+  webp and glb responses, for a small CPU cost and little saving
+  (GLB 1.64 → 1.53 MB).
+- **Only Chrome was tested.** Firefox and Safari (desktop) were not
+  tested in this phase.
+
+---
+
 ## OPEN — Realistic hero and themes (12d)
 
 - **Realism ceiling.** The head is good real-time CG, not photographic:

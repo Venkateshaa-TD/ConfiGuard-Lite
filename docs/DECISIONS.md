@@ -4,6 +4,87 @@ Format: one entry per decision, newest first.
 
 ---
 
+## 2026-10-02 — 12e: production polish and readiness audit
+
+- **Lint with Biome 2.5.15, not ESLint.**
+  - The project uses the TypeScript 7 native compiler, which ships no
+    classic compiler API, so `typescript-eslint` cannot parse against
+    it.
+  - Biome is a single pinned binary with no install scripts. It runs
+    the recommended preset, including React hooks and a11y rules.
+  - Four style rules are switched off with reasons in `biome.json`:
+    - non-null assertions, which `noUncheckedIndexedAccess` makes
+      deliberate;
+    - forEach arrow returns;
+    - `!important` in the reduced-motion CSS;
+    - `process` in Node scripts.
+  - Every remaining finding was fixed, or suppressed inline with a
+    justification.
+- **Per-route metadata is written by the server.** `src/route-meta.json`
+  is the single source; the build emits it to `dist/route-meta.json`.
+  - FastAPI (`service/site.py`) writes each route's title, description
+    and Open Graph / Twitter tags into the HTML shell before any
+    JavaScript runs. The client updates the same tags on in-app
+    navigation.
+  - The 404 page gets `noindex`.
+  - Shells re-render when the build changes on disk, so a redeployed
+    `dist` never serves a stale shell.
+- **No invented domain.** `public_base_url` (or
+  `CONFIGUARD_PUBLIC_BASE_URL`) is optional and validated: http(s) only,
+  with no credentials, query or fragment.
+  - Only when it is set does the server write absolute `canonical`,
+    `og:url` and `og:image` URLs. Otherwise these stay relative, and
+    canonical/og:url are omitted.
+- **Icons and social image are rendered from local sources** by
+  `scripts/render-icons.mjs` (Chrome, no network).
+  - The favicon was redrawn as the brand mark (it was a leftover 12b
+    tick).
+  - New: ICO (16 + 32), 180 px Apple touch icon, 192/512 px icons, a
+    maskable 512 px icon, and a 1200×630 JPEG social image using the
+    real hero head.
+  - `site.webmanifest` uses `display: browser`, because the site is not
+    an installable PWA (no service worker).
+  - `.gitignore` ignores every `*.png`/`*.jpg` (to keep media and
+    datasets out of Git). Five anchored exceptions admit exactly these
+    generated site files; any other image stays ignored.
+- **CSP:** added `manifest-src 'self'`, needed for the manifest; nothing
+  else changed. The static UI files now get correct media types
+  (`font/woff2`, `image/webp`, `model/gltf-binary`,
+  `application/manifest+json`) instead of `application/octet-stream`
+  under `nosniff`.
+- **Faster route paint:** the server adds a `modulepreload` for the lazy
+  `/detect` or `/about` chunk (from the Vite manifest; asset-pattern
+  checked) and preloads the Geist body font.
+  - This took `/detect` mobile LCP from 2.59 s to 2.49 s; the LCP element
+    is the upload panel's text.
+- **Copy:**
+  - The hero headline "Truth, verified frame by frame" was an
+    unsupported claim for a screening tool that says it is not proof.
+    It is now "Faces, examined frame by frame."
+  - About's heatmap line now mentions the occlusion fallback.
+  - The empty state no longer says "on the left", which is wrong on
+    phones.
+- **Detector recovery:** each failure offers the action that can fix it.
+  - File problems → "Choose another file" (focuses the file input).
+  - 401 → "Enter API key": the key field appears even if `/v1/limits`
+    said none is needed, and it is focused.
+  - Busy, timeout, unavailable, network or offline → "Retry analysis"
+    (re-submits immediately) and "Choose another file".
+  - Cancelled → "Analyse again".
+  - A live "You are offline" banner appears when the connection drops.
+  - Failed upload-limit loading offers "Retry connection" (before, the
+    Analyse button stayed disabled for good).
+  - The completed result panel, which takes focus, is the success state;
+    there are no toasts.
+- **Layout:**
+  - The 404 page has "Go to the overview" and "Open the detector".
+  - The detector wordmark becomes mark-only below 400 px, so it no
+    longer wraps.
+  - The hero headline size is capped so it stays on two lines at every
+    desktop width.
+
+---
+
 ## 2026-10-02 — 12d: realistic hero head, themes, explanation fallback
 
 - **Hero asset: MakeHuman CC0 data, assembled by our own script.**

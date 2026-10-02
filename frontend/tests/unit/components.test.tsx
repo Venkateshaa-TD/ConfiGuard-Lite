@@ -145,9 +145,41 @@ describe("states", () => {
     const c = render(<ProgressView phase="analyzing" fraction={1} since={performance.now()} onCancel={() => {}} />);
     expect(screen.getByText(/There is no percentage/)).toBeInTheDocument();
     c.unmount();
-    const d = render(<ErrorView failure={new AnalysisFailure("http", "media_unreadable", "x", 422, "rid-1")} onRetry={() => {}} />);
+    const d = render(<ErrorView failure={new AnalysisFailure("http", "media_unreadable", "x", 422, "rid-1")} onAction={() => {}} />);
     expect(screen.getByRole("alert")).toHaveTextContent("The file could not be decoded");
     expect(screen.getByText("Request ID rid-1")).toBeInTheDocument();
     await noAxeViolations(d.container);
+  });
+
+  it.each([
+    ["media_unreadable", 422, ["Choose another file"]],
+    ["file_too_large", 413, ["Choose another file"]],
+    ["unsupported_media_type", 415, ["Choose another file"]],
+    ["unauthorized", 401, ["Enter API key", "Retry analysis"]],
+    ["server_busy", 429, ["Retry analysis", "Choose another file"]],
+    ["analysis_timeout", 504, ["Retry analysis", "Choose another file"]],
+    ["service_unavailable", 503, ["Retry analysis", "Choose another file"]],
+    ["network_error", 0, ["Retry analysis", "Choose another file"]],
+    ["offline", 0, ["Retry analysis", "Choose another file"]],
+  ] as const)("failure %s offers a recovery that can fix it", async (code, status, labels) => {
+    const seen: string[] = [];
+    const { container } = render(<ErrorView failure={new AnalysisFailure(status ? "http" : "network", code, "x", status)}
+      onAction={(a) => seen.push(a)} />);
+    expect(screen.getByRole("alert")).toHaveTextContent(/\w/);
+    expect(screen.getAllByRole("button").map((b) => b.textContent)).toEqual([...labels]);
+    await userEvent.click(screen.getAllByRole("button")[0]!);
+    expect(seen).toHaveLength(1);
+    await noAxeViolations(container);
+  });
+
+  it("cancelled analysis offers to analyse again", () => {
+    render(<ErrorView failure={new AnalysisFailure("cancelled", "cancelled", "Analysis cancelled.")} onAction={() => {}} />);
+    expect(screen.getByText("Cancelled")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Analyse again" })).toBeInTheDocument();
+  });
+
+  it("explains being offline", () => {
+    render(<ErrorView failure={new AnalysisFailure("network", "offline", "x")} onAction={() => {}} />);
+    expect(screen.getByRole("alert")).toHaveTextContent("You appear to be offline");
   });
 });

@@ -1,7 +1,7 @@
 import { WarningCircle } from "@phosphor-icons/react";
 import { forwardRef, useEffect, useState } from "react";
 import type { AnalysisFailure } from "../api/client";
-import { ERRORS, NOT_LEGAL_PROOF } from "../lib/labels";
+import { ERRORS, NOT_LEGAL_PROOF, recoveryFor, type RecoveryAction } from "../lib/labels";
 import { Button } from "./ui";
 
 export function EmptyState() {
@@ -9,7 +9,7 @@ export function EmptyState() {
     <section aria-labelledby="empty-h" className="border border-dashed border-line-strong bg-surface/60 p-6 md:p-8">
       <h2 id="empty-h" className="text-base font-semibold tracking-tight">No analysis yet</h2>
       <ol className="mt-3 flex max-w-[62ch] list-decimal flex-col gap-1.5 pl-5 text-sm leading-relaxed text-ink-2">
-        <li>Choose or drop a face image or video on the left.</li>
+        <li>Choose or drop a face image or video in the “Analyse media” panel.</li>
         <li>Optionally include visual evidence hints.</li>
         <li>Read the verdict as one of three outcomes: <strong className="font-semibold text-real">LIKELY REAL</strong>,{" "}
           <strong className="font-semibold text-fake">LIKELY MANIPULATED</strong> or <strong className="font-semibold text-unc">UNCERTAIN</strong>.</li>
@@ -64,9 +64,14 @@ export function ProgressView({ phase, fraction, since, onCancel }: {
   );
 }
 
-export const ErrorView = forwardRef<HTMLDivElement, { failure: AnalysisFailure; onRetry: () => void }>(function ErrorView({ failure, onRetry }, ref) {
+const ACTION_LABEL: Record<RecoveryAction, string> = { retry: "Retry analysis", choose: "Choose another file", key: "Enter API key" };
+
+export const ErrorView = forwardRef<HTMLDivElement, {
+  failure: AnalysisFailure; onAction: (a: RecoveryAction) => void;
+}>(function ErrorView({ failure, onAction }, ref) {
   const text = ERRORS[failure.code] ?? failure.message ?? "Request failed.";
   const cancelled = failure.kind === "cancelled";
+  const actions = recoveryFor(failure.code);
   return (
     <div ref={ref} tabIndex={-1} role="alert"
       className={`flex flex-col gap-3 border p-4 md:p-6 ${cancelled ? "border-line bg-surface" : "border-fake bg-fake-soft"}`}>
@@ -75,7 +80,13 @@ export const ErrorView = forwardRef<HTMLDivElement, { failure: AnalysisFailure; 
       </p>
       <p className="text-sm text-ink-2">{text}</p>
       {failure.requestId ? <p className="font-mono text-xs text-muted">Request ID {failure.requestId}</p> : null}
-      <div><Button onClick={onRetry}>Try again</Button></div>
+      <div className="flex flex-wrap gap-2">
+        {actions.map((a, i) => (
+          <Button key={a} variant={i === 0 ? "primary" : "secondary"} onClick={() => onAction(a)}>
+            {cancelled && a === "retry" ? "Analyse again" : ACTION_LABEL[a]}
+          </Button>
+        ))}
+      </div>
     </div>
   );
 });

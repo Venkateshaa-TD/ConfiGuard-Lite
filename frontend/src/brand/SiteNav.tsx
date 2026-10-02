@@ -18,6 +18,7 @@ export function SiteNav({ tone = "light" }: { tone?: "light" | "dark" }) {
   const { path, hash } = useLocation();
   const dark = tone === "dark";
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: close the menu whenever the route or hash changes
   useEffect(() => setOpen(false), [path, hash]);
 
   useEffect(() => {

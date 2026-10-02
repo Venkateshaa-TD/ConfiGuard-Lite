@@ -1,0 +1,16 @@
+{
+  "name": "ConfiGuard-Lite",
+  "short_name": "ConfiGuard",
+  "description": "Uncertainty-aware deepfake screening for images and video. An academic research project; results are estimates, not legal proof.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "browser",
+  "background_color": "#f5f8f9",
+  "theme_color": "#f5f8f9",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ]
+}

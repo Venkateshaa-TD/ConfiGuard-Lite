@@ -384,6 +384,16 @@ The landing hero is a fictional human head built from MakeHuman CC0 assets
   poster (a still render of the same head).
 - **Reduced motion:** shows a single frame.
 
+**Production metadata (12e):**
+- Every route has its own title, description and social-preview tags,
+  written by the server.
+- Set `CONFIGUARD_PUBLIC_BASE_URL=https://your-domain` (or
+  `service.public_base_url`) when deploying, so link previews get
+  absolute URLs. Nothing is assumed when it is unset.
+- Icons and the social image are regenerated with
+  `node frontend/scripts/render-icons.mjs`.
+- Lint the frontend with `cd frontend && npm run lint`.
+
 **Themes:** Light, Dark and System (default), switchable in the
 navigation and the detector settings. Only this choice is stored in the
 browser (`localStorage["cg-theme"]`).

@@ -41,7 +41,7 @@ async function taskMs(cdp: CDPSession): Promise<number> {
 test("landing navigation, section links, deep links, back and forward", async ({ page }) => {
   const w = await watch(page);
   await page.goto("/");
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText(/Truth, verified\s*frame by frame\./i);
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(/Faces, examined\s*frame by frame\./i);
   await page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Technology" }).click();
   await expect(page).toHaveURL(/\/#technology$/);
   await expect(page.getByRole("heading", { name: /Four stages/ })).toBeInViewport();

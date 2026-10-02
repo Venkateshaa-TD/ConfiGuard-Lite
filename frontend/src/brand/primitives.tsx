@@ -21,14 +21,15 @@ export function TechLabel({ children, tone = "ink", className = "" }: { children
   return <span className={`eyebrow inline-flex items-center gap-2 ${c} ${className}`}><span aria-hidden="true" className="inline-block size-1.5 bg-current" />{children}</span>;
 }
 
-export function Wordmark({ dark = false }: { dark?: boolean }) {
+export function Wordmark({ dark = false, compact = false }: { dark?: boolean; compact?: boolean }) {
+  // compact: on very narrow screens only the mark is shown (the link keeps its accessible name).
   return (
-    <span className={`inline-flex items-center gap-2.5 ${dark ? "text-on-dark" : "text-ink"}`}>
+    <span className={`inline-flex items-center gap-2.5 whitespace-nowrap ${dark ? "text-on-dark" : "text-ink"}`}>
       <svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true" focusable="false">
         <path d="M2 2h7v2H4v5H2zM20 2v7h-2V4h-5V2zM2 20v-7h2v5h5v2zM20 20h-7v-2h5v-5h2z" className="fill-current" />
         <path d="M7 11.5l2.6 2.6L15.2 8" fill="none" stroke="var(--cyan)" strokeWidth="2" strokeLinecap="square" />
       </svg>
-      <span className="font-display text-[22px] font-extrabold uppercase leading-none tracking-wide">ConfiGuard<span className={dark ? "text-steel" : "text-muted"}>-Lite</span></span>
+      <span className={`font-display text-[22px] font-extrabold uppercase leading-none tracking-wide ${compact ? "max-[400px]:sr-only" : ""}`}>ConfiGuard<span className={dark ? "text-steel" : "text-muted"}>-Lite</span></span>
     </span>
   );
 }

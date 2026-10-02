@@ -1,0 +1,18 @@
+{
+  "/": {
+    "title": "ConfiGuard-Lite — deepfake screening for images and video",
+    "description": "Uncertainty-aware screening of face manipulation in images and video on an ordinary CPU. An academic research project: results are estimates, not legal proof."
+  },
+  "/detect": {
+    "title": "Media detector — ConfiGuard-Lite",
+    "description": "Upload a face image or video for a calibrated likely-real, likely-manipulated or uncertain estimate, with quality checks and Content Credentials. Files are deleted after analysis."
+  },
+  "/about": {
+    "title": "Technology, evaluation and limits — ConfiGuard-Lite",
+    "description": "How ConfiGuard-Lite works, how it was evaluated on the FaceForensics++ validation split, and what it cannot tell you."
+  },
+  "404": {
+    "title": "Page not found — ConfiGuard-Lite",
+    "description": "This page does not exist. Go to the ConfiGuard-Lite overview or open the media detector."
+  }
+}

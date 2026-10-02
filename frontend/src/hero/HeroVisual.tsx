@@ -51,8 +51,8 @@ export function HeroVisual() {
       }
       if (disposed) { scene.dispose(); return; }
       performance.mark("cg:hero-ready");
-      const fit = () => scene.resize(el.clientWidth, el.clientHeight);
-      fit();
+      const fitSize = () => scene.resize(el.clientWidth, el.clientHeight);
+      fitSize();
       el.dataset.dpr = String(scene.stats.dpr);
       el.dataset.geometryBytes = String(scene.stats.geometryBytes);
       el.dataset.triangles = String(scene.stats.triangles);
@@ -77,7 +77,7 @@ export function HeroVisual() {
         if (on && !unsub && !reduced) unsub = subscribe(tick);
         if (!on && unsub) { unsub(); unsub = null; el.dataset.frames = String(frames); }
       };
-      const ro = new ResizeObserver(() => { fit(); if (reduced) scene.render(0, 0); });
+      const ro = new ResizeObserver(() => { fitSize(); if (reduced) scene.render(0, 0); });
       ro.observe(el);
       const io = new IntersectionObserver(([e]) => run(Boolean(e?.isIntersecting)));
       io.observe(el);

@@ -54,7 +54,20 @@ export const ERRORS: Record<string, string> = {
   network_error: "The connection to the server failed.",
   invalid_response: "The server response could not be read.",
   cancelled: "Analysis cancelled.",
+  offline: "You appear to be offline. Reconnect to the internet or the server's network, then retry.",
 };
+
+export type RecoveryAction = "retry" | "choose" | "key";
+
+const FILE_PROBLEMS = new Set(["file_too_large", "unsupported_media_type", "media_type_mismatch", "media_unreadable",
+  "video_too_long", "empty_file"]);
+
+/** The recovery actions that can actually fix a failure, most useful first. */
+export function recoveryFor(code: string): RecoveryAction[] {
+  if (FILE_PROBLEMS.has(code)) return ["choose"];
+  if (code === "unauthorized") return ["key", "retry"];
+  return ["retry", "choose"];
+}
 
 export const CREDENTIALS: Record<ProvenanceStatus, { label: string; tone: "ok" | "bad" | "neutral"; text: string }> = {
   ABSENT: { label: "No Content Credentials", tone: "neutral",

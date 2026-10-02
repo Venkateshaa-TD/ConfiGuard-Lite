@@ -12,8 +12,8 @@ export function Hero() {
       <div className="mx-auto grid min-h-[calc(100dvh-4rem)] max-w-[1440px] items-center gap-10 px-4 py-12 md:px-8 lg:grid-cols-[1.05fr_1fr] lg:py-0">
         <div className="flex flex-col gap-7">
           <TechLabel tone="muted">Image and video deepfake screening</TechLabel>
-          <h1 id="hero-h" tabIndex={-1} className="display text-[clamp(3.4rem,8.6vw,8.4rem)] text-ink outline-none">
-            Truth, verified<br /><span className="text-ink/80">frame by frame.</span>
+          <h1 id="hero-h" tabIndex={-1} className="display text-[clamp(3.4rem,7.6vw,7rem)] text-ink outline-none">
+            Faces, examined<br /><span className="text-ink/80">frame by frame.</span>
           </h1>
           <p className="max-w-[52ch] text-base leading-relaxed text-ink-2 md:text-lg">
             ConfiGuard-Lite screens faces in photos and videos for signs of manipulation. A compact model runs on an ordinary

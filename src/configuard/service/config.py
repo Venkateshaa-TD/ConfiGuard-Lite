@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from configuard.config import ProjectConfig, ValidationLimits, load_config
+from configuard.service.site import PublicUrlError, normalise_public_base_url
 
 DEVICES = ("cpu", "cuda")
 
@@ -39,6 +40,7 @@ class ServiceConfig:
     explain_occlusion_fallback: bool = True  # occlusion hint when Grad-CAM is withheld (explanation-only)
     docs_enabled: bool = True
     ui_enabled: bool = True
+    public_base_url: str | None = None  # e.g. https://example.org; absolute social/canonical URLs only when set
     ui_dist_dir: Path | None = None  # React build (frontend/dist); falls back to the Phase 11 static UI if absent
     c2pa_enabled: bool = True  # read-only Content Credentials check (separate signal)
     c2pa_timeout_s: float = 5.0
@@ -91,6 +93,8 @@ def service_config_from_project(project: ProjectConfig, overrides: dict[str, Any
     gate_path = Path(gate) if gate else _default_checkpoint_dir() / "quality_gate" / "p80" / "quality_gate.json"
     from configuard.media.face_detector import default_yunet_model_path
 
+    if os.environ.get("CONFIGUARD_PUBLIC_BASE_URL"):
+        block["public_base_url"] = os.environ["CONFIGUARD_PUBLIC_BASE_URL"]
     tmp = os.environ.get("CONFIGUARD_SERVICE_TEMP_DIR")
     dist = os.environ.get("CONFIGUARD_UI_DIST")
     default_dist = Path(__file__).resolve().parents[3] / "frontend" / "dist"
@@ -115,7 +119,11 @@ def validate_service_config(cfg: ServiceConfig) -> ServiceConfig:
             raise ServiceConfigError("production requires CONFIGUARD_API_KEYS; refusing to start without auth")
     if cfg.require_api_key and not cfg.api_key_sha256:
         raise ServiceConfigError("require_api_key is set but CONFIGUARD_API_KEYS is empty")
-    return cfg
+    try:
+        base = normalise_public_base_url(cfg.public_base_url)
+    except PublicUrlError as exc:
+        raise ServiceConfigError(str(exc)) from exc
+    return cfg if base == cfg.public_base_url else replace(cfg, public_base_url=base)
 
 
 def load_service_config(config_path: str | Path, **overrides: Any) -> ServiceConfig:

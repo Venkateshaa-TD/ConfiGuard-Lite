@@ -597,3 +597,31 @@ All notable changes to this project are documented here.
   (48 VAL items); parity 15/15; Lighthouse a11y 100 in both themes, LCP
   ≤ 2.42 s; 70 unit, 23 E2E and the full backend suite passed. No model,
   calibration, gate, C2PA or threshold change; FF++ test untouched.
+
+### 12e — Final website polish and production-readiness audit (2026-10-02)
+
+- **Metadata:** per-route titles, descriptions and Open Graph / Twitter
+  tags, written by the server and kept in sync client-side; 404 is
+  `noindex`.
+- **Public base URL:** optional, validated `public_base_url` /
+  `CONFIGUARD_PUBLIC_BASE_URL`; absolute URLs appear only when it is
+  set.
+- **Icons and manifest:** brand favicon (SVG + ICO), Apple touch icon,
+  192/512/maskable icons, `site.webmanifest` and a 1200×630 social image
+  (`scripts/render-icons.mjs`). CSP gains `manifest-src 'self'`.
+- **Detector:** every failure has a fitting recovery action, there is an
+  offline banner and offline message, upload-limit loading can be
+  retried, and a 401 reveals and focuses the API-key field.
+- **404 page:** overview and detector actions.
+- **Copy:** the unsupported "Truth, verified" headline was replaced;
+  heatmap limitation text updated; empty-state wording fixed for phones.
+- **Performance:** correct media types for woff2/webp/glb; `modulepreload`
+  for lazy route chunks and a body-font preload (`/detect` mobile LCP
+  2.59 → 2.49 s); the HTML shell is refreshed when the build changes.
+- **Lint:** Biome lint (`npm run lint`); all findings fixed or justified.
+- **Tests:**
+  - `tests/e2e/audit.spec.ts` (17 tests): overflow at 9 widths +
+    landscape + short, 200% zoom/text, keyboard focus, axe in 4 theme
+    modes, links, console/network, metadata, 404, no WebGL on
+    `/detect`, all detector states.
+  - Backend `tests/service/test_site_meta.py`.

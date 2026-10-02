@@ -8,6 +8,7 @@
   },
   "scripts": {
     "dev": "vite",
+    "lint": "biome lint --error-on-warnings",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "build": "npm run typecheck && vite build",
     "test": "vitest run",
@@ -24,6 +25,7 @@
     "three": "0.186.1"
   },
   "devDependencies": {
+    "@biomejs/biome": "2.5.15",
     "@playwright/test": "1.63.0",
     "@tailwindcss/vite": "4.3.3",
     "@testing-library/dom": "10.4.2",

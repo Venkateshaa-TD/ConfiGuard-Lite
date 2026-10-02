@@ -119,8 +119,8 @@ export const ResultView = forwardRef<HTMLHeadingElement, { r: AnalyzeResult }>(f
                   </tr>
                 </thead>
                 <tbody>
-                  {r.timeline.map((e, i) => (
-                    <tr key={`${e.frame_index}-${i}`} className="border-b border-line/60">
+                  {r.timeline.map((e) => (
+                    <tr key={`${e.slot ?? "-"}:${e.frame_index}`} className="border-b border-line/60">
                       <td className="py-1.5 pr-3">{e.frame_index}</td>
                       <td className="py-1.5 pr-3">{seconds(e.timestamp_s)}</td>
                       <td className="py-1.5 pr-3">{pct(e.p_fake_frame)}</td>

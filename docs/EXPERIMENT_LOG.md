@@ -2577,3 +2577,79 @@ cd frontend && npx playwright test       # 23 passed (chrome, chrome-swiftshader
 cd frontend && node scripts/size-report.mjs   # landing 93.1 KB gzip, ok
 .venv/Scripts/python.exe -m pytest -q -p no:cacheprovider   # 665 passed, 322.43 s
 ```
+
+## 2026-10-02 — 12e production-readiness audit
+
+Commands:
+
+```
+cd frontend
+npm run lint                     # biome lint --error-on-warnings: 57 files, clean
+npm run typecheck                # clean
+npx vitest run                   # 82 passed
+npm run build && node scripts/size-report.mjs   # landing initial JS 93.8 KB gzip (< 180)
+npx playwright test              # 40 passed (17 new audit tests in tests/e2e/audit.spec.ts)
+node scripts/lighthouse.mjs      # both themes, mobile + desktop
+node scripts/render-icons.mjs    # icons + og-image from local sources
+cd .. && .venv/Scripts/python.exe -m pytest -q -p no:cacheprovider   # 679 passed, 271.31 s
+.venv/Scripts/python.exe scripts/detection_parity.py compare          # 15 items, decisions identical: true
+```
+
+Lighthouse, final (prefers-color-scheme forced per Chrome instance):
+
+| run | perf / a11y / BP / SEO | LCP | TBT | CLS |
+|---|---|---|---|---|
+| `/` mobile light | 97 / 100 / 100 / 100 | 2.35 s | 30 ms | 0 |
+| `/` desktop light | 100 / 100 / 100 / 100 | 0.51 s | 7 ms | 0 |
+| `/detect` mobile light | 97 / 100 / 100 / 100 | 2.49 s | 49 ms | 0 |
+| `/detect` desktop light | 100 / 100 / 100 / 100 | 0.63 s | 0 ms | 0.001 |
+| `/` mobile dark | 97 / 100 / 100 / 100 | 2.35 s | 27 ms | 0 |
+| `/` desktop dark | 100 / 100 / 100 / 100 | 0.50 s | 7 ms | 0 |
+| `/detect` mobile dark | 96 / 100 / 100 / 100 | 2.49 s | 69 ms | 0 |
+| `/detect` desktop dark | 100 / 100 / 100 / 100 | 0.61 s | 0 ms | 0.001 |
+
+`/detect` mobile LCP before this phase's fixes: 2.59–2.60 s.
+- The LCP element is the upload panel's description paragraph (element
+  render delay about 660 ms).
+- A `modulepreload` for the DetectPage chunk gave 2.53–2.54 s; also
+  preloading the Geist body font gave 2.49 s.
+
+Asset audit (served by FastAPI; gzip by the middleware where compressible):
+
+| file | bytes | type / cache |
+|---|---|---|
+| `assets/index-*.js` (entry) | 315,522 (93.8 KB gzip) | immutable 1 year |
+| `assets/heroScene-*.js` (lazy, `/` only) | 543,905 (131.5 KB gzip) | immutable |
+| `assets/DetectPage-*.js` / `AboutPage-*.js` | 89,432 / 6,971 | immutable |
+| `assets/index-*.css` | 38,513 (8.5 KB gzip) | immutable |
+| Geist / Geist Mono / Big Shoulders woff2 | 29,400 + 16,512 + 23,128 / 35,504 | `font/woff2`; immutable / 1 week |
+| `hero/head.glb` | 1,643,008 | `model/gltf-binary`, 1 week |
+| `hero/poster-{light,dark}.webp` | 44,004 / 43,948 (721×900) | `image/webp`, 1 week |
+| `og-image.jpg` | 99,044 (1200×630) | 1 week |
+| icons (ico / 180 / 192 / 512 / maskable 512 / svg) | 926 / 1,677 / 2,545 / 7,951 / 3,878 / 324 | 1 week |
+| `site.webmanifest` / `theme-init.js` / HTML | 708 / 817 / 3.5 KB | 1 day / no-cache / no-store |
+
+- Media types were fixed from `application/octet-stream` for woff2,
+  webp and glb.
+- `route-meta.json` is server-internal (404 over HTTP).
+- No unused source files were found.
+
+Audit results (`tests/e2e/audit.spec.ts`):
+- **Overflow:** 0 px at 9 widths, 2 landscape sizes and 2 short sizes on
+  all 4 routes.
+- **200% zoom and text:** no overflow.
+- **axe:** 0 violations, including contrast, in 4 theme modes.
+- **Links:** 9 internal links valid.
+- **Console and network:** 0 errors or failed requests.
+- **Metadata:** unique titles and descriptions.
+- **404 page:** both actions work.
+- **WebGL:** 0 WebGL contexts on `/detect`.
+- **Detector:** all 14 UI states pass.
+
+Final screenshots: `%TEMP%\frontend_12e\2026-10-02T13-32-13-573Z\` — 40 full-page captures:
+- routes `/`, `/detect`, `/about` and 404;
+- light and dark;
+- 360 / 390 / 820 / 1440 / 1920 px.
+
+They are not committed. For these captures only, `content-visibility`
+is disabled so off-screen sections paint.

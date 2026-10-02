@@ -89,7 +89,7 @@ export function EvidenceGrid({ ex, decided = true }: { ex: Explanation; decided?
             </p>
           )}
           <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-            {shown.map((f, i) => <Frame key={`${f.frame_index}-${i}`} f={f} fallbackLabel={ex.label} />)}
+            {shown.map((f) => <Frame key={`${f.slot ?? "-"}:${f.frame_index}`} f={f} fallbackLabel={ex.label} />)}
           </div>
           {missing > 0 ? <WhySafer /> : null}
         </>
