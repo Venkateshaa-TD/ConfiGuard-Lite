@@ -663,3 +663,16 @@ All notable changes to this project are documented here.
 - **Verification:** Space image built locally and run as uid 1000 on
   2 CPUs: fail-closed without key, auth 401/401/200, parity 15/15,
   24/24 val items. Not pushed. No model, service or frontend change.
+
+## 2026-10-22 — 15: free hosting on Oracle Cloud Always Free (arm64)
+
+- **Context:** Hugging Face refused the Phase 14 push (Docker Spaces need
+  PRO); Phase 14 marked BLOCKED for free accounts.
+- **New:** `deploy/oracle/` (compose override, Caddyfile, server-setup.sh,
+  deploy.sh); `scripts/prepare_oracle_bundle.py` (arm64 build, image
+  save, digest-only key file, SHA256SUMS); 16 tests.
+- **Changed:** `Dockerfile` frontend stage on `$BUILDPLATFORM`;
+  `.gitattributes` LF for `deploy/**`.
+- **Verification:** arm64 wheels 37/37; arm64 build OK; parity 15/15 same
+  verdicts (float noise ≤ 1.6e-5); Caddy stack HTTPS/auth/upload checks;
+  pytest 711/711. VM not created yet.

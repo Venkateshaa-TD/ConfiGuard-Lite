@@ -13,7 +13,9 @@ ARG NODE_IMAGE=node:24.19.0-bookworm-slim@sha256:a9f5f7c91a432850b2a8a7797adf5ea
 ARG PYTHON_IMAGE=python:3.11.9-slim-bookworm@sha256:8fb099199b9f2d70342674bd9dbccd3ed03a258f26bbd1d556822c6dfc60c317
 
 # ---------------------------------------------------------------- 1. frontend build
-FROM ${NODE_IMAGE} AS web
+# Runs on the build host's platform: the output is static files, identical for every target, so an arm64
+# image (Oracle Ampere, Phase 15) does not build the frontend under emulation.
+FROM --platform=$BUILDPLATFORM ${NODE_IMAGE} AS web
 WORKDIR /web
 # .npmrc: exact pins, lockfile, ignore-scripts (no package install scripts run).
 COPY frontend/package.json frontend/package-lock.json frontend/.npmrc ./

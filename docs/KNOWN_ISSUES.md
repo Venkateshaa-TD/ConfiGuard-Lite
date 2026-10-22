@@ -4,8 +4,30 @@ Format: one entry per issue. Mark resolved issues rather than deleting them.
 
 ---
 
+## OPEN — Oracle Cloud arm64 deployment (Phase 15)
+
+- **Native arm64 not measured.** Only QEMU emulation was available
+  (~50× slower). Speed, the 3 timing checks of container_check and the
+  60 s request timeout must be re-checked on the VM.
+- **arm64 numerics differ by float noise** (≤ 1.6e-5 logits) from the
+  amd64 baseline; verdicts were identical on 15/15. A strict 6-decimal
+  parity run reports these as differences; use a tolerance for arm64.
+- **Uploads above 160 MB get a closed connection,** not a clean 413
+  (Caddy body cap while the client is still sending). The service limit
+  is 150 MB, so normal oversize files are rejected by the service.
+- **Oracle-side unknowns:** A1 capacity can be unavailable in the home
+  region; idle Always Free VMs may be reclaimed; sign-up needs a card.
+- **No rate limiting or per-key quotas** (same as rc.1); rotate the key
+  with a new bundle (`--new-key`) if it leaks.
+- **Dev machine disk:** C: was nearly full; build bundles on D:
+  (`--out D:\...`).
+
+---
+
 ## OPEN — Hugging Face Space hosting (Phase 14)
 
+- **Needs a paid PRO account.** The push was refused (402: Docker Spaces on
+  free cpu-basic require PRO). Superseded by Phase 15 for free hosting.
 - **Not pushed yet.** Only the local equivalent was verified (uid 1000,
   2 CPUs). The real Space build, its upload size limit through the
   Hugging Face proxy (150 MB videos) and sleep/wake time are unverified.

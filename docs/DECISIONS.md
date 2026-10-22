@@ -4,6 +4,34 @@ Format: one entry per decision, newest first.
 
 ---
 
+## 2026-10-22 — 15: free hosting on Oracle Cloud Always Free (arm64) behind Caddy
+
+**Context:** the Phase 14 push showed Hugging Face Docker Spaces need a
+paid PRO account. Free container hosts give 512 MB RAM (peak is ~1 GiB);
+Vercel functions cap request bodies far below the 150 MB upload limit.
+
+**Decision:** one Oracle Always Free Ampere A1 VM (arm64, 2 OCPU / 12 GB)
+running the unchanged hardened `compose.yaml` plus an override and a
+digest-pinned Caddy for automatic HTTPS. The image is the same Dockerfile
+and hash lock built for `linux/arm64` on the laptop and shipped as a
+`docker save` bundle with SHA256SUMS (no registry, no build on the VM).
+Free domain: DuckDNS. Auth stays mandatory.
+
+**Why:** always on, enough memory, keeps every compose hardening setting,
+no dependency changes (all locked wheels exist for aarch64). Building the
+frontend on `$BUILDPLATFORM` avoids an emulated npm build.
+
+**Rejected:** laptop + Cloudflare Tunnel (only up while the laptop is on;
+100 MB body cap) — kept as a fallback; Hugging Face PRO (paid);
+building on the VM (needs staged artifacts there and the Debian snapshot
+mirror at deploy time).
+
+**Trade-offs:** arm64 results differ from amd64 by float noise only
+(≤ 1.6e-5 logits); card needed for Oracle sign-up; capacity can be
+unavailable; idle Always Free VMs may be reclaimed.
+
+---
+
 ## 2026-10-22 — 14: free hosting on a Hugging Face Docker Space, auth kept
 
 **Context:** the user wants free hosting. The image needs ~1 GiB peak

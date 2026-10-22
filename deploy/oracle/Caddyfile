@@ -1,0 +1,28 @@
+# Public HTTPS front for ConfiGuard-Lite (Phase 15). Caddy obtains and renews a Let's Encrypt certificate
+# for CONFIGUARD_DOMAIN automatically (ports 80 and 443 must be reachable from the internet).
+{
+	email {$ACME_EMAIL}
+	admin off
+}
+
+{$CONFIGUARD_DOMAIN} {
+	encode zstd gzip
+
+	# Largest accepted upload is 150 MB (configs/production.yaml); allow multipart overhead, reject more here.
+	request_body {
+		max_size 160MB
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		-Server
+	}
+
+	reverse_proxy configuard:8000 {
+		transport http {
+			# Service timeouts are 60 s upload + 60 s analysis; keep the proxy above both.
+			read_timeout 150s
+			write_timeout 150s
+		}
+	}
+}

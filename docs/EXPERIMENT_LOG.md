@@ -2764,3 +2764,44 @@ docker run -d --user 1000:1000 --cpus 2 -p 127.0.0.1:8798:8000 configuard-hf-spa
 Parity report: `D:/ConfiGuard-Data/outputs/detection_parity/detection_parity_compare_20261022-181646_hf_space.json`.
 The load figures came from a one-off timing script (scratch, not committed) that uses the project's
 `val_media` / `frame_images` helpers.
+
+## 2026-10-22 — 15 Oracle arm64 bundle (local verification)
+
+Host: Docker Desktop (WSL2, amd64) with QEMU for linux/arm64. FF++ **val**
+only (test sealed).
+
+```
+pip download --no-deps --require-hashes --only-binary=:all: --python-version 3.11 --abi cp311 --platform manylinux_2_{17..36}_aarch64 --platform any -r docker/requirements-runtime.lock   # 37/37
+docker buildx imagetools inspect <node|python base digest>                          # both include linux/arm64/v8
+docker buildx build --platform linux/arm64 --load -t configuard-lite:1.0.0-rc.1-arm64 .   # exit 0, 385 MB
+.venv/Scripts/python.exe scripts/container_check.py --image configuard-lite:1.0.0-rc.1-arm64 --videos 6 --images 6 --concurrency 2
+docker run --platform linux/arm64 ... --env development  (development.yaml bind-mounted with 1800 s timeouts, test only)
+detection_parity.py compare --url http://127.0.0.1:8797 --label _arm64_emulated     (client timeout raised to 1800 s by a scratch wrapper)
+docker compose -f compose.yaml -f compose.oracle.yaml -f <local test override: amd64 image, ports 18080/18443> up -d   (CONFIGUARD_DOMAIN=localhost)
+docker run caddy:2.11.7-alpine@sha256:24ec7b05… caddy validate --config /etc/caddy/Caddyfile
+docker run koalaman/shellcheck:stable server-setup.sh deploy.sh
+.venv/Scripts/python.exe -m pytest -q
+```
+
+| check | result |
+|---|---|
+| aarch64 wheels vs hash lock | 37/37 |
+| arm64 build | exit 0; 385 MB |
+| container_check (emulated) | 22/25 — failures are emulation timeouts (load videos 0/6, in-flight at SIGTERM, clean exit) |
+| emulated speed | cold start 132.7 s; image P50 21.1 s; one video 504 after 123 s; idle 345 MiB, peak 1078 MiB |
+| parity arm64 vs native baseline | 15/15 same verdicts and all categorical fields; max logit diff 1.6e-5, max p_fake diff 4e-6 |
+| Caddy stack: health / site / redirect | 200 / 200 / 308 → https |
+| headers | HSTS max-age=31536000, CSP present, Server removed |
+| analyze via proxy: no key / key | 401 / 200 (likely_real, 4.95 s) |
+| 140 MB junk via proxy | 415 from the service (passes Caddy) |
+| 170 MB junk via proxy | connection closed by Caddy (body cap 160 MB) |
+| caddy validate / ShellCheck | valid / clean (one info note silenced) |
+| pytest | 711 passed (347 s) |
+
+Reports: `D:/ConfiGuard-Data/outputs/container_check/container_check_20261022-191724.json`,
+`D:/ConfiGuard-Data/outputs/detection_parity/detection_parity_compare_20261022-193220_arm64_emulated.json`.
+
+Host note: C: reached 99–100% during this phase (Docker's 14 GB virtual
+disk, 4.4 GB of pytest temp runs). Removed only this session's scratch
+files, the `configuard-hf-space:test` image and pytest temp runs; C: back
+to ~4.5 GB free.

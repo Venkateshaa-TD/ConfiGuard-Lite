@@ -92,9 +92,14 @@ Results for rc.1 are in `docs/EXPERIMENT_LOG.md` (Phase 13); open risks
 (unfixed upstream CVEs, latency under a CPU quota) are in
 `docs/KNOWN_ISSUES.md`.
 
-## Free hosting: Hugging Face Docker Space (Phase 14)
+## Hugging Face Docker Space (Phase 14; needs a paid PRO account)
 
-The free `cpu-basic` Space (2 vCPU, 16 GB RAM) runs the same image. Auth
+**Not free.** The first push (2026-10-22) was refused with `402 Payment
+Required`: "hosting Gradio and Docker Spaces on free cpu-basic requires a
+PRO subscription". The package below works unchanged for a PRO account;
+the free deployment target is Oracle Cloud (next section).
+
+The `cpu-basic` Space (2 vCPU, 16 GB RAM) runs the same image. Auth
 stays mandatory (production profile, "Option A"): visitors see the site,
 but analysis needs an API key you hand out.
 
@@ -131,3 +136,73 @@ Differences from `compose.yaml` (the platform controls the container):
 no read-only root filesystem, no capability drop, no memory/PID limits,
 no tini. The image still runs as a non-root user with read-only app files.
 A public Space also exposes its files, **including the ONNX model**.
+
+## Free hosting: Oracle Cloud Always Free, Ampere A1 (Phase 15)
+
+One always-on arm64 VM (Always Free: 2 OCPU / 12 GB in 2026) runs the
+hardened `compose.yaml` unchanged plus Caddy for automatic HTTPS. Auth
+stays mandatory ("Option A").
+
+**What runs:** `compose.yaml` + `deploy/oracle/compose.oracle.yaml`.
+The override only sets the arm64 image (`pull_policy: never`), `cpus: 2`,
+one ONNX Runtime thread per analysis and the public base URL, and adds a
+digest-pinned, read-only Caddy (`caddy:2.11.7-alpine`) on ports 80/443.
+Caddy gets a Let's Encrypt certificate, caps request bodies at 160 MB and
+adds HSTS.
+
+**The image is the same Dockerfile and lock built for `linux/arm64`.**
+All 37 locked Python packages have aarch64 wheels whose hashes match
+`docker/requirements-runtime.lock`, and both base images are multi-arch
+digests. The frontend stage runs on the build host (`--platform=$BUILDPLATFORM`).
+
+### 1. Oracle account and VM (web console)
+
+1. Sign up at oracle.com/cloud/free. A card is needed for identity
+   verification. Pick a **home region** carefully: Always Free VMs exist
+   only there.
+2. Make an SSH key on Windows:
+   `ssh-keygen -t ed25519 -f $HOME\.ssh\oracle_configuard`
+3. **Compute → Instances → Create instance:** image **Canonical Ubuntu
+   24.04** (aarch64); shape **Ampere → VM.Standard.A1.Flex, 2 OCPU,
+   12 GB**; networking: public subnet, **assign a public IPv4 address**;
+   SSH keys: paste `oracle_configuard.pub`. If you see "Out of host
+   capacity", retry later or pick another availability domain.
+4. **Networking → the instance's VCN → Security Lists → Default →
+   Add ingress rules:** source `0.0.0.0/0`, TCP, destination ports `80`
+   and `443`.
+5. Free domain: sign in at duckdns.org, create `<name>.duckdns.org` and
+   set its IP to the VM's public IP.
+
+### 2. Build the bundle (this laptop, Docker Desktop running)
+
+```powershell
+.venv\Scripts\python.exe scripts\stage_release.py                     # if build\release is missing or stale
+.venv\Scripts\python.exe scripts\prepare_oracle_bundle.py --domain <name>.duckdns.org --email <you@example.com> --new-key --out D:\configuard-bundle
+```
+
+It builds `configuard-lite:1.0.0-rc.1-arm64` (under emulation, slow the
+first time), saves it to the `--out` folder (default `build\oracle-bundle\`;
+on this laptop use D:, C: is nearly full), and prints the new API key
+**once**. Only the key's SHA-256 digest is written to the bundle.
+
+### 3. Copy and start (VM)
+
+```powershell
+scp -i $HOME\.ssh\oracle_configuard -r D:\configuard-bundle ubuntu@<VM-IP>:~/configuard
+ssh -i $HOME\.ssh\oracle_configuard ubuntu@<VM-IP>
+```
+
+```bash
+cd ~/configuard && bash server-setup.sh     # once: Docker, compose, firewall 80/443, unattended upgrades
+exit                                        # log in again so the docker group applies
+cd ~/configuard && bash deploy.sh           # checks SHA256SUMS, loads the image, starts both containers
+```
+
+Open `https://<name>.duckdns.org`. **Update:** rebuild the bundle,
+`scp` it again and re-run `bash deploy.sh`. **Logs:**
+`docker compose -f compose.yaml -f compose.oracle.yaml logs -f`.
+
+**Notes:** keep the `caddy_data` volume (certificates; Let's Encrypt rate
+limits). Oracle may reclaim Always Free VMs that stay idle for a long
+time (low CPU, network and memory use). There is no rate limiting or
+per-key quota; rotate the key if it leaks (new bundle with `--new-key`).

@@ -10,7 +10,7 @@ operating rules this project is developed under.
 
 ## Status
 
-Phase 14 (free Hugging Face Docker Space package, auth kept; verified locally, not pushed). Phase 13 (hardened CPU Docker release candidate `1.0.0-rc.1`, verified locally, not deployed; see `docs/DEPLOYMENT.md`). Phase 12 (read-only C2PA Content Credentials verification as a separate signal; official CAI SDK + pinned official trust list). Phase 11 (optional Grad-CAM evidence hints, gated by an occlusion check, and a local web UI at `/`). Phase 10 (production inference API: FastAPI over ONNX FP32 adaptive inference + the Phase 9 v1 quality gate; CPU default, development data only, test sealed). Phase 9c (final hybrid quality-gate experiment, rejected; quality-gate experimentation ended). The Phase 9 downgrade-only media-quality gate over ONNX FP32 adaptive inference remains enabled by default (development data only, test sealed). Phase 9b (quality-gate hardening) was also rejected. Phase 8 exported the calibrated `student_distilled_p80` to ONNX (FP32 default on CPU and GPU). Phase 7 evaluated and rejected a GRU temporal head. Phase 6e ran the compression-robust training experiment (not selected). Phase 6d added adaptive 4/8/16-frame video inference. Phase 6c added calibration and the uncertain output. Phase 6b trained the MobileNetV4 students (BCE baseline vs GenD-distilled). Phase 6a cached frozen GenD CLIP-L/14 teacher logits for train/val. Before that, Phase 5d (matched face-crop extraction and shortcut audit) — see
+Phase 15 (free hosting on Oracle Cloud Always Free, arm64, behind Caddy HTTPS; bundle verified locally, VM not yet created). Phase 14 (Hugging Face Docker Space package; blocked: Docker Spaces need HF PRO). Phase 13 (hardened CPU Docker release candidate `1.0.0-rc.1`, verified locally, not deployed; see `docs/DEPLOYMENT.md`). Phase 12 (read-only C2PA Content Credentials verification as a separate signal; official CAI SDK + pinned official trust list). Phase 11 (optional Grad-CAM evidence hints, gated by an occlusion check, and a local web UI at `/`). Phase 10 (production inference API: FastAPI over ONNX FP32 adaptive inference + the Phase 9 v1 quality gate; CPU default, development data only, test sealed). Phase 9c (final hybrid quality-gate experiment, rejected; quality-gate experimentation ended). The Phase 9 downgrade-only media-quality gate over ONNX FP32 adaptive inference remains enabled by default (development data only, test sealed). Phase 9b (quality-gate hardening) was also rejected. Phase 8 exported the calibrated `student_distilled_p80` to ONNX (FP32 default on CPU and GPU). Phase 7 evaluated and rejected a GRU temporal head. Phase 6e ran the compression-robust training experiment (not selected). Phase 6d added adaptive 4/8/16-frame video inference. Phase 6c added calibration and the uncertain output. Phase 6b trained the MobileNetV4 students (BCE baseline vs GenD-distilled). Phase 6a cached frozen GenD CLIP-L/14 teacher logits for train/val. Before that, Phase 5d (matched face-crop extraction and shortcut audit) — see
 `docs/PHASE_STATUS.md` for current status. FF++ c23 (5000 videos,
 8.4 GiB) is downloaded to `D:`, validated, and split with the authors'
 official train/val/test files (720/140/140 originals, leakage-checked).
@@ -493,7 +493,17 @@ docker compose up -d                                        # http://127.0.0.1:8
   Desktop. Not deployed anywhere. See `docs/DEPLOYMENT.md` and the open
   CVE and throughput notes in `docs/KNOWN_ISSUES.md`.
 
-## Free hosting on Hugging Face Spaces (Phase 14)
+## Free hosting on Oracle Cloud (Phase 15)
+
+```powershell
+.venv\Scripts\python.exe scripts\prepare_oracle_bundle.py --domain <name>.duckdns.org --email <you@example.com> --new-key --out D:\configuard-bundle
+scp -i $HOME\.ssh\oracle_configuard -r D:\configuard-bundle ubuntu@<VM-IP>:~/configuard
+```
+
+Then on the VM: `bash server-setup.sh` once, log in again, `bash deploy.sh`.
+Full walkthrough (Oracle account, VM, ports, DuckDNS): `docs/DEPLOYMENT.md`.
+
+## Hugging Face Spaces (Phase 14; needs a paid PRO account)
 
 ```powershell
 .venv\Scripts\python.exe scripts\prepare_hf_space.py --generate-key                       # key to share + digest for the Space secret

@@ -29,7 +29,8 @@
 | 12d | Realistic human hero, light/dark themes, explanation availability | PASS | 2026-10-02 |
 | 12e | Final website polish and production-readiness audit | PASS | 2026-10-02 |
 | 13 | Hardened Docker release candidate (1.0.0-rc.1) | PASS | 2026-10-02 |
-| 14 | Free hosting package: Hugging Face Docker Space (auth kept) | PARTIAL (prepared + verified locally; not pushed) | 2026-10-22 |
+| 14 | Free hosting package: Hugging Face Docker Space (auth kept) | BLOCKED (push refused: Docker Spaces need HF PRO; superseded by 15) | 2026-10-22 |
+| 15 | Free hosting: Oracle Cloud Always Free (Ampere A1, arm64) + Caddy HTTPS | PARTIAL (bundle + arm64 image verified locally; VM not yet created) | 2026-10-22 |
 
 Full per-phase results are recorded below as they complete.
 
@@ -1617,3 +1618,62 @@ hardening):**
 
 **Not verified:** the real Hugging Face build and runtime (proxy upload
 size limit, sleep/wake time, uid handling) — check after the first push.
+
+**Update (2026-10-22):** the first `--push` failed with `402 Payment
+Required` — "hosting Gradio and Docker Spaces on free cpu-basic requires a
+PRO subscription". Nothing was created. Phase 14 is BLOCKED for a free
+account and superseded by Phase 15; the package still works for PRO.
+
+---
+
+## Phase 15 — Free hosting: Oracle Cloud Always Free (Ampere A1, arm64)
+
+**Status:** PARTIAL — the arm64 image, deployment files and bundle script
+are built and verified locally; the user has not yet created the VM.
+
+**Goal:** a free, always-on host for the unchanged hardened compose
+stack. Oracle Always Free Ampere A1 (2 OCPU / 12 GB in 2026, arm64) was
+chosen after Hugging Face Docker Spaces turned out to need PRO.
+
+**Implemented:**
+- `Dockerfile`: frontend stage runs on `$BUILDPLATFORM` (static output;
+  no emulated npm build for arm64). No other change.
+- `deploy/oracle/compose.oracle.yaml`: arm64 image (`pull_policy: never`),
+  `cpus: 2`, 1 ORT thread, public base URL; digest-pinned read-only Caddy
+  2.11.7 (cap drop ALL + NET_BIND_SERVICE) on 80/443.
+- `deploy/oracle/Caddyfile`: automatic Let's Encrypt, 160 MB body cap,
+  HSTS, `Server` header removed, 150 s proxy timeouts, admin API off.
+- `deploy/oracle/server-setup.sh` (Docker + Compose v2 from Ubuntu,
+  iptables 80/443 persisted, unattended upgrades) and `deploy.sh`
+  (SHA256SUMS check, `docker load`, compose up, health wait).
+- `scripts/prepare_oracle_bundle.py`: buildx arm64 build with commit/dirty,
+  `docker save` → gzip, bundle with `.env`, digest-only
+  `secrets/api_keys.txt` (`--new-key` prints the key once), SHA256SUMS.
+- `tests/test_prepare_oracle_bundle.py` (16 tests); `.gitattributes`
+  forces LF under `deploy/`.
+
+**Verification (local, Docker Desktop, arm64 under QEMU emulation):**
+- All 37 locked packages resolve to aarch64 wheels with matching hashes
+  (`pip download --require-hashes --only-binary=:all:`); both base images
+  are multi-arch digests. arm64 image builds (exit 0, 385 MB).
+- container_check on arm64: 22/25. All hardening, auth, website, CSP,
+  corrupt-upload, cleanup and log checks pass. Failed: load (videos),
+  in-flight request at SIGTERM, clean exit — emulation is ~50× slower
+  (image P50 21 s); a direct video request returned `504
+  analysis_timeout` after 123 s. Not representative of native Ampere.
+- Detection parity on arm64 (emulated, timeouts raised for the test only):
+  15/15 items with identical verdicts, base verdicts, frames used,
+  stopping reasons, warnings, gate, provenance and explanations; logits
+  differ by ≤ 1.6e-5 and p_fake by ≤ 4e-6 (ARM float kernels), so the
+  6-decimal exact comparison reports 14 items as "different".
+- Full stack (amd64 image + Caddy with a local CA, merged compose files):
+  HTTPS health/site 200, HTTP → HTTPS 308, HSTS + CSP present, `Server`
+  removed; analyze no key 401, key 200; 140 MB upload reaches the service
+  (415 for junk content); 170 MB is cut off by Caddy (connection closed).
+- Merged config resolves in a bundle folder without the repo or Dockerfile;
+  `caddy validate` OK; ShellCheck clean; `bash -n` OK.
+
+**Tests:** backend full suite 711/711 (695 + 16 new).
+
+**Not verified:** native Ampere performance, Let's Encrypt issuance, Oracle
+firewall/security-list behaviour, idle reclamation — after the VM exists.
