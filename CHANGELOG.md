@@ -649,3 +649,17 @@ All notable changes to this project are documented here.
   the image; Trivy 0 fixable; SBOM generated. Local tag `v1.0.0-rc.1`
   (not pushed). No model, calibration, gate or C2PA change; FF++ test
   untouched.
+
+## 2026-10-22 — 14: free hosting package (Hugging Face Docker Space)
+
+- **New:** `scripts/prepare_hf_space.py` builds `build/hf-space/`
+  (git-ignored) from the Docker allowlist + verified staged artifacts,
+  writes the Space README header and a Space Dockerfile (baked commit,
+  1 ORT thread, public base URL), `--generate-key`, optional `--push`.
+- **Tests:** `tests/test_prepare_hf_space.py` (14).
+- **Docs:** Hugging Face section in `docs/DEPLOYMENT.md`; README,
+  PHASE_STATUS, DECISIONS, EXPERIMENT_LOG, KNOWN_ISSUES updated; fixed the
+  `secrets\api_keys.txt` typo in README.
+- **Verification:** Space image built locally and run as uid 1000 on
+  2 CPUs: fail-closed without key, auth 401/401/200, parity 15/15,
+  24/24 val items. Not pushed. No model, service or frontend change.

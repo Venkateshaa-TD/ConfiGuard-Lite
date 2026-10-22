@@ -4,6 +4,23 @@ Format: one entry per issue. Mark resolved issues rather than deleting them.
 
 ---
 
+## OPEN — Hugging Face Space hosting (Phase 14)
+
+- **Not pushed yet.** Only the local equivalent was verified (uid 1000,
+  2 CPUs). The real Space build, its upload size limit through the
+  Hugging Face proxy (150 MB videos) and sleep/wake time are unverified.
+- **Compose hardening does not apply on Spaces:** no read-only root
+  filesystem, no capability drop, no memory/PID limits, no tini. With the
+  unfixed ffmpeg CVEs (Phase 13) this suits a demo, not sensitive media.
+- **A public Space exposes the ONNX model** (FaceForensics++-trained,
+  research-use terms). Keep the research-demo labelling.
+- **Free hardware sleeps when idle;** the first visit afterwards waits for
+  a cold start. Video P95 on 2 vCPU was 16.8 s locally.
+- **No rate limiting or per-key quotas;** anyone with a key can use the
+  full capacity. Rotate the key (new secret) if it leaks.
+
+---
+
 ## OPEN — Docker release candidate (Phase 13)
 
 - **Unfixed upstream CVEs.** Trivy (2026-10-02 DB): 0 fixable, but

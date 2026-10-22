@@ -29,6 +29,7 @@
 | 12d | Realistic human hero, light/dark themes, explanation availability | PASS | 2026-10-02 |
 | 12e | Final website polish and production-readiness audit | PASS | 2026-10-02 |
 | 13 | Hardened Docker release candidate (1.0.0-rc.1) | PASS | 2026-10-02 |
+| 14 | Free hosting package: Hugging Face Docker Space (auth kept) | PARTIAL (prepared + verified locally; not pushed) | 2026-10-22 |
 
 Full per-phase results are recorded below as they complete.
 
@@ -1583,3 +1584,36 @@ media).
 **Tests:** backend full suite 681/681, service 73/73, vitest 82/82, Biome and
 tsc clean, native E2E 40/40.
 
+---
+
+## Phase 14 — Free hosting package: Hugging Face Docker Space
+
+**Status:** PARTIAL — the Space is prepared and verified locally; it has
+not been pushed (needs the user's Hugging Face account, token and Space
+secret).
+
+**Goal:** host the rc.1 image for free. Hugging Face Spaces (Docker,
+`cpu-basic`: 2 vCPU, 16 GB) was chosen; auth stays mandatory
+("Option A": keys handed out by the maintainer).
+
+**Implemented:** `scripts/prepare_hf_space.py` (verify staged artifacts →
+assemble `build/hf-space/` from the Docker allowlist and Git-tracked files
+→ Space README header `sdk: docker`, `app_port: 8000` → Dockerfile with
+baked commit + Space ENV block → optional `--push` via `huggingface_hub`;
+`--generate-key` prints a key and its `sha256:` digest);
+`tests/test_prepare_hf_space.py` (14 tests); `docs/DEPLOYMENT.md` section.
+
+**Verification (local, Docker Desktop, image built from `build/hf-space/`
+exactly as the Space builds it, run as uid 1000 with `--cpus 2`, no compose
+hardening):**
+- No `CONFIGUARD_API_KEYS` → refuses to start (fail closed).
+- With a key digest: `/health/ready` ready (artifacts, ONNX, C2PA ok);
+  site `/` 200; analyze without key 401, wrong key 401, right key 200.
+- Detection parity vs the native baseline: 15/15 identical.
+- 24 val items (12 videos + 12 frames), concurrency 4: 24/24 OK,
+  0.97 req/s, video P50/P95 4.6/16.8 s, image 0.66/2.15 s, ~1.0 GiB memory.
+
+**Tests:** backend full suite 695/695 (681 + 14 new).
+
+**Not verified:** the real Hugging Face build and runtime (proxy upload
+size limit, sleep/wake time, uid handling) — check after the first push.

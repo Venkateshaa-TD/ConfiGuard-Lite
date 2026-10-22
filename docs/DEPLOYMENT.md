@@ -91,3 +91,43 @@ docker run --rm -v //var/run/docker.sock:/var/run/docker.sock -v trivy-cache:/ro
 Results for rc.1 are in `docs/EXPERIMENT_LOG.md` (Phase 13); open risks
 (unfixed upstream CVEs, latency under a CPU quota) are in
 `docs/KNOWN_ISSUES.md`.
+
+## Free hosting: Hugging Face Docker Space (Phase 14)
+
+The free `cpu-basic` Space (2 vCPU, 16 GB RAM) runs the same image. Auth
+stays mandatory (production profile, "Option A"): visitors see the site,
+but analysis needs an API key you hand out.
+
+```powershell
+.venv\Scripts\python.exe scripts\stage_release.py                                   # if build\release is stale
+.venv\Scripts\python.exe scripts\prepare_hf_space.py --generate-key                  # prints a key + its sha256 digest
+.venv\Scripts\python.exe scripts\prepare_hf_space.py --space-id <user>/configuard-lite   # builds build\hf-space\
+.venv\Scripts\hf.exe auth login                                                     # token with write access
+.venv\Scripts\python.exe scripts\prepare_hf_space.py --space-id <user>/configuard-lite --push
+```
+
+Then, on the Space page → **Settings → Variables and secrets → New secret**:
+`CONFIGUARD_API_KEYS` = `sha256:<digest>` (the digest, never the raw key).
+The Space restarts and serves `https://<user>-configuard-lite.hf.space`.
+Without the secret the service refuses to start (fail closed); the build
+log then shows `production requires CONFIGUARD_API_KEYS`.
+
+What `prepare_hf_space.py` does:
+
+- Re-verifies every staged artifact against `build/release/artifacts.json`
+  (size + SHA-256, no extra files) and refuses a test-split bundle.
+- Copies only the Docker build context (the `.dockerignore` allowlist),
+  from Git-tracked files only, plus the staged artifacts.
+- Writes the Space `README.md` header (`sdk: docker`, `app_port: 8000`)
+  with a research-use notice.
+- Bakes the Git commit / dirty flag into the Dockerfile build-arg defaults
+  (Spaces cannot pass build args) and appends one Space block:
+  `CONFIGUARD_CPU_THREADS_PER_SESSION=1` (2 vCPU ÷ 2 concurrent analyses)
+  and `CONFIGUARD_PUBLIC_BASE_URL=<Space URL>`.
+- `--push` mirrors `build\hf-space\` to the Space with `huggingface_hub`
+  (binaries go through LFS/Xet automatically; stale files are removed).
+
+Differences from `compose.yaml` (the platform controls the container):
+no read-only root filesystem, no capability drop, no memory/PID limits,
+no tini. The image still runs as a non-root user with read-only app files.
+A public Space also exposes its files, **including the ONNX model**.

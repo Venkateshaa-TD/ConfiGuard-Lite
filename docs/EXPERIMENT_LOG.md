@@ -2731,3 +2731,36 @@ UNKNOWN, **0 with a fix**; Python packages 0. CRITICAL (none fixable):
 libaom3, glib, mbedtls ×3, sqlite, libxml2, perl-base ×3, zlib (minizip,
 will_not_fix). SBOM: 298 deb, 37 Python, 2 binary packages; no torch,
 timm, transformers, pip, setuptools or wheel.
+
+## 2026-10-22 — 14 Hugging Face Space package (local verification)
+
+Host: Docker Desktop (WSL2, linux/amd64). Media: official FF++ **val**
+only (test sealed).
+
+```
+.venv/Scripts/python.exe scripts/prepare_hf_space.py --space-id your-username/configuard-lite   # 221 files, 23.9 MB, commit 7ad18d43ed3b, clean
+docker build -t configuard-hf-space:test build/hf-space                                          # exit 0 (layers cached from rc.1)
+docker run --user 1000:1000 --cpus 2 configuard-hf-space:test                                    # REFUSED TO START: production requires CONFIGUARD_API_KEYS
+docker run -d --user 1000:1000 --cpus 2 -e CONFIGUARD_API_KEYS=sha256:<digest> -p 127.0.0.1:8790:8000 configuard-hf-space:test
+docker run -d --user 1000:1000 --cpus 2 -p 127.0.0.1:8798:8000 configuard-hf-space:test --env development
+.venv/Scripts/python.exe scripts/detection_parity.py compare --url http://127.0.0.1:8798 --label _hf_space
+.venv/Scripts/python.exe -m pytest -q
+```
+
+| check | result |
+|---|---|
+| fail closed without key | refused to start |
+| `/health/ready` | ready (artifacts, onnx_sessions, content_credentials ok) |
+| site `/` | 200 |
+| analyze: no key / wrong key / key | 401 / 401 / 200 (random JPEG → uncertain, NO_FACE_DETECTED) |
+| process uid; ENV | 1000; threads 1, base URL set; manifest commit 7ad18d43ed3b |
+| parity vs native baseline | 15/15 identical |
+| load, 24 val items (12 videos + 12 frames, seed 88), concurrency 4 | 24/24 OK, 0.97 req/s |
+| video P50 / P95 | 4612 / 16824 ms |
+| image P50 / P95 | 657 / 2154 ms |
+| memory idle / after load | 189 MiB / 1007 MiB |
+| pytest | 695 passed (224 s) |
+
+Parity report: `D:/ConfiGuard-Data/outputs/detection_parity/detection_parity_compare_20261022-181646_hf_space.json`.
+The load figures came from a one-off timing script (scratch, not committed) that uses the project's
+`val_media` / `frame_images` helpers.
