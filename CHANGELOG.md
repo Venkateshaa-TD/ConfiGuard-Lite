@@ -4,6 +4,17 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+### Fix — missing FFmpeg reported as a server problem (2026-11-10)
+
+- Video uploads on a server without `ffprobe` returned 422 `media_unreadable`
+  ("may be corrupted") from upload validation. Validation now raises the
+  existing `FFPROBE_NOT_AVAILABLE` code, mapped to 503 `video_unavailable`, and
+  `/health/ready` reports `checks.video_decoder` (`ok` / `ffprobe_missing`).
+  Images are unaffected. Test: `test_missing_ffprobe_is_reported_not_corrupt`.
+- `scripts/serve.py` reads optional `CONFIGUARD_FFMPEG_DIR` from `.env`.
+- Service face detection is coarse-to-fine for frames > 1920 px: 4K videos
+  ~3x faster and closer to native-resolution accuracy (see DECISIONS.md).
+
 ### Phase 0 — Environment and repository foundation (2026-09-29)
 
 - Initialized Git repository and project scaffolding.

@@ -30,7 +30,8 @@ from configuard.service.config import ServiceConfig
 from configuard.provenance.trust import TrustListError, default_trust_dir, load_trust_bundle
 from configuard.provenance.verifier import C2paLimits, C2paVerifier
 from configuard.service.explain import LABEL, CamExplainer
-from configuard.service.extract import CancelToken, extract_image, extract_video
+from configuard.service.extract import (CancelToken, DownscalingDetector, extract_image, extract_video,
+                                        video_decoder_available)
 
 INPUT, OUTPUT = "pixels", "logit"
 BATCH_SIZES = (1, 4, 8, 16)
@@ -130,7 +131,7 @@ class InferenceEngine:
         self.runner: OnnxRunner | None = None
         self.error: str | None = None
         self._local = threading.local()
-        self._detector_factory = detector_factory or (lambda: YuNetFaceDetector(cfg.yunet_path))
+        self._detector_factory = detector_factory or (lambda: DownscalingDetector(YuNetFaceDetector(cfg.yunet_path)))
         self._session_factory = session_factory
         self._last_check = 0.0
         self._check_lock = threading.Lock()
@@ -198,6 +199,7 @@ class InferenceEngine:
                                   ("disabled" if not self.cfg.allow_explanations else (self.explainer_error or "unavailable")))
         checks["content_credentials"] = ("ok" if self.c2pa is not None else
                                          ("disabled" if not self.cfg.c2pa_enabled else (self.c2pa_error or "unavailable")))
+        checks["video_decoder"] = "ok" if video_decoder_available() else "ffprobe_missing"
         info: dict[str, Any] = {"checks": checks}
         if ok:
             info |= {"model": self.bundle.describe(), "device": {"requested": self.runner.device_requested,

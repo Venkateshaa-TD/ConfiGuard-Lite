@@ -20,6 +20,23 @@ from configuard.env_loader import load_dotenv  # noqa: E402
 load_dotenv(REPO_ROOT / ".env")
 
 
+def _ensure_ffmpeg_on_path() -> None:
+    """Prepend CONFIGUARD_FFMPEG_DIR (if set) to PATH so video analysis finds ffprobe even when the
+    shell's PATH predates the FFmpeg install; warn if ffprobe is still missing (images keep working)."""
+    import os
+    import shutil
+
+    ffmpeg_dir = os.environ.get("CONFIGUARD_FFMPEG_DIR", "").strip()
+    if ffmpeg_dir and Path(ffmpeg_dir).is_dir():
+        os.environ["PATH"] = ffmpeg_dir + os.pathsep + os.environ.get("PATH", "")
+    if shutil.which("ffprobe") is None:
+        print("WARNING: ffprobe (FFmpeg) not found - video uploads will be refused. Install FFmpeg or set "
+              "CONFIGUARD_FFMPEG_DIR in .env to its bin folder.", file=sys.stderr)
+
+
+_ensure_ffmpeg_on_path()
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--env", default="development", choices=("development", "testing", "production"))

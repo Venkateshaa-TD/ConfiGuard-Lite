@@ -4,6 +4,27 @@ Format: one entry per decision, newest first.
 
 ---
 
+## 2026-11-10 — Service: coarse-to-fine face detection for frames > 1920 px
+
+**Context:** 4K uploads (e.g. DJI drone clips) spent 56–71 s in face
+extraction (≈200 YuNet runs at ~0.3 s each on faceless frames). Measured on
+54 FF++ c23 frames upscaled to 3840 px, full-frame YuNet also degraded
+accuracy: 81.5% vs 96.3% at native resolution (YuNet localizes large faces
+poorly).
+
+**Decision:** The service wraps YuNet in `DownscalingDetector`
+(`service/extract.py`): frames with a side > 1920 px are detected on a copy
+shrunk to 1920 px, then each face is re-detected at full resolution in a
+region of 0.75× its size around it (coarse box kept if that misses). Frames
+≤ 1920 px — every training and calibration input — go straight to YuNet,
+so the Phase 5d extraction contract is unchanged for them. Training code
+(`crops/`) is not touched.
+
+**Why:** Same 54 frames: 94.4% accuracy (mean |Δp_fake| to native 0.095
+vs 0.170 for full-frame); DJI clips 17 s / 25 s instead of 57 s / 72 s.
+
+---
+
 ## 2026-10-22 — 15: free hosting on Oracle Cloud Always Free (arm64) behind Caddy
 
 **Context:** the Phase 14 push showed Hugging Face Docker Spaces need a

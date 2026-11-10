@@ -2805,3 +2805,35 @@ Host note: C: reached 99–100% during this phase (Docker's 14 GB virtual
 disk, 4.4 GB of pytest temp runs). Removed only this session's scratch
 files, the `configuard-hf-space:test` image and pytest temp runs; C: back
 to ~4.5 GB free.
+
+---
+
+## 2026-11-10 — Fix: FFmpeg detection and 4K face-detection speed/accuracy
+
+Commands (venv, FFmpeg 9.0.2 via `winget install --id Gyan.FFmpeg -e`):
+- `scripts/serve.py --env development --port 8001` started from a shell
+  whose PATH predates the install → `/health/ready` `video_decoder: ok`
+  (via `CONFIGUARD_FFMPEG_DIR`).
+- Upload of FF++ c23 videos to `/v1/analyze`:
+
+| video | verdict | p_fake | time |
+|---|---|---|---|
+| youtube/130 | likely_real | 0.007 | 0.6 s |
+| youtube/390 | likely_real | 0.011 | 1.0 s |
+| Deepfakes/400_476 | likely_manipulated | 0.997 | 0.8 s |
+| Face2Face/200_189 | likely_manipulated | 0.991 | 0.4 s |
+| FaceSwap/000_003 | likely_manipulated | 0.991 | 0.3 s |
+| user DJI 4K 12 s clip ×2 | uncertain (no usable face) | – | 57 s/72 s → 17 s/25 s |
+
+4K detection comparison (54 FF++ c23 frames, frame 60 of youtube 880–909,
+Deepfakes/FaceSwap/Face2Face 880–889, upscaled bicubic to 3840 px wide;
+image path of the service engine):
+
+| detection | acc@0.5 | mean abs(p − p_native) |
+|---|---|---|
+| native resolution (reference) | 0.963 | 0 |
+| 4K, full-frame YuNet (before) | 0.815 | 0.170 |
+| 4K, coarse-to-fine (after) | 0.944 | 0.095 |
+
+Tests: `pytest tests -q` → 715 passed; `npm test` → 82 passed;
+`npm run build` OK.

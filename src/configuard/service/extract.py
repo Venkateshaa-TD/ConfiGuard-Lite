@@ -12,6 +12,7 @@ analyzer then ends as "uncertain" when a stage needs it.
 
 from __future__ import annotations
 
+import shutil
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -25,7 +26,7 @@ from configuard.crops.extract import _detect, build_primary_track, faces_link, r
 from configuard.crops.matching import SamplingError, planned_indices, recovery_offsets
 from configuard.crops.store import ExtractionConfig
 from configuard.media.face_detector import FaceDetector
-from configuard.media.types import DetectedFace
+from configuard.media.types import BoundingBox, DetectedFace, FaceLandmarks
 
 EXTRACTION = ExtractionConfig(detector_name="yunet", detector_version="2026may", detector_model_sha256="")
 
@@ -36,6 +37,50 @@ class AnalysisTimeout(Exception):
 
 class MediaUnreadable(Exception):
     pass
+
+
+class DownscalingDetector:
+    """Coarse-to-fine detection for frames larger than `max_side` px: find faces on a shrunk copy, then
+    re-detect each one at full resolution inside a region around it (so boxes/landmarks, and hence the
+    aligned crop, match full-frame detection). Faceless 4K frames cost one small detection instead of one
+    4K detection. Frames within `max_side` (all training data) go straight to `inner`, unchanged."""
+
+    def __init__(self, inner: FaceDetector, max_side: int = 1920, roi_margin: float = 0.75) -> None:
+        self.inner, self.max_side, self.roi_margin = inner, max_side, roi_margin
+        self.name, self.version = inner.name, inner.version
+
+    def detect(self, image: np.ndarray) -> list[tuple[BoundingBox, FaceLandmarks, float]]:
+        if image is None or image.size == 0 or max(image.shape[:2]) <= self.max_side:
+            return self.inner.detect(image)
+        h, w = image.shape[:2]
+        s = self.max_side / max(h, w)
+        small = cv2.resize(image, (max(1, round(w * s)), max(1, round(h * s))), interpolation=cv2.INTER_AREA)
+        sx, sy = w / small.shape[1], h / small.shape[0]
+        out = []
+        for b, lm, conf in self.inner.detect(small):
+            coarse = BoundingBox(b.x * sx, b.y * sy, b.width * sx, b.height * sy)
+            mx, my = coarse.width * self.roi_margin, coarse.height * self.roi_margin
+            x0, y0 = max(0, int(coarse.x - mx)), max(0, int(coarse.y - my))
+            x1, y1 = min(w, int(coarse.x + coarse.width + mx) + 1), min(h, int(coarse.y + coarse.height + my) + 1)
+            cx, cy = coarse.x + coarse.width / 2, coarse.y + coarse.height / 2
+            fine = [(BoundingBox(fb.x + x0, fb.y + y0, fb.width, fb.height),
+                     FaceLandmarks.from_flat([v for px, py in flm.as_tuple() for v in (px + x0, py + y0)]), fc)
+                    for fb, flm, fc in self.inner.detect(image[y0:y1, x0:x1])]
+            fine = [f for f in fine if f[0].x <= cx <= f[0].x + f[0].width and f[0].y <= cy <= f[0].y + f[0].height]
+            if fine:  # the full-resolution detection of this face
+                out.append(min(fine, key=lambda f: abs(f[0].x + f[0].width / 2 - cx) + abs(f[0].y + f[0].height / 2 - cy)))
+            else:  # region detect missed it: keep the coarse detection mapped back
+                out.append((coarse, FaceLandmarks.from_flat([v for px, py in lm.as_tuple() for v in (px * sx, py * sy)]),
+                            conf))
+        return out
+
+
+class VideoDecoderMissing(Exception):
+    """ffprobe (FFmpeg) is not on PATH: a server setup problem, not a bad upload."""
+
+
+def video_decoder_available() -> bool:
+    return shutil.which("ffprobe") is not None
 
 
 @dataclass
@@ -78,6 +123,8 @@ def extract_video(path: Path, detector: FaceDetector, cancel: CancelToken,
                   cfg: ExtractionConfig = EXTRACTION) -> VideoCrops:
     from configuard.datasets.faceforensics import ffprobe_video
 
+    if not video_decoder_available():
+        raise VideoDecoderMissing()
     probe = ffprobe_video(path, timeout_s=max(1.0, min(60.0, cancel.remaining())))
     cancel.check()
     if not probe.ok or not probe.packets:

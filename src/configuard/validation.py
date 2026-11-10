@@ -165,7 +165,9 @@ def validate_media_file(path: str | Path, limits: ValidationLimits) -> Validatio
     duration_seconds: float | None = None
     if media_type is MediaType.VIDEO and not errors:
         duration_seconds = _ffprobe_duration_seconds(path)
-        if duration_seconds is None:
+        if duration_seconds is None and shutil.which("ffprobe") is None:
+            errors.append(ValidationErrorCode.FFPROBE_NOT_AVAILABLE)  # server setup, not a bad upload
+        elif duration_seconds is None:
             errors.append(ValidationErrorCode.VIDEO_UNREADABLE)
         elif duration_seconds > limits.max_video_duration_seconds:
             errors.append(ValidationErrorCode.VIDEO_TOO_LONG)

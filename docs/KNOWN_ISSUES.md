@@ -4,6 +4,23 @@ Format: one entry per issue. Mark resolved issues rather than deleting them.
 
 ---
 
+## RESOLVED (2026-11-10) — Videos reported as "corrupted" when FFmpeg is missing
+
+Upload validation and video extraction both called `ffprobe`; with FFmpeg
+absent from PATH, every video got 422 `media_unreadable` ("may be
+corrupted"). Now: 503 `video_unavailable`, `/health/ready` reports
+`checks.video_decoder`, and `scripts/serve.py` prepends the optional
+`CONFIGUARD_FFMPEG_DIR` (.env) to PATH and warns at startup if ffprobe is
+still missing. Local fix: FFmpeg 9.0.2 installed via winget.
+
+## OPEN — 4K video analysis still takes ~15–25 s
+
+Sequential 4K decoding (~2.7 s per pass, up to 3 passes with recovery)
+dominates after the detection fix. Within the 120 s request timeout for
+the 120 s duration cap, but longer 4K clips near the cap may be slow.
+
+---
+
 ## OPEN — Oracle Cloud arm64 deployment (Phase 15)
 
 - **Native arm64 not measured.** Only QEMU emulation was available

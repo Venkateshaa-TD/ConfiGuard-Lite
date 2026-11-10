@@ -35,7 +35,7 @@ from starlette.staticfiles import StaticFiles
 
 from configuard.service.config import ServiceConfig, hash_api_key
 from configuard.service.engine import InferenceEngine
-from configuard.service.extract import AnalysisTimeout, CancelToken, MediaUnreadable
+from configuard.service.extract import AnalysisTimeout, CancelToken, MediaUnreadable, VideoDecoderMissing
 from configuard.service.logs import configure_logging, log_event, request_id_var
 from configuard.service.schemas import (ANALYZE_RESPONSES, AnalyzeResponse, LimitsResponse, LiveResponse, ReadyResponse,
                                         READY_EXAMPLE)
@@ -52,7 +52,7 @@ _VALIDATION_HTTP = {
     ValidationErrorCode.FILE_TOO_LARGE: (413, "file_too_large"),
     ValidationErrorCode.VIDEO_UNREADABLE: (422, "media_unreadable"),
     ValidationErrorCode.VIDEO_TOO_LONG: (422, "video_too_long"),
-    ValidationErrorCode.FFPROBE_NOT_AVAILABLE: (503, "service_unavailable"),
+    ValidationErrorCode.FFPROBE_NOT_AVAILABLE: (503, "video_unavailable"),
 }
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 # Strict CSP for the UI and the API: same-origin scripts/styles only, images from self or data: URIs
@@ -308,6 +308,10 @@ def create_app(cfg: ServiceConfig, engine: InferenceEngine | None = None) -> Fas
                 raise ApiError(504, "analysis_timeout", "Analysis exceeded the time limit.") from None
             except MediaUnreadable:
                 raise ApiError(422, "media_unreadable", "The media could not be decoded; it may be corrupted.") from None
+            except VideoDecoderMissing:
+                log_event("video_decoder_missing", logging.ERROR)
+                raise ApiError(503, "video_unavailable",
+                               "Video analysis is unavailable: FFmpeg (ffprobe) is not installed on the server.") from None
             timings["total_ms"] = round((time.perf_counter() - t_start) * 1000, 2)
             log_event("analysis_done", media_type=v.media_type.value, size_bytes=size, verdict=result["verdict"],
                       base_verdict=result["base_verdict"], frames_used=result["frames_used"],

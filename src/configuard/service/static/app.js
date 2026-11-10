@@ -37,7 +37,7 @@
   const ERRORS = {
     unauthorized: "A valid API key is required.", file_too_large: "The file is larger than the allowed limit.",
     unsupported_media_type: "This file type is not supported.", media_type_mismatch: "The file content does not match its extension.",
-    media_unreadable: "The file could not be decoded; it may be corrupted.", video_too_long: "The video is longer than the allowed duration.",
+    media_unreadable: "The file could not be decoded; it may be corrupted.", video_unavailable: "Video analysis is unavailable on this server (FFmpeg is not installed).", video_too_long: "The video is longer than the allowed duration.",
     server_busy: "The server is busy. Please retry in a moment.", analysis_timeout: "Analysis took too long and was stopped.",
     service_unavailable: "The model is not ready.", upload_timeout: "The upload took too long.",
   };

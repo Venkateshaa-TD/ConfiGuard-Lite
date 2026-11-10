@@ -53,7 +53,8 @@ def test_health_and_image_analysis(tmp_path, bundle):
     with c:
         assert c.get("/health/live").json() == {"status": "alive"}
         r = c.get("/health/ready")
-        assert r.status_code == 200 and r.json()["checks"] == {"artifacts": "ok", "onnx_sessions": "ok", "explanations": "disabled", "content_credentials": "disabled"}
+        assert r.status_code == 200 and r.json()["checks"] == {"artifacts": "ok", "onnx_sessions": "ok", "explanations": "disabled", "content_credentials": "disabled",
+                                                        "video_decoder": "ok"}
         assert r.json()["device"]["active"] == "cpu"
         fake, real = post(c, image_bytes(250)), post(c, image_bytes(15, ".jpg"), "x.jpg")
     assert fake.status_code == 200 and real.status_code == 200
@@ -125,6 +126,19 @@ def test_corrupt_media(tmp_path, bundle):
         assert_safe_error(c.post("/v1/analyze", files={"note": (None, "hi")}), 400, "missing_file")
         assert_safe_error(c.post("/v1/analyze", content=b"{}", headers={"content-type": "application/json"}), 415,
                           "unsupported_content_type")
+    assert leftover(cfg) == []
+
+
+def test_missing_ffprobe_is_reported_not_corrupt(tmp_path, bundle, videos, monkeypatch):
+    real_which = shutil.which
+    monkeypatch.setattr(shutil, "which", lambda name, *a, **k: None if name == "ffprobe" else real_which(name, *a, **k))
+    cfg = make_config(tmp_path, *bundle)
+    c, _ = client_for(cfg)
+    with c:
+        r = c.get("/health/ready")
+        assert r.status_code == 200 and r.json()["checks"]["video_decoder"] == "ffprobe_missing"
+        assert_safe_error(post(c, videos["bright"].read_bytes(), "clip.mp4"), 503, "video_unavailable")
+        assert post(c, image_bytes(250)).status_code == 200  # images do not need FFmpeg
     assert leftover(cfg) == []
 
 
