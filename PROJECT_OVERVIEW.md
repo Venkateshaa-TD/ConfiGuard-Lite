@@ -36,11 +36,11 @@ needed.
 
 ```mermaid
 flowchart TD
-    A["1. Upload and validate<br/>Streamed to a temp folder with a size cap<br/>File type checked by content; ffprobe reads duration"]
-    B["2. Find and align the face<br/>YuNet detector, coarse-to-fine above 1920 px<br/>5-point alignment to a 224 x 224 face crop"]
-    C["3. Score with the student model<br/>MobileNetV4, ONNX FP32 on CPU, 2.3 ms a frame<br/>Video score = mean frame logit over 4, 8 or 16"]
-    D["4. Calibrate and decide<br/>Temperature scaling, then a conformal label set<br/>One label: a verdict. Both or none: uncertain"]
-    E["5. Quality gate<br/>Checks blur, resolution, blocking and face size<br/>Can only downgrade a verdict to uncertain"]
+    A["Step 1: Upload and validate<br/>Streamed to a temp folder with a size cap<br/>File type checked by content; ffprobe reads duration"]
+    B["Step 2: Find and align the face<br/>YuNet detector, coarse-to-fine above 1920 px<br/>5-point alignment to a 224 x 224 face crop"]
+    C["Step 3: Score with the student model<br/>MobileNetV4, ONNX FP32 on CPU, 2.3 ms a frame<br/>Video score = mean frame logit over 4, 8 or 16"]
+    D["Step 4: Calibrate and decide<br/>Temperature scaling, then a conformal label set<br/>One label: a verdict. Both or none: uncertain"]
+    E["Step 5: Quality gate<br/>Checks blur, resolution, blocking and face size<br/>Can only downgrade a verdict to uncertain"]
     F["Verdict + confidence + reason codes<br/>likely real / likely manipulated / uncertain"]
     L["Adaptive video loop<br/>Confident at 4 frames: stop early<br/>Not yet: add frames, up to 8, then 16"]
     P["Content Credentials (C2PA)<br/>Shown beside the verdict, never mixed in"]
